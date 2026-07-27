@@ -29,6 +29,7 @@
 8. 测试数据先通过 JSON fixture 或文件 Adapter 接入，不猜 PDX 内部格式。
 9. `samples/host-integration` 提供无源码集成样例。
 10. `/copilot` 作为可复用侧边栏组件，`/showcase` 只负责演示嵌入效果。
+11. `/api/v1/test-data/insights` 提供确定性数据洞察，优先用 DuckDB，未安装时回退标准库。
 
 暂不做：动态 UI、多 Agent、写入类工具、设备控制、全量向量库迁移。
 
@@ -59,6 +60,18 @@ http://127.0.0.1:8765/plugin-manifest.json
 http://127.0.0.1:8765/api/v1/tools
 http://127.0.0.1:8765/openapi.json
 ```
+
+测试数据洞察示例：
+
+```powershell
+Invoke-RestMethod `
+  -Method Post `
+  -ContentType 'application/json' `
+  -Uri 'http://127.0.0.1:8765/api/v1/test-data/insights' `
+  -Body '{"source_file":"D:\\geely-ai-platform\\src\\ai-gateway\\tests\\fixtures\\test-run-cases.csv"}'
+```
+
+白话备注：`insights` 是给演示和第一版集成看的“稳定数据分析按钮”。它不让大模型自己算通过率、失败分布这些关键指标，而是用代码算好，再让 Copilot 展示和解释。
 
 ## 目录结构
 

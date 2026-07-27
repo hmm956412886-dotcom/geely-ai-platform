@@ -20,6 +20,8 @@
 
 备注：复用开源不是“把一堆库塞进项目”。正确做法是先用最小依赖跑通一个业务闭环，库只藏在 Adapter 后面。
 
+当前 MVP 示例：`/api/v1/test-data/insights` 会优先使用可选 DuckDB 引擎；如果运行环境没有安装 DuckDB，则回退 Python 标准库统计，保证产品演示不被额外依赖卡住。
+
 ### 1.3 不重复造轮子
 
 - 不自研已有的文档解析器、向量数据库、HTTP 客户端、CLI 解析框架或 Agent 编排框架。
@@ -210,7 +212,7 @@ Phase 1 禁止：
 | P0-012 | 宿主集成 Demo 包 | Done | `samples/host-integration` 可模拟宿主软件传入上下文、调用分析、对比结果和打开 Copilot |
 | P0-013 | 产品展示前端 | Done | `/showcase` 展示宿主软件模拟台 + Copilot 右侧栏，并能调用分析、对比和 Host Context |
 | P0-014 | 可复用 Copilot Shell | Done | `/copilot` 作为独立 iframe/WebView 侧边栏，`/showcase` 只嵌入它，不复制 UI |
-| P0-015 | DuckDB 测试数据分析 Spike | P0 | 在 Adapter 后接 DuckDB，可对 CSV 做确定性 SQL 指标分析 |
+| P0-015 | DuckDB 测试数据分析 Spike | Done | `/api/v1/test-data/insights` 可返回状态分布和 Top 失败原因；DuckDB 为可选引擎，未安装时回退标准库 |
 | P1-001 | PDX 工具链调研 | P1 | 找到官方工具、SDK 或样例格式 |
 | P1-002 | PDX Adapter | P1 | 能解析脱敏 PDX 样例 |
 | P1-003 | IndexedRagProvider | P1 | 向量检索作为可选后端 |
@@ -249,6 +251,7 @@ python evals\run_eval.py
 - Host Context 可写入和读取。
 - CSV 测试文件可分析。
 - 两次测试结果可对比。
+- 数据洞察接口可返回状态分布和失败原因。
 - 模型未配置时可 fallback。
 - 最近 API 调用可进入 Audit Log。
 - 坏 JSON 返回 `invalid_json`。

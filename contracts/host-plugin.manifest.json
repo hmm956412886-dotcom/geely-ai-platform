@@ -38,6 +38,13 @@
         "requires_confirmation": false
       },
       {
+        "operation_id": "analyze_test_data_insights",
+        "method": "POST",
+        "path": "/api/v1/test-data/insights",
+        "side_effect": "read_only",
+        "requires_confirmation": false
+      },
+      {
         "operation_id": "query_knowledge",
         "method": "POST",
         "path": "/api/v1/knowledge/query",

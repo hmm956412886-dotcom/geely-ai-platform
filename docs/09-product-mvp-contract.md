@@ -49,6 +49,7 @@ GET  /api/v1/tools
 POST /api/v1/analyze
 POST /api/v1/test-data/summary
 POST /api/v1/test-data/compare
+POST /api/v1/test-data/insights
 POST /api/v1/knowledge/query
 ```
 
@@ -236,6 +237,28 @@ Content-Type: application/json
 - 失败用例数差异。
 - 通过率差异。
 
+数据洞察：
+
+```http
+POST /api/v1/test-data/insights
+Content-Type: application/json
+```
+
+```json
+{
+  "source_file": "D:\\geely-ai-platform\\src\\ai-gateway\\tests\\fixtures\\test-run-cases.csv"
+}
+```
+
+返回内容包含：
+
+- `engine`：`duckdb` 或 `stdlib`。
+- 状态分布：passed / failed / warning / unknown。
+- Top 失败原因。
+- 通过率和用例数量。
+
+白话备注：这个接口就是“数据分析展示按钮”的后端。它先把能确定算出来的指标算稳，再把结果交给 Copilot 解释，避免大模型一本正经地算错数。
+
 ## 6. 后续替换点
 
 | 当前 MVP | 后续真实实现 |
@@ -243,7 +266,8 @@ Content-Type: application/json
 | 演示测试数据 | 已支持 JSON/CSV，后续接 Excel/PDX Adapter |
 | 演示飞书引用 | lark-cli 搜索和正文读取 |
 | 固定分析文本 | 已支持 OpenAI-compatible 模型 API 配置；后续接 Semantic Kernel |
-| `/demo` 简单页面 | 正式 AI 面板 |
+| `/demo` 简单页面 | `/copilot` 可复用侧边栏 |
+| 标准库 CSV 统计 | 可选 DuckDB / Polars / Pandas 分析 Adapter |
 | 本地配置 | 客户环境变量或密钥管理 |
 
 ## 7. 不做什么
@@ -268,6 +292,7 @@ python evals\run_eval.py
 - Host Context 是否可写入和读取。
 - CSV 文件分析是否正常。
 - 两次测试对比是否正常。
+- 数据洞察接口是否正常。
 - 模型未配置时是否安全 fallback。
 - 审计事件是否记录最近 API 调用。
 - 错误响应是否包含 `request_id` 和稳定 `error.code`。

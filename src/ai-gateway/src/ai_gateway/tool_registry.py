@@ -91,6 +91,27 @@ _TOOLS: list[dict[str, Any]] = [
         "audit_level": "standard",
     },
     {
+        "name": "analyze_test_data_insights",
+        "description": "Return deterministic status distribution and top failure reasons for a test data file.",
+        "method": "POST",
+        "path": "/api/v1/test-data/insights",
+        "input_schema": {
+            "type": "object",
+            "required": ["source_file"],
+            "properties": {"source_file": _STRING},
+            "additionalProperties": False,
+        },
+        "output_schema": {
+            "type": "object",
+            "required": ["request_id", "result"],
+            "properties": {"request_id": _STRING, "result": {"type": "object"}},
+        },
+        "side_effect": "read_only",
+        "requires_confirmation": False,
+        "risk_level": "low",
+        "audit_level": "standard",
+    },
+    {
         "name": "query_knowledge",
         "description": "Query the configured knowledge provider and return answer citations.",
         "method": "POST",

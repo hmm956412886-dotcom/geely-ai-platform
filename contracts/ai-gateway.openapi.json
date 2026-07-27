@@ -68,6 +68,11 @@
         "summary": "Compare two test run files"
       }
     },
+    "/api/v1/test-data/insights": {
+      "post": {
+        "summary": "Return deterministic test data insights"
+      }
+    },
     "/api/v1/knowledge/query": {
       "post": {
         "summary": "Query knowledge provider"

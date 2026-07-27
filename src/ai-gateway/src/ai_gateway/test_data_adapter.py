@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import importlib.util
 import json
 from pathlib import Path
 from typing import Any
@@ -40,6 +41,13 @@ def compare_test_runs(baseline_file: str, target_file: str) -> dict[str, Any]:
     }
 
 
+def load_test_data_insights(source_file: str) -> dict[str, Any]:
+    path = _validate_source_file(source_file)
+    if path.suffix.lower() == ".csv" and importlib.util.find_spec("duckdb"):
+        return _duckdb_csv_insights(path)
+    return _stdlib_insights(load_test_run_summary(str(path)))
+
+
 def _validate_source_file(source_file: str) -> Path:
     if not source_file or not source_file.strip():
         raise ValueError("source_file is required")
@@ -53,6 +61,126 @@ def _validate_source_file(source_file: str) -> Path:
     if path.stat().st_size > MAX_FILE_BYTES:
         raise ValueError("source_file is too large for MVP parser")
     return path
+
+
+def _duckdb_csv_insights(path: Path) -> dict[str, Any]:
+    import duckdb
+
+    source = str(path)
+    with duckdb.connect(database=":memory:") as connection:
+        row = connection.execute(
+            """
+            select
+              any_value(run_id) as run_id,
+              any_value(project_id) as project_id,
+              count(*) as total_cases,
+              sum(case when lower(trim(status)) in ('pass', 'passed', 'ok', 'success', 'succeeded') then 1 else 0 end) as passed_cases,
+              sum(case when lower(trim(status)) in ('fail', 'failed', 'error', 'failed_case') then 1 else 0 end) as failed_cases,
+              sum(case when lower(trim(status)) in ('warn', 'warning') then 1 else 0 end) as warning_cases
+            from read_csv_auto(?)
+            """,
+            [source],
+        ).fetchone()
+        status_rows = connection.execute(
+            """
+            select
+              case
+                when lower(trim(status)) in ('pass', 'passed', 'ok', 'success', 'succeeded') then 'passed'
+                when lower(trim(status)) in ('fail', 'failed', 'error', 'failed_case') then 'failed'
+                when lower(trim(status)) in ('warn', 'warning') then 'warning'
+                else 'unknown'
+              end as status,
+              count(*) as count
+            from read_csv_auto(?)
+            group by 1
+            order by count desc, status
+            """,
+            [source],
+        ).fetchall()
+        reason_rows = connection.execute(
+            """
+            select coalesce(nullif(trim(reason), ''), 'unknown') as reason, count(*) as count
+            from read_csv_auto(?)
+            where lower(trim(status)) in ('fail', 'failed', 'error', 'failed_case')
+            group by 1
+            order by count desc, reason
+            limit 5
+            """,
+            [source],
+        ).fetchall()
+
+    run_id, project_id, total_cases, passed_cases, failed_cases, warning_cases = row
+    return _insights_payload(
+        engine="duckdb",
+        source_type="csv",
+        source_ref=source,
+        run_id=run_id or path.stem,
+        project_id=project_id,
+        total_cases=total_cases,
+        passed_cases=passed_cases,
+        failed_cases=failed_cases,
+        warning_cases=warning_cases,
+        status_counts=status_rows,
+        failure_reasons=reason_rows,
+    )
+
+
+def _stdlib_insights(summary: dict[str, Any]) -> dict[str, Any]:
+    status_counts = [
+        ("failed", summary["failed_cases"]),
+        ("passed", summary["passed_cases"]),
+        ("warning", summary["metrics"].get("warning_cases", 0)),
+    ]
+    reasons: dict[str, int] = {}
+    for failure in summary["failures"]:
+        reason = failure.get("reason") or "unknown"
+        reasons[reason] = reasons.get(reason, 0) + 1
+    return _insights_payload(
+        engine="stdlib",
+        source_type=summary["source"]["type"],
+        source_ref=summary["source"]["ref"],
+        run_id=summary["run_id"],
+        project_id=summary.get("project_id"),
+        total_cases=summary["total_cases"],
+        passed_cases=summary["passed_cases"],
+        failed_cases=summary["failed_cases"],
+        warning_cases=summary["metrics"].get("warning_cases", 0),
+        status_counts=[item for item in status_counts if item[1]],
+        failure_reasons=sorted(reasons.items(), key=lambda item: (-item[1], item[0]))[:5],
+    )
+
+
+def _insights_payload(
+    *,
+    engine: str,
+    source_type: str,
+    source_ref: str,
+    run_id: Any,
+    project_id: Any,
+    total_cases: Any,
+    passed_cases: Any,
+    failed_cases: Any,
+    warning_cases: Any,
+    status_counts: list[tuple[Any, Any]],
+    failure_reasons: list[tuple[Any, Any]],
+) -> dict[str, Any]:
+    total = int(total_cases or 0)
+    passed = int(passed_cases or 0)
+    failed = int(failed_cases or 0)
+    warnings = int(warning_cases or 0)
+    return {
+        "run_id": str(run_id),
+        "project_id": project_id,
+        "source": {"type": source_type, "ref": source_ref},
+        "engine": engine,
+        "total_cases": total,
+        "passed_cases": passed,
+        "failed_cases": failed,
+        "warning_cases": warnings,
+        "pass_rate": round(passed / total, 4) if total else 0,
+        "status_counts": [{"status": str(status), "count": int(count or 0)} for status, count in status_counts],
+        "failure_reasons": [{"reason": str(reason), "count": int(count or 0)} for reason, count in failure_reasons],
+    }
 
 
 def _summary_from_json(path: Path) -> dict[str, Any]:

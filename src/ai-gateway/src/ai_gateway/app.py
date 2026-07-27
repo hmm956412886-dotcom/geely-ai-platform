@@ -10,7 +10,7 @@ from uuid import uuid4
 from .audit_log import append_audit_event, list_audit_events
 from .host_context import get_host_context, update_host_context
 from .model_client import chat_completion, load_model_config
-from .test_data_adapter import compare_test_runs, load_test_run_summary
+from .test_data_adapter import compare_test_runs, load_test_data_insights, load_test_run_summary
 from .tool_registry import list_tools, manifest_operations
 
 
@@ -59,6 +59,8 @@ def _handle_request(method: str, path: str, body: str = "") -> Response:
         return json_response(_test_data_summary(_read_json(body)))
     if method == "POST" and path == "/api/v1/test-data/compare":
         return json_response(_test_data_compare(_read_json(body)))
+    if method == "POST" and path == "/api/v1/test-data/insights":
+        return json_response(_test_data_insights(_read_json(body)))
     if method == "POST" and path == "/api/v1/knowledge/query":
         return json_response(_knowledge_query(_read_json(body)))
     if method == "POST" and path == "/api/v1/analyze":
@@ -140,6 +142,11 @@ def _test_data_compare(payload: dict[str, Any]) -> dict[str, Any]:
     baseline_file = str(payload.get("baseline_file") or "")
     target_file = str(payload.get("target_file") or "")
     return {"request_id": _request_id(), "result": compare_test_runs(baseline_file, target_file)}
+
+
+def _test_data_insights(payload: dict[str, Any]) -> dict[str, Any]:
+    source_file = str(payload.get("source_file") or "")
+    return {"request_id": _request_id(), "result": load_test_data_insights(source_file)}
 
 
 def _knowledge_query(payload: dict[str, Any]) -> dict[str, Any]:
@@ -362,6 +369,7 @@ def _copilot_html() -> str:
     <section class="composer">
       <div class="suggestions">
         <button class="pill" id="analyze">分析当前测试</button>
+        <button class="pill" id="insights">数据洞察</button>
         <button class="pill" id="compare">对比两次结果</button>
         <button class="pill" id="knowledge">查询规范依据</button>
       </div>
@@ -459,6 +467,21 @@ def _copilot_html() -> str:
       addMessage("assistant", `${payload.result.summary}\\n\\nrequest_id: ${payload.request_id}`);
     }
 
+    async function loadInsights() {
+      addMessage("user", "生成当前测试数据洞察。");
+      const payload = await postJson("/api/v1/test-data/insights", { source_file: source.value });
+      if (payload.error) {
+        addMessage("assistant", `${payload.error.message}\\n\\nrequest_id: ${payload.request_id}`);
+        return;
+      }
+      const result = payload.result;
+      const topReason = result.failure_reasons[0] ? `${result.failure_reasons[0].reason} (${result.failure_reasons[0].count})` : "无失败原因";
+      addMessage(
+        "assistant",
+        `分析引擎：${result.engine}\\n状态分布：${result.status_counts.map(item => `${item.status} ${item.count}`).join("，")}\\nTop 失败原因：${topReason}\\n\\nrequest_id: ${payload.request_id}`
+      );
+    }
+
     async function queryKnowledge() {
       addMessage("user", "查询本次问题相关规范依据。");
       const payload = await postJson("/api/v1/knowledge/query", { query: question.value });
@@ -472,6 +495,7 @@ def _copilot_html() -> str:
     document.getElementById("reload").addEventListener("click", loadContext);
     document.getElementById("send").addEventListener("click", analyze);
     document.getElementById("analyze").addEventListener("click", analyze);
+    document.getElementById("insights").addEventListener("click", loadInsights);
     document.getElementById("compare").addEventListener("click", compareRuns);
     document.getElementById("knowledge").addEventListener("click", queryKnowledge);
     loadContext();
@@ -655,6 +679,7 @@ def _openapi() -> dict[str, Any]:
             "/api/v1/analyze": {"post": {"summary": "Analyze test data with knowledge citations"}},
             "/api/v1/test-data/summary": {"post": {"summary": "Return a test run summary"}},
             "/api/v1/test-data/compare": {"post": {"summary": "Compare two test run files"}},
+            "/api/v1/test-data/insights": {"post": {"summary": "Return deterministic test data insights"}},
             "/api/v1/knowledge/query": {"post": {"summary": "Query knowledge provider"}},
         },
     }

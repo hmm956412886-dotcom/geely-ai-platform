@@ -9,7 +9,7 @@ MVP 的数据分析重点是客户测试软件里的测试数据和结果产物�
 ```text
 测试软件导出文件 / PDX / 报告
   -> TestDataFileAdapter
-  -> 标准 TestRunSummary / CompareResult
+  -> 标准 TestRunSummary / CompareResult / TestDataInsights
   -> TestDataPlugin
   -> SK / AI Gateway
   -> 数据分析结论
@@ -90,6 +90,47 @@ PDX 可能是某类测试工程包、诊断数据包或厂商私有格式。没�
 }
 ```
 
+`TestDataInsights`：
+
+```json
+{
+  "run_id": "RUN_CSV_001",
+  "project_id": "GEELY_TEST",
+  "source": {
+    "type": "csv",
+    "ref": "D:\\test-results\\run_001.csv"
+  },
+  "engine": "duckdb",
+  "total_cases": 120,
+  "passed_cases": 108,
+  "failed_cases": 10,
+  "warning_cases": 2,
+  "pass_rate": 0.9,
+  "status_counts": [
+    {
+      "status": "failed",
+      "count": 10
+    }
+  ],
+  "failure_reasons": [
+    {
+      "reason": "扭矩误差超过阈值",
+      "count": 6
+    }
+  ]
+}
+```
+
+白话解释：`summary` 像一页测试概览，`compare` 像版本对比，`insights` 像数据透视表。MVP 先做状态分布和 Top 失败原因，够演示，也不会把问题做散。
+
+当前 `insights` 的实现策略：
+
+| 文件类型 | 引擎 | 说明 |
+| --- | --- | --- |
+| CSV | DuckDB | 如果安装了 `duckdb`，用 SQL 统计状态分布和失败原因 |
+| CSV / JSON | 标准库 | 没安装 DuckDB 时自动回退，保证 MVP 不因依赖缺失跑不起来 |
+| PDX | 暂不猜格式 | 等官方工具、SDK 或样例格式明确后再接 Adapter |
+
 ## 5. MVP 任务
 
 | 编号 | 任务 | 完成标准 |
@@ -97,5 +138,6 @@ PDX 可能是某类测试工程包、诊断数据包或厂商私有格式。没�
 | TD-001 | 建 `TestDataFileAdapter` 接口 | 能接收文件路径并输出标准模型 |
 | TD-002 | 支持 JSON fixture | 不依赖真实 PDX 也能跑通分析 |
 | TD-003 | 支持 CSV/Excel 导出 | 覆盖最常见客户导出形式 |
-| TD-004 | 调研 PDX 工具链 | 找到官方工具、SDK 或样例格式 |
-| TD-005 | 建 PDX Adapter | 只有格式明确后再实现 |
+| TD-004 | 支持数据洞察接口 | `/api/v1/test-data/insights` 返回状态分布、通过率和 Top 失败原因 |
+| TD-005 | 调研 PDX 工具链 | 找到官方工具、SDK 或样例格式 |
+| TD-006 | 建 PDX Adapter | 只有格式明确后再实现 |

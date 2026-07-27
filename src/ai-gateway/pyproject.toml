@@ -9,6 +9,8 @@ description = "Embeddable AI Gateway MVP for customer software integration"
 requires-python = ">=3.11"
 dependencies = []
 
+[project.optional-dependencies]
+analytics = ["duckdb>=1.0.0"]
+
 [project.scripts]
 geely-ai-gateway = "ai_gateway.server:main"
-

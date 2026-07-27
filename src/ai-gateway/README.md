@@ -19,6 +19,7 @@ GET  /api/v1/audit/events
 POST /api/v1/analyze
 POST /api/v1/test-data/summary
 POST /api/v1/test-data/compare
+POST /api/v1/test-data/insights
 POST /api/v1/knowledge/query
 ```
 
@@ -29,6 +30,14 @@ cd D:\geely-ai-platform\src\ai-gateway
 $env:PYTHONPATH='src'
 python -m ai_gateway.server --port 8765
 ```
+
+可选安装 DuckDB 数据分析引擎：
+
+```powershell
+python -m pip install -e .[analytics]
+```
+
+备注：不安装 DuckDB 也能运行，`/api/v1/test-data/insights` 会自动回退到标准库统计。安装 DuckDB 后，CSV 洞察会走 SQL 引擎，更适合后续大文件和多维分析。
 
 打开产品展示页：
 
@@ -69,14 +78,15 @@ PASS tools_registry
 PASS analyze_csv
 PASS host_context_roundtrip
 PASS compare_runs
+PASS insights_csv
 PASS model_fallback
 PASS audit_events
 PASS invalid_json_error
 PASS missing_file_error
-10 passed, 0 failed
+11 passed, 0 failed
 ```
 
-这组自检覆盖产品展示页、Copilot 页面、Host Context、CSV 分析、两次测试对比、模型 fallback、审计事件、坏 JSON 和缺文件错误响应。
+这组自检覆盖产品展示页、Copilot 页面、Host Context、CSV 分析、两次测试对比、数据洞察、模型 fallback、审计事件、坏 JSON 和缺文件错误响应。
 
 ## 宿主软件怎么接
 
@@ -85,8 +95,9 @@ PASS missing_file_error
 1. 宿主软件先调用 `POST /api/v1/host/context`，传入当前项目、Run 和测试文件路径。
 2. 演示时打开 `/showcase`，真实嵌入时 WebView 或 iframe 打开 `/copilot`，作为宿主软件或公司网站的右侧 AI 面板。
 3. 插件按钮调用 `POST /api/v1/analyze`，传入当前测试文件路径、`run_id` 或导出后的 JSON。
-4. 宿主软件读取 `/plugin-manifest.json`，按 manifest 自动注册 AI 面板和 API 操作。
-5. 客户没有源码时，用外部启动脚本或桌面快捷方式启动 AI Gateway。
+4. 数据面板或 Copilot 快捷按钮调用 `POST /api/v1/test-data/insights`，展示状态分布和 Top 失败原因。
+5. 宿主软件读取 `/plugin-manifest.json`，按 manifest 自动注册 AI 面板和 API 操作。
+6. 客户没有源码时，用外部启动脚本或桌面快捷方式启动 AI Gateway。
 
 Host Context 示例：
 
@@ -186,6 +197,31 @@ run_id,project_id,case_id,name,status,reason
 ```
 
 `status` 支持 `passed`、`failed`、`warning` 等常见写法。通过率、失败数、失败用例由确定性代码计算，AI 只做解释。
+
+数据洞察：
+
+```powershell
+Invoke-RestMethod `
+  -Method Post `
+  -ContentType 'application/json' `
+  -Uri 'http://127.0.0.1:8765/api/v1/test-data/insights' `
+  -Body '{"source_file":"D:\\geely-ai-platform\\src\\ai-gateway\\tests\\fixtures\\test-run-cases.csv"}'
+```
+
+返回内容包含：
+
+```text
+engine
+total_cases
+passed_cases
+failed_cases
+warning_cases
+pass_rate
+status_counts
+failure_reasons
+```
+
+白话备注：`summary` 是“这次测试整体如何”，`compare` 是“这次和上次比怎样”，`insights` 是“从数据里直接抓分布和 Top 问题”。这三个都应先保持只读、可审计、可复现。
 
 ## 模型 API 配置
 

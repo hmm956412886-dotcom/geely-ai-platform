@@ -1,7 +1,7 @@
 from pathlib import Path
 import unittest
 
-from ai_gateway.test_data_adapter import compare_test_runs, load_test_run_summary
+from ai_gateway.test_data_adapter import compare_test_runs, load_test_data_insights, load_test_run_summary
 
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -45,6 +45,17 @@ class TestDataAdapterTests(unittest.TestCase):
         self.assertIn("失败用例增加 1 个", result["summary"])
         self.assertEqual(result["changed_metrics"][2]["name"], "failed_cases")
         self.assertEqual(result["changed_metrics"][2]["delta"], 1)
+
+    def test_load_test_data_insights(self) -> None:
+        result = load_test_data_insights(str(FIXTURES / "test-run-cases.csv"))
+
+        self.assertIn(result["engine"], {"duckdb", "stdlib"})
+        self.assertEqual(result["run_id"], "RUN_CSV_001")
+        self.assertEqual(result["total_cases"], 3)
+        self.assertEqual(result["failed_cases"], 1)
+        self.assertEqual(result["warning_cases"], 1)
+        self.assertEqual(result["pass_rate"], 0.3333)
+        self.assertEqual(result["failure_reasons"][0]["reason"], "扭矩误差超过阈值")
 
 
 if __name__ == "__main__":

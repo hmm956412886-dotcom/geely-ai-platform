@@ -184,6 +184,7 @@ class AppTests(unittest.TestCase):
         self.assertEqual(payload["api"]["operations"][0]["side_effect"], "read_only")
         operation_ids = {operation["operation_id"] for operation in payload["api"]["operations"]}
         self.assertIn("compare_test_runs", operation_ids)
+        self.assertIn("analyze_test_data_insights", operation_ids)
         self.assertIn("get_model_config", operation_ids)
         self.assertIn("get_host_context", operation_ids)
         self.assertIn("update_host_context", operation_ids)
@@ -198,11 +199,26 @@ class AppTests(unittest.TestCase):
         self.assertEqual(response.status, 200)
         self.assertIn("analyze_test_run", by_name)
         self.assertIn("compare_test_runs", by_name)
+        self.assertIn("analyze_test_data_insights", by_name)
         self.assertIn("input_schema", by_name["analyze_test_run"])
         self.assertIn("output_schema", by_name["analyze_test_run"])
         self.assertEqual(by_name["update_host_context"]["risk_level"], "medium")
         self.assertEqual(by_name["list_audit_events"]["audit_level"], "debug")
         self.assertFalse(by_name["compare_test_runs"]["requires_confirmation"])
+
+    def test_test_data_insights_reads_source_file(self) -> None:
+        response = handle_request(
+            "POST",
+            "/api/v1/test-data/insights",
+            json.dumps({"source_file": str(FIXTURES / "test-run-cases.csv")}),
+        )
+
+        payload = json.loads(response.body)
+        self.assertEqual(response.status, 200)
+        self.assertIn(payload["result"]["engine"], {"duckdb", "stdlib"})
+        self.assertEqual(payload["result"]["run_id"], "RUN_CSV_001")
+        self.assertEqual(payload["result"]["status_counts"][0]["count"], 1)
+        self.assertEqual(payload["result"]["failure_reasons"][0]["reason"], "扭矩误差超过阈值")
 
     def test_test_data_compare_reads_two_source_files(self) -> None:
         response = handle_request(

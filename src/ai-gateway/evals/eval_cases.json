@@ -21,7 +21,7 @@
     "expect": {
       "result.tools.0.name": "analyze_test_run",
       "result.tools.0.side_effect": "read_only",
-      "result.tools.6.risk_level": "medium"
+      "result.tools.7.risk_level": "medium"
     },
     "prefix": {
       "request_id": "req_"
@@ -83,6 +83,23 @@
     },
     "contains": {
       "result.summary": "失败用例增加 1 个"
+    }
+  },
+  {
+    "name": "test_data_insights",
+    "method": "POST",
+    "path": "/api/v1/test-data/insights",
+    "body": {
+      "source_file": "${FIXTURES}/test-run-cases.csv"
+    },
+    "expect_status": 200,
+    "expect": {
+      "result.run_id": "RUN_CSV_001",
+      "result.failed_cases": 1,
+      "result.failure_reasons.0.reason": "扭矩误差超过阈值"
+    },
+    "prefix": {
+      "request_id": "req_"
     }
   },
   {
