@@ -1,0 +1,8 @@
+{
+  "project_id": "GEELY_TEST",
+  "run_id": "RUN_HOST_DEMO",
+  "source_file": "D:\\geely-ai-platform\\src\\ai-gateway\\tests\\fixtures\\test-run-cases.csv",
+  "target_file": "D:\\geely-ai-platform\\src\\ai-gateway\\tests\\fixtures\\test-run-cases-target.csv",
+  "current_view": "test_result_detail",
+  "user_id": "tester"
+}

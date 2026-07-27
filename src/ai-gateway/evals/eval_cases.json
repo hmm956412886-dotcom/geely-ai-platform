@@ -1,0 +1,131 @@
+[
+  {
+    "name": "copilot_page",
+    "method": "GET",
+    "path": "/copilot",
+    "expect_status": 200,
+    "body_contains": "Geely AI Copilot"
+  },
+  {
+    "name": "tools_registry",
+    "method": "GET",
+    "path": "/api/v1/tools",
+    "expect_status": 200,
+    "expect": {
+      "result.tools.0.name": "analyze_test_run",
+      "result.tools.0.side_effect": "read_only",
+      "result.tools.6.risk_level": "medium"
+    },
+    "prefix": {
+      "request_id": "req_"
+    }
+  },
+  {
+    "name": "analyze_csv",
+    "method": "POST",
+    "path": "/api/v1/analyze",
+    "body": {
+      "source_file": "${FIXTURES}/test-run-cases.csv"
+    },
+    "expect_status": 200,
+    "expect": {
+      "data.run_id": "RUN_CSV_001",
+      "data.failed_cases": 1
+    },
+    "contains": {
+      "answer": "本次测试共"
+    },
+    "prefix": {
+      "request_id": "req_"
+    }
+  },
+  {
+    "name": "host_context_roundtrip",
+    "method": "POST",
+    "path": "/api/v1/host/context",
+    "body": {
+      "project_id": "GEELY_TEST",
+      "run_id": "RUN_HOST_001",
+      "source_file": "${FIXTURES}/test-run-cases.csv",
+      "target_file": "${FIXTURES}/test-run-cases-target.csv",
+      "current_view": "test_result_detail",
+      "user_id": "tester"
+    },
+    "expect_status": 200,
+    "expect": {
+      "result.run_id": "RUN_HOST_001",
+      "result.current_view": "test_result_detail"
+    },
+    "prefix": {
+      "request_id": "req_"
+    }
+  },
+  {
+    "name": "compare_runs",
+    "method": "POST",
+    "path": "/api/v1/test-data/compare",
+    "body": {
+      "baseline_file": "${FIXTURES}/test-run-cases.csv",
+      "target_file": "${FIXTURES}/test-run-cases-target.csv"
+    },
+    "expect_status": 200,
+    "expect": {
+      "result.baseline_run_id": "RUN_CSV_001",
+      "result.target_run_id": "RUN_CSV_002",
+      "result.changed_metrics.2.delta": 1
+    },
+    "contains": {
+      "result.summary": "失败用例增加 1 个"
+    }
+  },
+  {
+    "name": "model_fallback",
+    "method": "POST",
+    "path": "/api/v1/analyze",
+    "body": {
+      "source_file": "${FIXTURES}/test-run-cases.csv",
+      "use_model": true
+    },
+    "expect_status": 200,
+    "contains": {
+      "warnings.0": "model api is not configured"
+    }
+  },
+  {
+    "name": "audit_events",
+    "method": "GET",
+    "path": "/api/v1/audit/events",
+    "expect_status": 200,
+    "expect": {
+      "result.events.0.path": "/api/v1/analyze"
+    }
+  },
+  {
+    "name": "invalid_json_error",
+    "method": "POST",
+    "path": "/api/v1/analyze",
+    "body_raw": "{bad",
+    "expect_status": 400,
+    "expect": {
+      "error.code": "invalid_json"
+    },
+    "prefix": {
+      "request_id": "req_"
+    }
+  },
+  {
+    "name": "missing_file_error",
+    "method": "POST",
+    "path": "/api/v1/test-data/summary",
+    "body": {
+      "source_file": "${FIXTURES}/missing.csv"
+    },
+    "expect_status": 400,
+    "expect": {
+      "error.code": "bad_request"
+    },
+    "contains": {
+      "error.message": "does not exist"
+    }
+  }
+]

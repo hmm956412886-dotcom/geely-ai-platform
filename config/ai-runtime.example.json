@@ -1,0 +1,26 @@
+{
+  "llm": {
+    "provider": "openai-compatible",
+    "base_url_env": "AI_MODEL_BASE_URL",
+    "api_key_env": "AI_MODEL_API_KEY",
+    "chat_model_env": "AI_MODEL_NAME",
+    "timeout_seconds_env": "AI_MODEL_TIMEOUT_SECONDS",
+    "embedding_model": null
+  },
+  "knowledge": {
+    "provider": "feishu-cli",
+    "command": "lark-cli",
+    "identity": "user",
+    "timeout_seconds": 30
+  },
+  "business_api": {
+    "base_url": "http://localhost:8080",
+    "auth_token_env": "TEST_SOFTWARE_API_TOKEN",
+    "timeout_seconds": 30
+  },
+  "runtime": {
+    "mode": "external-http",
+    "log_level": "info",
+    "audit_enabled": true
+  }
+}

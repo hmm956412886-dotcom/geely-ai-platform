@@ -1,0 +1,24 @@
+{
+  "run_id": "RUN_JSON_001",
+  "project_id": "GEELY_TEST",
+  "started_at": "2026-07-24T09:00:00+08:00",
+  "finished_at": "2026-07-24T09:30:00+08:00",
+  "cases": [
+    {
+      "case_id": "TC_001",
+      "name": "动力响应测试",
+      "status": "failed",
+      "reason": "扭矩误差超过阈值"
+    },
+    {
+      "case_id": "TC_002",
+      "name": "电压稳定性测试",
+      "status": "passed"
+    },
+    {
+      "case_id": "TC_003",
+      "name": "通信稳定性测试",
+      "status": "passed"
+    }
+  ]
+}

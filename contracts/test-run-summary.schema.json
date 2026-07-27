@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "TestRunSummary",
+  "type": "object",
+  "required": [
+    "run_id",
+    "source",
+    "status",
+    "total_cases",
+    "passed_cases",
+    "failed_cases"
+  ],
+  "properties": {
+    "run_id": {
+      "type": "string"
+    },
+    "source": {
+      "type": "object",
+      "required": [
+        "type",
+        "ref"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "api",
+            "json",
+            "csv",
+            "excel",
+            "pdx",
+            "xml"
+          ]
+        },
+        "ref": {
+          "type": "string"
+        }
+      }
+    },
+    "project_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "passed",
+        "failed",
+        "warning",
+        "unknown"
+      ]
+    },
+    "started_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "finished_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "total_cases": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "passed_cases": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "failed_cases": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": {
+        "type": [
+          "number",
+          "string",
+          "boolean",
+          "null"
+        ]
+      }
+    },
+    "failures": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "case_id",
+          "name"
+        ],
+        "properties": {
+          "case_id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      }
+    }
+  }
+}
+

@@ -1,0 +1,72 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Geely AI Gateway MVP",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "Health check"
+      }
+    },
+    "/demo": {
+      "get": {
+        "summary": "Embeddable demo panel"
+      }
+    },
+    "/copilot": {
+      "get": {
+        "summary": "Embeddable Copilot side panel"
+      }
+    },
+    "/plugin-manifest.json": {
+      "get": {
+        "summary": "Host integration manifest"
+      }
+    },
+    "/api/v1/tools": {
+      "get": {
+        "summary": "Return machine-readable AI tool contracts"
+      }
+    },
+    "/api/v1/model/config": {
+      "get": {
+        "summary": "Return public model runtime config"
+      }
+    },
+    "/api/v1/host/context": {
+      "get": {
+        "summary": "Return host software context"
+      },
+      "post": {
+        "summary": "Update host software context"
+      }
+    },
+    "/api/v1/audit/events": {
+      "get": {
+        "summary": "Return recent audit events"
+      }
+    },
+    "/api/v1/analyze": {
+      "post": {
+        "summary": "Analyze test data with knowledge citations"
+      }
+    },
+    "/api/v1/test-data/summary": {
+      "post": {
+        "summary": "Return a test run summary"
+      }
+    },
+    "/api/v1/test-data/compare": {
+      "post": {
+        "summary": "Compare two test run files"
+      }
+    },
+    "/api/v1/knowledge/query": {
+      "post": {
+        "summary": "Query knowledge provider"
+      }
+    }
+  }
+}

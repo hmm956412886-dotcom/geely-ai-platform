@@ -1,0 +1,4 @@
+run_id,project_id,case_id,name,status,reason
+RUN_CSV_001,GEELY_TEST,TC_001,动力响应测试,failed,扭矩误差超过阈值
+RUN_CSV_001,GEELY_TEST,TC_002,电压稳定性测试,passed,
+RUN_CSV_001,GEELY_TEST,TC_003,通信稳定性测试,warning,偶发抖动

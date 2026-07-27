@@ -1,0 +1,10 @@
+# Treat common test-data artifacts as binary. Use Git LFS only for sanitized
+# fixtures that are safe to store in the repository.
+*.pdx binary
+*.mf4 binary
+*.mdf binary
+*.blf binary
+*.dbc binary
+*.xlsx binary
+*.xls binary
+

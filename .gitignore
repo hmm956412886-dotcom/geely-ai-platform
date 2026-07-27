@@ -1,0 +1,33 @@
+# .NET
+bin/
+obj/
+.vs/
+
+# Python
+__pycache__/
+.venv/
+*.py[cod]
+
+# Local configuration and secrets
+.env
+.env.local
+secrets/
+
+# Generated data
+data/
+logs/
+tmp/
+.codegraph/
+
+# Customer data and local test artifacts
+*.pdx
+*.mf4
+*.mdf
+*.blf
+*.dbc
+customer-data/
+local-fixtures/
+
+# IDE
+.idea/
+.vscode/

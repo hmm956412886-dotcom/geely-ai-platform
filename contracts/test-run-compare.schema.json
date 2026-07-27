@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "TestRunCompareResult",
+  "type": "object",
+  "required": [
+    "baseline_run_id",
+    "target_run_id",
+    "summary",
+    "changed_metrics"
+  ],
+  "properties": {
+    "baseline_run_id": {
+      "type": "string"
+    },
+    "target_run_id": {
+      "type": "string"
+    },
+    "summary": {
+      "type": "string"
+    },
+    "changed_metrics": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "baseline",
+          "target",
+          "delta"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "baseline": {
+            "type": [
+              "number",
+              "string",
+              "boolean",
+              "null"
+            ]
+          },
+          "target": {
+            "type": [
+              "number",
+              "string",
+              "boolean",
+              "null"
+            ]
+          },
+          "delta": {
+            "type": [
+              "number",
+              "string",
+              "boolean",
+              "null"
+            ]
+          }
+        }
+      }
+    }
+  }
+}
+

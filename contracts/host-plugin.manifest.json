@@ -1,0 +1,77 @@
+{
+  "id": "geely-ai-gateway",
+  "version": "0.1.0",
+  "display_name": "Geely AI Assistant",
+  "integration_modes": [
+    "webview",
+    "http-api",
+    "cli-launch"
+  ],
+  "webview": {
+    "entry": "/copilot",
+    "preferred_width": 460,
+    "preferred_height": 720
+  },
+  "api": {
+    "base_path": "/api/v1",
+    "tools": "/api/v1/tools",
+    "operations": [
+      {
+        "operation_id": "analyze_test_run",
+        "method": "POST",
+        "path": "/api/v1/analyze",
+        "side_effect": "read_only",
+        "requires_confirmation": false
+      },
+      {
+        "operation_id": "summarize_test_data",
+        "method": "POST",
+        "path": "/api/v1/test-data/summary",
+        "side_effect": "read_only",
+        "requires_confirmation": false
+      },
+      {
+        "operation_id": "compare_test_runs",
+        "method": "POST",
+        "path": "/api/v1/test-data/compare",
+        "side_effect": "read_only",
+        "requires_confirmation": false
+      },
+      {
+        "operation_id": "query_knowledge",
+        "method": "POST",
+        "path": "/api/v1/knowledge/query",
+        "side_effect": "read_only",
+        "requires_confirmation": false
+      },
+      {
+        "operation_id": "get_model_config",
+        "method": "GET",
+        "path": "/api/v1/model/config",
+        "side_effect": "read_only",
+        "requires_confirmation": false
+      },
+      {
+        "operation_id": "get_host_context",
+        "method": "GET",
+        "path": "/api/v1/host/context",
+        "side_effect": "read_only",
+        "requires_confirmation": false
+      },
+      {
+        "operation_id": "update_host_context",
+        "method": "POST",
+        "path": "/api/v1/host/context",
+        "side_effect": "local_state",
+        "requires_confirmation": false
+      },
+      {
+        "operation_id": "list_audit_events",
+        "method": "GET",
+        "path": "/api/v1/audit/events",
+        "side_effect": "read_only",
+        "requires_confirmation": false
+      }
+    ]
+  }
+}
