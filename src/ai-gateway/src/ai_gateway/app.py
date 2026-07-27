@@ -283,62 +283,101 @@ def _copilot_html() -> str:
   <title>Geely AI Copilot</title>
   <style>
     * { box-sizing: border-box; }
-    body { margin: 0; font-family: "Segoe UI", Arial, sans-serif; color: #172033; background: #f4f6f8; }
-    main { width: min(100vw, 460px); min-height: 100vh; margin: 0 auto; background: #ffffff; border-left: 1px solid #d7dde7; border-right: 1px solid #d7dde7; display: flex; flex-direction: column; }
-    header { padding: 14px 16px; border-bottom: 1px solid #d7dde7; background: #ffffff; }
-    h1 { margin: 0; font-size: 18px; font-weight: 650; letter-spacing: 0; }
-    .sub { margin-top: 4px; font-size: 12px; color: #657186; }
-    .panel { padding: 14px 16px; border-bottom: 1px solid #e3e7ee; }
-    label { display: block; margin: 10px 0 6px; font-size: 12px; color: #4b5568; }
-    input, textarea { width: 100%; border: 1px solid #cbd3df; border-radius: 6px; padding: 8px 9px; font: inherit; color: #172033; background: #ffffff; }
-    textarea { min-height: 76px; resize: vertical; }
+    :root { color-scheme: light; --line: #d1d1d1; --soft-line: #e8e8e8; --text: #1f1f1f; --muted: #616161; --panel: #ffffff; --page: #f5f5f5; --accent: #2563eb; --accent-soft: #eef4ff; }
+    body { margin: 0; font-family: "Segoe UI", Arial, sans-serif; color: var(--text); background: var(--page); }
+    main { width: min(100vw, 440px); height: 100vh; margin-left: auto; background: var(--panel); border-left: 1px solid var(--line); display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; }
+    header { min-height: 56px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 14px; border-bottom: 1px solid var(--line); background: #fbfbfb; }
+    .brand { display: flex; align-items: center; min-width: 0; gap: 10px; }
+    .mark { width: 28px; height: 28px; border-radius: 6px; display: grid; place-items: center; color: #fff; background: linear-gradient(135deg, #2563eb, #0f766e); font-weight: 800; }
+    h1 { margin: 0; font-size: 16px; font-weight: 650; letter-spacing: 0; }
+    .sub { margin-top: 2px; color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .iconbtn { width: 32px; height: 32px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: #424242; cursor: pointer; font-size: 18px; line-height: 1; }
+    .iconbtn:hover { background: #f0f0f0; }
+    .context { padding: 10px 14px; border-bottom: 1px solid var(--soft-line); background: #ffffff; }
+    .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+    .chip { max-width: 100%; border: 1px solid #d6e3ff; background: var(--accent-soft); color: #174ea6; border-radius: 999px; padding: 4px 8px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    details { margin-top: 8px; }
+    summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+    label { display: block; margin: 8px 0 4px; font-size: 12px; color: var(--muted); }
+    input, textarea { width: 100%; border: 1px solid #c8c8c8; border-radius: 6px; padding: 7px 8px; font: inherit; color: var(--text); background: #fff; }
+    input { height: 32px; }
+    textarea { min-height: 70px; resize: vertical; }
     .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-    .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
-    button { min-height: 36px; border: 1px solid #2f6fed; border-radius: 6px; background: #2f6fed; color: white; cursor: pointer; font-weight: 600; }
-    button.secondary { background: #ffffff; color: #2f405f; border-color: #b8c2d2; }
-    button:disabled { opacity: .62; cursor: not-allowed; }
-    .result { flex: 1; min-height: 240px; padding: 14px 16px; background: #f8fafc; }
-    pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; line-height: 1.45; color: #132033; }
-    .status { margin-bottom: 10px; font-size: 12px; color: #657186; }
-    @media (min-width: 760px) { main { margin-left: auto; margin-right: 0; } }
+    .messages { min-height: 0; overflow: auto; padding: 14px; background: #fafafa; }
+    .msg { display: grid; gap: 6px; margin-bottom: 14px; }
+    .msg .name { color: var(--muted); font-size: 12px; }
+    .bubble { border: 1px solid var(--soft-line); border-radius: 8px; padding: 10px 11px; background: #fff; font-size: 13px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .msg.user .bubble { background: var(--accent-soft); border-color: #cfe0ff; }
+    .facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 8px; }
+    .fact { border: 1px solid var(--soft-line); border-radius: 6px; padding: 7px; background: #fff; }
+    .fact strong { display: block; font-size: 16px; }
+    .fact span { color: var(--muted); font-size: 11px; }
+    .composer { border-top: 1px solid var(--line); background: #ffffff; padding: 12px 14px 14px; }
+    .suggestions { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 8px; }
+    button { min-height: 34px; border: 1px solid #c8c8c8; border-radius: 6px; background: #ffffff; color: #242424; cursor: pointer; font-weight: 600; }
+    button.primary { border-color: var(--accent); background: var(--accent); color: #ffffff; }
+    button.pill { flex: 0 0 auto; padding: 0 10px; font-size: 12px; font-weight: 600; }
+    .sendrow { display: grid; grid-template-columns: minmax(0, 1fr) 70px; gap: 8px; align-items: end; }
+    .status { color: var(--muted); font-size: 12px; margin-top: 7px; min-height: 16px; }
+    pre { margin: 8px 0 0; padding: 8px; max-height: 160px; overflow: auto; border-radius: 6px; background: #f5f5f5; font-size: 11px; white-space: pre-wrap; overflow-wrap: anywhere; }
+    @media (max-width: 520px) { main { width: 100vw; border-left: 0; } .facts { grid-template-columns: 1fr; } .grid { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
   <main>
     <header>
-      <h1>Geely AI Copilot</h1>
-      <div class="sub">当前测试上下文 · 只读分析</div>
-    </header>
-    <section class="panel">
-      <div class="grid">
+      <div class="brand">
+        <div class="mark">AI</div>
         <div>
-          <label for="project">项目</label>
-          <input id="project" value="GEELY_TEST" />
-        </div>
-        <div>
-          <label for="run">测试 Run</label>
-          <input id="run" value="RUN_CSV_001" />
+          <h1>Geely AI Copilot</h1>
+          <div class="sub" id="summary">当前测试上下文 · 只读分析</div>
         </div>
       </div>
-      <label for="source">当前测试文件</label>
-      <input id="source" value="D:\\geely-ai-platform\\src\\ai-gateway\\tests\\fixtures\\test-run-cases.csv" />
-      <label for="target">对比测试文件</label>
-      <input id="target" value="D:\\geely-ai-platform\\src\\ai-gateway\\tests\\fixtures\\test-run-cases-target.csv" />
-      <label for="question">问题</label>
-      <textarea id="question">分析当前测试失败原因，并给出下一步排查建议。</textarea>
-      <div class="actions">
-        <button id="analyze">分析当前测试</button>
-        <button id="compare" class="secondary">对比测试结果</button>
+      <button class="iconbtn" title="刷新上下文" id="reload">↻</button>
+    </header>
+    <section class="context">
+      <div class="chips">
+        <span class="chip" id="projectChip">GEELY_TEST</span>
+        <span class="chip" id="runChip">RUN_CSV_001</span>
+        <span class="chip">只读</span>
+      </div>
+      <details>
+        <summary>上下文</summary>
+        <div class="grid">
+          <div><label for="project">项目</label><input id="project" value="GEELY_TEST" /></div>
+          <div><label for="run">Run</label><input id="run" value="RUN_CSV_001" /></div>
+        </div>
+        <label for="source">当前测试文件</label>
+        <input id="source" value="D:\\geely-ai-platform\\src\\ai-gateway\\tests\\fixtures\\test-run-cases.csv" />
+        <label for="target">对比测试文件</label>
+        <input id="target" value="D:\\geely-ai-platform\\src\\ai-gateway\\tests\\fixtures\\test-run-cases-target.csv" />
+      </details>
+    </section>
+    <section class="messages" id="messages">
+      <div class="msg assistant">
+        <div class="name">Copilot</div>
+        <div class="bubble">我已连接当前测试上下文，可以分析失败原因、对比两次测试结果，并返回 request_id 方便追踪。</div>
       </div>
     </section>
-    <section class="result">
-      <div id="status" class="status">等待操作</div>
-      <pre id="output">选择一个动作开始。</pre>
+    <section class="composer">
+      <div class="suggestions">
+        <button class="pill" id="analyze">分析当前测试</button>
+        <button class="pill" id="compare">对比两次结果</button>
+        <button class="pill" id="knowledge">查询规范依据</button>
+      </div>
+      <div class="sendrow">
+        <textarea id="question">分析当前测试失败原因，并给出下一步排查建议。</textarea>
+        <button class="primary" id="send">发送</button>
+      </div>
+      <div id="status" class="status">已加载</div>
     </section>
   </main>
   <script>
-    const output = document.getElementById("output");
+    const messages = document.getElementById("messages");
     const status = document.getElementById("status");
+    const summary = document.getElementById("summary");
+    const projectChip = document.getElementById("projectChip");
+    const runChip = document.getElementById("runChip");
     const project = document.getElementById("project");
     const run = document.getElementById("run");
     const source = document.getElementById("source");
@@ -354,12 +393,41 @@ def _copilot_html() -> str:
       run.value = context.run_id || run.value;
       source.value = context.source_file || source.value;
       target.value = context.target_file || context.baseline_file || target.value;
+      projectChip.textContent = project.value;
+      runChip.textContent = run.value;
+      summary.textContent = `${run.value} · ${context.current_view || "test_result_detail"} · 只读分析`;
       status.textContent = "已加载宿主上下文";
+    }
+
+    function addMessage(role, text, extra) {
+      const item = document.createElement("div");
+      item.className = `msg ${role}`;
+      item.innerHTML = `<div class="name">${role === "user" ? "你" : "Copilot"}</div><div class="bubble"></div>`;
+      item.querySelector(".bubble").textContent = text;
+      if (extra) item.querySelector(".bubble").appendChild(extra);
+      messages.appendChild(item);
+      messages.scrollTop = messages.scrollHeight;
+    }
+
+    function facts(data) {
+      const wrap = document.createElement("div");
+      wrap.className = "facts";
+      const passRate = data.metrics && typeof data.metrics.pass_rate === "number" ? `${(data.metrics.pass_rate * 100).toFixed(2)}%` : "-";
+      [
+        ["总用例", data.total_cases],
+        ["失败", data.failed_cases],
+        ["通过率", passRate]
+      ].forEach(([label, value]) => {
+        const fact = document.createElement("div");
+        fact.className = "fact";
+        fact.innerHTML = `<strong>${value}</strong><span>${label}</span>`;
+        wrap.appendChild(fact);
+      });
+      return wrap;
     }
 
     async function postJson(path, body) {
       status.textContent = "请求中...";
-      output.textContent = "";
       const response = await fetch(path, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -367,15 +435,45 @@ def _copilot_html() -> str:
       });
       const payload = await response.json();
       status.textContent = response.ok ? "完成" : "请求失败";
-      output.textContent = JSON.stringify(payload, null, 2);
+      return payload;
     }
 
-    document.getElementById("analyze").addEventListener("click", () => {
-      postJson("/api/v1/analyze", { source_file: source.value, question: question.value });
-    });
-    document.getElementById("compare").addEventListener("click", () => {
-      postJson("/api/v1/test-data/compare", { baseline_file: source.value, target_file: target.value });
-    });
+    async function analyze() {
+      addMessage("user", question.value);
+      const payload = await postJson("/api/v1/analyze", { source_file: source.value, question: question.value });
+      if (payload.error) {
+        addMessage("assistant", `${payload.error.message}\\n\\nrequest_id: ${payload.request_id}`);
+        return;
+      }
+      const extra = payload.data ? facts(payload.data) : null;
+      addMessage("assistant", `${payload.answer}\\n\\nrequest_id: ${payload.request_id}`, extra);
+    }
+
+    async function compareRuns() {
+      addMessage("user", "对比当前测试与基线测试。");
+      const payload = await postJson("/api/v1/test-data/compare", { baseline_file: source.value, target_file: target.value });
+      if (payload.error) {
+        addMessage("assistant", `${payload.error.message}\\n\\nrequest_id: ${payload.request_id}`);
+        return;
+      }
+      addMessage("assistant", `${payload.result.summary}\\n\\nrequest_id: ${payload.request_id}`);
+    }
+
+    async function queryKnowledge() {
+      addMessage("user", "查询本次问题相关规范依据。");
+      const payload = await postJson("/api/v1/knowledge/query", { query: question.value });
+      if (payload.error) {
+        addMessage("assistant", `${payload.error.message}\\n\\nrequest_id: ${payload.request_id}`);
+        return;
+      }
+      addMessage("assistant", `${payload.answer}\\n引用：${payload.citations[0].title}\\nrequest_id: ${payload.request_id}`);
+    }
+
+    document.getElementById("reload").addEventListener("click", loadContext);
+    document.getElementById("send").addEventListener("click", analyze);
+    document.getElementById("analyze").addEventListener("click", analyze);
+    document.getElementById("compare").addEventListener("click", compareRuns);
+    document.getElementById("knowledge").addEventListener("click", queryKnowledge);
     loadContext();
   </script>
 </body>
@@ -422,9 +520,8 @@ def _showcase_html() -> str:
     .barrow { display: grid; grid-template-columns: 86px 1fr 32px; gap: 8px; align-items: center; font-size: 12px; }
     .bar { height: 10px; border-radius: 999px; background: #e5eaf1; overflow: hidden; }
     .fill { height: 100%; background: #2f6fed; }
-    aside { background: #ffffff; border-left: 1px solid #d8dee8; display: flex; flex-direction: column; min-width: 0; }
-    .copilot-head { padding: 16px; border-bottom: 1px solid #d8dee8; }
-    .copilot-title { font-size: 18px; font-weight: 750; }
+    aside { background: #ffffff; border-left: 1px solid #d8dee8; min-width: 0; }
+    .copilot-frame { width: 100%; height: 100vh; border: 0; display: block; background: #ffffff; }
     .context { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 12px 16px; border-bottom: 1px solid #e5eaf1; }
     label { display: block; font-size: 12px; color: #5b667a; margin-bottom: 5px; }
     input, textarea { width: 100%; border: 1px solid #cbd3df; border-radius: 6px; padding: 8px; color: #172033; background: #fff; }
@@ -438,6 +535,7 @@ def _showcase_html() -> str:
       .shell { grid-template-columns: 1fr; }
       nav { display: none; }
       aside { border-left: 0; border-top: 1px solid #d8dee8; }
+      .copilot-frame { height: 720px; }
       .workspace { grid-template-columns: 1fr; }
     }
     @media (max-width: 680px) {
@@ -465,7 +563,7 @@ def _showcase_html() -> str:
         </div>
         <div class="toolbar">
           <button class="secondary" id="sync">同步上下文</button>
-          <button id="quickAnalyze">AI 分析</button>
+          <button id="quickAnalyze">刷新 Copilot</button>
         </div>
       </div>
       <div class="content">
@@ -499,86 +597,41 @@ def _showcase_html() -> str:
       </div>
     </main>
     <aside>
-      <div class="copilot-head">
-        <div class="copilot-title">AI Copilot</div>
-        <div class="sub">读取当前测试上下文，返回可追踪结论</div>
-      </div>
-      <div class="context">
-        <div>
-          <label for="project">项目</label>
-          <input id="project" value="GEELY_TEST" />
-        </div>
-        <div>
-          <label for="run">Run</label>
-          <input id="run" value="RUN_CSV_001" />
-        </div>
-        <div class="full">
-          <label for="source">当前测试文件</label>
-          <input id="source" value="D:\\geely-ai-platform\\src\\ai-gateway\\tests\\fixtures\\test-run-cases.csv" />
-        </div>
-        <div class="full">
-          <label for="target">对比测试文件</label>
-          <input id="target" value="D:\\geely-ai-platform\\src\\ai-gateway\\tests\\fixtures\\test-run-cases-target.csv" />
-        </div>
-        <div class="full">
-          <label for="question">问题</label>
-          <textarea id="question">分析当前动力系统测试失败原因，并给出下一步排查建议。</textarea>
-        </div>
-      </div>
-      <div class="copilot-actions">
-        <button id="analyze">分析当前测试</button>
-        <button class="secondary" id="compare">对比两次结果</button>
-      </div>
-      <div class="answer">
-        <div id="status" class="status">等待操作</div>
-        <pre id="output">点击“AI 分析”开始。</pre>
-      </div>
+      <iframe class="copilot-frame" id="copilotFrame" title="Reusable Geely AI Copilot" src="/copilot"></iframe>
     </aside>
   </div>
   <script>
-    const output = document.getElementById("output");
-    const status = document.getElementById("status");
-    const project = document.getElementById("project");
-    const run = document.getElementById("run");
-    const source = document.getElementById("source");
-    const target = document.getElementById("target");
-    const question = document.getElementById("question");
+    const copilotFrame = document.getElementById("copilotFrame");
+    const context = {
+      project_id: "GEELY_TEST",
+      run_id: "RUN_CSV_001",
+      source_file: "D:/geely-ai-platform/src/ai-gateway/tests/fixtures/test-run-cases.csv",
+      target_file: "D:/geely-ai-platform/src/ai-gateway/tests/fixtures/test-run-cases-target.csv",
+      current_view: "test_result_detail",
+      user_id: "demo_user"
+    };
 
     async function postJson(path, body) {
-      status.textContent = "请求中...";
       const response = await fetch(path, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body)
       });
-      const payload = await response.json();
-      status.textContent = response.ok ? "完成" : "请求失败";
-      output.textContent = JSON.stringify(payload, null, 2);
-      return payload;
+      return response.json();
     }
 
     async function syncContext() {
-      await postJson("/api/v1/host/context", {
-        project_id: project.value,
-        run_id: run.value,
-        source_file: source.value,
-        target_file: target.value,
-        current_view: "test_result_detail",
-        user_id: "demo_user"
-      });
+      await postJson("/api/v1/host/context", context);
     }
 
-    async function analyze() {
+    async function reloadCopilot() {
       await syncContext();
-      await postJson("/api/v1/analyze", { source_file: source.value, question: question.value });
+      copilotFrame.contentWindow.location.reload();
     }
 
     document.getElementById("sync").addEventListener("click", syncContext);
-    document.getElementById("quickAnalyze").addEventListener("click", analyze);
-    document.getElementById("analyze").addEventListener("click", analyze);
-    document.getElementById("compare").addEventListener("click", () => {
-      postJson("/api/v1/test-data/compare", { baseline_file: source.value, target_file: target.value });
-    });
+    document.getElementById("quickAnalyze").addEventListener("click", reloadCopilot);
+    syncContext();
   </script>
 </body>
 </html>

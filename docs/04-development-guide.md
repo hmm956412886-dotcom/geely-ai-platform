@@ -209,6 +209,8 @@ Phase 1 禁止：
 | P0-011 | Tool Registry 契约 | Done | `/api/v1/tools` 暴露 Agent/SK 可消费的工具名、schema、风险和审计等级 |
 | P0-012 | 宿主集成 Demo 包 | Done | `samples/host-integration` 可模拟宿主软件传入上下文、调用分析、对比结果和打开 Copilot |
 | P0-013 | 产品展示前端 | Done | `/showcase` 展示宿主软件模拟台 + Copilot 右侧栏，并能调用分析、对比和 Host Context |
+| P0-014 | 可复用 Copilot Shell | Done | `/copilot` 作为独立 iframe/WebView 侧边栏，`/showcase` 只嵌入它，不复制 UI |
+| P0-015 | DuckDB 测试数据分析 Spike | P0 | 在 Adapter 后接 DuckDB，可对 CSV 做确定性 SQL 指标分析 |
 | P1-001 | PDX 工具链调研 | P1 | 找到官方工具、SDK 或样例格式 |
 | P1-002 | PDX Adapter | P1 | 能解析脱敏 PDX 样例 |
 | P1-003 | IndexedRagProvider | P1 | 向量检索作为可选后端 |

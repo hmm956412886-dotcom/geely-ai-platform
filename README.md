@@ -8,14 +8,14 @@
 
 ```text
 客户测试软件
-  -> WebView / HTTP / CLI / 文件路径
+  -> WebView / iframe / HTTP / CLI / 文件路径
   -> AI Gateway
   -> 知识源：飞书 CLI
   -> 数据源：测试软件导出文件、PDX Adapter、客户 API
   -> 模型 API：客户自行配置
 ```
 
-白话备注：先让客户软件能打开一个 AI 面板或调用一个本地 HTTP 服务。后面客户换 API Key、换模型、换知识库，都不需要改宿主软件主体逻辑。
+白话备注：先让客户软件或公司网站能嵌入同一个 AI 面板，或调用同一个本地 HTTP 服务。后面客户换 API Key、换模型、换知识库，都不需要改宿主软件主体逻辑。
 
 ## MVP 先做什么
 
@@ -28,6 +28,7 @@
 7. 飞书先通过 CLI 查询，不做全量迁移。
 8. 测试数据先通过 JSON fixture 或文件 Adapter 接入，不猜 PDX 内部格式。
 9. `samples/host-integration` 提供无源码集成样例。
+10. `/copilot` 作为可复用侧边栏组件，`/showcase` 只负责演示嵌入效果。
 
 暂不做：动态 UI、多 Agent、写入类工具、设备控制、全量向量库迁移。
 
@@ -86,3 +87,4 @@ http://127.0.0.1:8765/openapi.json
 - [GitHub 版本控制指南](docs/07-github-versioning.md)
 - [测试数据文件分析方案](docs/08-test-data-file-analysis.md)
 - [产品 MVP 集成契约](docs/09-product-mvp-contract.md)
+- [可复用 Copilot 嵌入契约](docs/10-reusable-copilot-embed.md)

@@ -42,6 +42,16 @@ http://127.0.0.1:8765/showcase
 http://127.0.0.1:8765/copilot
 ```
 
+网站或桌面软件嵌入：
+
+```html
+<iframe
+  title="Geely AI Copilot"
+  src="http://127.0.0.1:8765/copilot"
+  style="width: 440px; height: 100vh; border: 0"
+></iframe>
+```
+
 ## MVP 自检
 
 ```powershell
@@ -73,7 +83,7 @@ PASS missing_file_error
 优先顺序：
 
 1. 宿主软件先调用 `POST /api/v1/host/context`，传入当前项目、Run 和测试文件路径。
-2. 演示时打开 `/showcase`，真实嵌入时 WebView 打开 `/copilot`，作为宿主软件右侧 AI 面板。
+2. 演示时打开 `/showcase`，真实嵌入时 WebView 或 iframe 打开 `/copilot`，作为宿主软件或公司网站的右侧 AI 面板。
 3. 插件按钮调用 `POST /api/v1/analyze`，传入当前测试文件路径、`run_id` 或导出后的 JSON。
 4. 宿主软件读取 `/plugin-manifest.json`，按 manifest 自动注册 AI 面板和 API 操作。
 5. 客户没有源码时，用外部启动脚本或桌面快捷方式启动 AI Gateway。
