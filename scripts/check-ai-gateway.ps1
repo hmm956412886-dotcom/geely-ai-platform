@@ -1,9 +1,11 @@
 param(
-    [string]$GatewayUrl = $(if ($env:AI_GATEWAY_URL) { $env:AI_GATEWAY_URL } else { "http://127.0.0.1:8765" })
+    [string]$GatewayUrl = $(if ($env:AI_GATEWAY_URL) { $env:AI_GATEWAY_URL } else { "http://127.0.0.1:8765" }),
+    [string]$CopilotUrl = ""
 )
 
 $ErrorActionPreference = "Stop"
 $BaseUrl = $GatewayUrl.TrimEnd("/")
+$CopilotBaseUrl = if ($CopilotUrl) { $CopilotUrl.TrimEnd("/") } else { $BaseUrl + "/copilot-shell" }
 
 function Invoke-GatewayJson {
     param([string]$Path)
@@ -37,8 +39,9 @@ Assert-Ok ($toolNames -contains "compare_test_runs") "tool compare_test_runs"
 $showcase = Invoke-WebRequest -Method Get -UseBasicParsing -Uri ($BaseUrl + "/showcase")
 Assert-Ok ($showcase.StatusCode -eq 200) "/showcase"
 
-$copilot = Invoke-WebRequest -Method Get -UseBasicParsing -Uri ($BaseUrl + "/copilot-shell/")
-Assert-Ok ($copilot.StatusCode -eq 200) "/copilot-shell/"
-Assert-Ok ($copilot.Content -match "/copilot-shell/assets/.+\.js") "Copilot shell JavaScript asset"
+$copilot = Invoke-WebRequest -Method Get -UseBasicParsing -Uri ($CopilotBaseUrl + "/")
+Assert-Ok ($copilot.StatusCode -eq 200) "Copilot shell URL"
+Assert-Ok ($copilot.Content -match "/copilot-shell/(assets/.+\.js|src/main\.tsx)") "Copilot shell JavaScript entry"
 
 Write-Host "AI Gateway check completed: $BaseUrl"
+Write-Host "Copilot shell check completed: $CopilotBaseUrl/"

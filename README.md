@@ -33,11 +33,27 @@
 10. `/copilot-shell/` 作为 React + CopilotKit 可复用侧边栏，`/showcase` 只负责演示嵌入效果。
 11. `/api/v1/test-data/insights` 提供确定性数据洞察，优先用 DuckDB，未安装时回退标准库。
 12. `scripts/start-ai-gateway.ps1` 和 `scripts/check-ai-gateway.ps1` 提供客户部署启动与验收入口。
-13. P0-018 已采用 CopilotKit + Microsoft Fluent UI，下一步主线是 P0-019 宿主嵌入与会话契约。
+13. 宿主通过 `host_session_id`、`postMessage` 和 `asset_id` 安全复用同一个 Copilot。
+14. `scripts/start-copilot-shell.ps1` 可独立启动前端联调服务，检查脚本可同时验证 Gateway 和前端 URL。
+15. P0 产品底座和演示交付已完成；PDX 样例到位前，下一主线是真实飞书 CLI 知识查询。
 
 暂不做：动态 UI、多 Agent、写入类工具、设备控制、全量向量库迁移、继续手写零散 Copilot UI。
 
 ## 运行 AI Gateway MVP
+
+一键启动产品演示（Gateway 会直接提供生产构建的 Copilot）：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-ai-gateway.ps1
+```
+
+独立启动前端联调服务：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-copilot-shell.ps1 -GatewayUrl http://127.0.0.1:8765
+```
+
+手动启动 Gateway：
 
 ```powershell
 cd D:\geely-ai-platform\src\ai-gateway

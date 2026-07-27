@@ -218,14 +218,15 @@ Phase 1 禁止：
 | P0-016 | Host Connector / Plugin SDK 样例 | Done | `samples/host-integration` 提供 PowerShell 调用样例和 Python Host SDK，宿主侧可完成上下文写入、分析、洞察、对比和 Copilot URL 获取 |
 | P0-017 | 客户部署配置最小化 | Done | 按 `docs/11-mvp-delivery-plan.md` 提供 env 模板、启动脚本、检查脚本和客户部署指南 |
 | P0-018 | 开源 Copilot 插件底座 | Done | React + TypeScript + CopilotKit + Fluent UI 构建产物由 Gateway 提供，调用集中到 Gateway client |
-| P0-019 | 宿主嵌入与会话契约 | P0 | `host_session_id` 隔离上下文，iframe/WebView 通过 `postMessage` 或 Host SDK 更新会话 |
-| P0-020 | 演示交付包 | P0 | 一套脚本启动 Gateway 和 Copilot 前端，并提供检查命令 |
+| P0-019 | 宿主嵌入与会话契约 | Done | `host_session_id` 隔离上下文，iframe/WebView 通过 `postMessage` 或 Host SDK 更新会话 |
+| P0-020 | 演示交付包 | Done | 一套脚本启动 Gateway 和 Copilot 前端，并提供检查命令 |
 | P1-001 | PDX 工具链调研 | P1 | 找到官方工具、SDK 或样例格式 |
 | P1-002 | PDX Adapter | P1 | 能解析脱敏 PDX 样例 |
-| P1-003 | IndexedRagProvider | P1 | 向量检索作为可选后端 |
-| P1-004 | 数据画像 | P1 | 接入 ydata-profiling 或同类工具生成可审计报告 |
-| P1-005 | 数据质量规则 | P1 | 接入 Great Expectations 或同类工具校验阈值、缺失值、范围 |
-| P1-006 | 可视化探索 | P1 | 接入 PyGWalker / Graphic Walker 或同类工具，不自研 BI |
+| P1-003 | Feishu CLI Provider | P1 | 可读取有权限飞书文档并返回引用 |
+| P1-004 | Indexed RAG Provider | P1 | 飞书 CLI 查询性能不足时接 LanceDB / Qdrant / PGVector 之一 |
+| P1-005 | 数据质量规则 | P1 | 规则明确后接 Great Expectations 或轻量规则引擎 |
+| P1-006 | 数据画像报告 | P1 | 需要一键概览时接 ydata-profiling 或同类工具 |
+| P1-007 | SK / MAF Tool Adapter | P1 | 将稳定的 `/api/v1/tools` 契约映射为成熟 Agent 框架工具 |
 | P2-001 | Schema 动态 UI | P2 | LLM 只生成 JSON Schema / UI Schema，前端成熟组件渲染 |
 
 ## 9. 开发完成标准

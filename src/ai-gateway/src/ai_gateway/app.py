@@ -806,6 +806,7 @@ def _plugin_manifest() -> dict[str, Any]:
             "entry": "/copilot-shell/",
             "fallback_entry": "/copilot",
             "host_session_query_parameter": "host_session_id",
+            "host_origin_query_parameter": "host_origin",
             "post_message": {
                 "host_to_copilot": "geely-ai.host-context",
                 "copilot_to_host": "geely-ai.copilot-ready",

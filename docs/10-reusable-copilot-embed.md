@@ -1,96 +1,89 @@
 # 可复用 Copilot 嵌入契约
 
-## 1. 结论
+## 1. 产品入口
 
-`/copilot` 是可复用的 AI 侧边栏组件，不能绑定某一个业务软件页面。
-
-它可以被嵌入到：
-
-- 汽车测试软件 WebView。
-- 公司内部网站。
-- 项目管理平台。
-- 后续其他桌面软件或 Web 系统。
-
-白话备注：我们不要给每个软件重新做一个 AI 面板。每个宿主只负责告诉 AI “我现在在哪、看什么数据”，同一个 Copilot 面板负责展示、提问和工具调用。
-
-## 2. 嵌入方式
-
-Web / 公司网站：
-
-```html
-<iframe
-  title="Geely AI Copilot"
-  src="http://127.0.0.1:8765/copilot"
-  style="width: 440px; height: 100vh; border: 0"
-></iframe>
-```
-
-桌面软件 WebView：
+同一个 React + CopilotKit 侧边栏用于公司网站 iframe 和桌面软件 WebView：
 
 ```text
-http://127.0.0.1:8765/copilot
+http://127.0.0.1:8765/copilot-shell/?host_session_id=<宿主会话ID>&host_origin=<宿主网页Origin>
 ```
 
-产品演示页：
+`host_session_id` 由宿主创建。同一个侧边栏实例保持不变，不同网站页面、桌面窗口或测试任务使用不同会话，避免上下文串线。
+
+产品演示入口：
 
 ```text
 http://127.0.0.1:8765/showcase
 ```
 
-`/showcase` 只是演示宿主软件如何嵌入 `/copilot`，不是另一个正式 Copilot。
+## 2. 网站 iframe
 
-## 3. 宿主上下文
-
-宿主系统在打开或刷新 Copilot 前，调用：
-
-```http
-POST /api/v1/host/context
-Content-Type: application/json
+```html
+<iframe
+  id="geely-ai-copilot"
+  title="Geely AI Copilot"
+  src="http://127.0.0.1:8765/copilot-shell/?host_session_id=run-001&amp;host_origin=https%3A%2F%2Fintranet.example.com"
+  style="width: 460px; height: 100vh; border: 0"
+></iframe>
 ```
 
-```json
+Copilot 加载后会发送 `geely-ai.copilot-ready`。宿主使用同源 `postMessage` 更新当前上下文：
+
+```js
+const copilot = document.getElementById("geely-ai-copilot");
+
+copilot.contentWindow.postMessage(
+  {
+    type: "geely-ai.host-context",
+    host_session_id: "run-001",
+    context: {
+      project_id: "GEELY_TEST",
+      run_id: "RUN_001",
+      source_asset_id: "current-run",
+      target_asset_id: "baseline-run",
+      current_view: "test_result_detail",
+      user_id: "tester"
+    }
+  },
+  "http://127.0.0.1:8765"
+);
+```
+
+`host_origin` 必须是宿主网页的精确 Origin，例如 `https://intranet.example.com`。Gateway 与宿主经反向代理保持同源时可以省略。生产环境的 `host_session_id` 应使用不可预测的 UUID。
+
+## 3. 本地文件
+
+浏览器不传本地绝对路径。桌面宿主、Sidecar 或 Host SDK 先注册文件：
+
+```http
+POST /api/v1/host/assets?host_session_id=run-001
+Content-Type: application/json
+
 {
-  "project_id": "GEELY_TEST",
-  "run_id": "RUN_001",
-  "source_file": "D:\\test-results\\run_001.csv",
-  "target_file": "D:\\test-results\\run_000.csv",
-  "current_view": "test_result_detail",
-  "user_id": "tester"
+  "asset_id": "current-run",
+  "file_path": "D:\\test-results\\run_001.csv"
 }
 ```
 
-Copilot 自己读取：
+Gateway 只向浏览器返回 `asset_id`、文件名、类型和大小，真实路径只保存在当前 Gateway 进程内。
 
-```http
-GET /api/v1/host/context
+## 4. 桌面 WebView / Host SDK
+
+桌面软件可直接打开会话化 URL，并使用 `samples/host-integration/python_host_sdk.py` 完成：
+
+- 创建 `host_session_id`。
+- 注册本地 CSV / JSON 为 `asset_id`。
+- 更新当前项目、Run 和视图上下文。
+- 调用只读分析、洞察和对比接口。
+
+稳定集成协议仍是 Gateway REST API；`postMessage` 只负责 iframe/WebView 的上下文同步。
+
+## 5. 集成契约
+
+```text
+/plugin-manifest.json
+/openapi.json
+/api/v1/tools
 ```
 
-白话备注：这就是“上下文注入”。AI 面板不需要知道宿主软件内部代码，只要拿到当前项目、当前 Run、当前文件路径，就能工作。
-
-## 4. 复用边界
-
-Copilot 只负责：
-
-- 展示消息流。
-- 读取 Host Context。
-- 调用 `/api/v1/tools` 中声明的工具。
-- 展示分析结果、引用和 `request_id`。
-
-宿主系统负责：
-
-- 决定在哪里显示侧边栏。
-- 提供当前上下文。
-- 管理用户身份和权限。
-- 控制是否允许高风险工具。
-
-## 5. 后续升级
-
-当前 MVP 先用无依赖 HTML/CSS/JS，保证可展示、可嵌入。
-
-后续如果要做正式前端工程，再考虑：
-
-- `assistant-ui`：成熟 Chat UI 组件。
-- `CopilotKit`：更完整的 Copilot / Agent UI。
-- `AG-UI`：Agent 与前端交互协议。
-
-原则不变：前端框架可以替换，`/copilot`、`/api/v1/host/context`、`/api/v1/tools` 这三个契约不要轻易变。
+宿主负责身份、权限、侧边栏位置和会话生命周期。Copilot 负责读取上下文、调用只读工具并展示结果与 `request_id`。

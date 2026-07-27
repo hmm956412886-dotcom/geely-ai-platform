@@ -28,6 +28,8 @@ import type {
 type ChatMessages = NonNullable<ComponentProps<typeof CopilotChatView>["messages"]>;
 type ChatMessage = ChatMessages[number];
 
+const parentOrigin = resolveParentOrigin();
+
 const emptyContext: HostContext = {
   host_session_id: hostSessionId,
   project_id: "未连接",
@@ -130,7 +132,7 @@ export default function App() {
 
   useEffect(() => {
     const receiveHostContext = (event: MessageEvent<HostContextMessage>) => {
-      if (event.source !== window.parent || event.origin !== window.location.origin) return;
+      if (event.source !== window.parent || event.origin !== parentOrigin) return;
       if (event.data?.type !== "geely-ai.host-context") return;
       if (event.data.host_session_id !== hostSessionId) return;
       void gatewayClient
@@ -142,7 +144,7 @@ export default function App() {
     if (window.parent !== window) {
       window.parent.postMessage(
         { type: "geely-ai.copilot-ready", host_session_id: hostSessionId },
-        window.location.origin,
+        parentOrigin,
       );
     }
     return () => window.removeEventListener("message", receiveHostContext);
@@ -276,4 +278,15 @@ export default function App() {
       </main>
     </FluentProvider>
   );
+}
+
+function resolveParentOrigin(): string {
+  const configuredOrigin = new URLSearchParams(window.location.search).get("host_origin");
+  if (!configuredOrigin) return window.location.origin;
+  try {
+    const origin = new URL(configuredOrigin).origin;
+    return origin === "null" ? window.location.origin : origin;
+  } catch {
+    return window.location.origin;
+  }
 }

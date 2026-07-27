@@ -56,7 +56,19 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-ai-gateway.p
 
 ```text
 http://127.0.0.1:8765/showcase
-http://127.0.0.1:8765/copilot
+http://127.0.0.1:8765/copilot-shell/
+```
+
+Gateway 已直接提供生产构建的 Copilot 前端。需要独立联调前端时，另开 PowerShell：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-copilot-shell.ps1 -GatewayUrl http://127.0.0.1:8765
+```
+
+独立前端入口：
+
+```text
+http://127.0.0.1:5173/copilot-shell/
 ```
 
 ## 4. 检查部署状态
@@ -65,6 +77,14 @@ http://127.0.0.1:8765/copilot
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\check-ai-gateway.ps1 -GatewayUrl http://127.0.0.1:8765
+```
+
+同时检查独立前端：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\check-ai-gateway.ps1 `
+  -GatewayUrl http://127.0.0.1:8765 `
+  -CopilotUrl http://127.0.0.1:5173/copilot-shell
 ```
 
 应看到：
@@ -78,7 +98,8 @@ PASS tool analyze_test_run
 PASS tool analyze_test_data_insights
 PASS tool compare_test_runs
 PASS /showcase
-PASS /copilot
+PASS Copilot shell URL
+PASS Copilot shell JavaScript entry
 ```
 
 ## 5. 宿主软件接入
@@ -86,17 +107,20 @@ PASS /copilot
 客户软件有 WebView：
 
 ```text
-打开 /copilot
+打开 /copilot-shell/?host_session_id=<宿主会话ID>&host_origin=<宿主网页Origin>
 ```
 
 客户软件能发 HTTP：
 
 ```text
-POST /api/v1/host/context
-POST /api/v1/analyze
+POST /api/v1/host/assets?host_session_id=<宿主会话ID>
+POST /api/v1/host/context?host_session_id=<宿主会话ID>
+POST /api/v1/analyze?host_session_id=<宿主会话ID>
 POST /api/v1/test-data/insights
 POST /api/v1/test-data/compare
 ```
+
+网站 iframe 和桌面 WebView 的完整 `postMessage`、`asset_id` 示例见 `docs/10-reusable-copilot-embed.md`。
 
 客户软件暂时没有源码：
 

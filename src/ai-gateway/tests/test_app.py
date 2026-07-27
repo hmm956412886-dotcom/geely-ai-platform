@@ -272,6 +272,7 @@ class AppTests(unittest.TestCase):
         self.assertEqual(payload["webview"]["entry"], "/copilot-shell/")
         self.assertEqual(payload["webview"]["fallback_entry"], "/copilot")
         self.assertEqual(payload["webview"]["host_session_query_parameter"], "host_session_id")
+        self.assertEqual(payload["webview"]["host_origin_query_parameter"], "host_origin")
         self.assertEqual(
             payload["webview"]["post_message"]["host_to_copilot"],
             "geely-ai.host-context",
