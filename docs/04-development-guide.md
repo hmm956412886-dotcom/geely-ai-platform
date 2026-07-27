@@ -217,7 +217,7 @@ Phase 1 禁止：
 | P0-015 | DuckDB 测试数据分析 Spike | Done | `/api/v1/test-data/insights` 可返回状态分布和 Top 失败原因；DuckDB 为可选引擎，未安装时回退标准库 |
 | P0-016 | Host Connector / Plugin SDK 样例 | Done | `samples/host-integration` 提供 PowerShell 调用样例和 Python Host SDK，宿主侧可完成上下文写入、分析、洞察、对比和 Copilot URL 获取 |
 | P0-017 | 客户部署配置最小化 | Done | 按 `docs/11-mvp-delivery-plan.md` 提供 env 模板、启动脚本、检查脚本和客户部署指南 |
-| P0-018 | 开源 Copilot 插件底座 | Done | React + TypeScript + CopilotKit + Fluent UI 构建产物由 Gateway 提供，调用集中到 Gateway client |
+| P0-018 | 开源 Copilot 插件底座 | Done | React + TypeScript + assistant-ui + Fluent UI 构建产物由 Gateway 提供，调用集中到 Gateway client |
 | P0-019 | 宿主嵌入与会话契约 | Done | `host_session_id` 隔离上下文，iframe/WebView 通过 `postMessage` 或 Host SDK 更新会话 |
 | P0-020 | 演示交付包 | Done | 一套脚本启动 Gateway 和 Copilot 前端，并提供检查命令 |
 | P1-001 | PDX 工具链调研 | P1 | 找到官方工具、SDK 或样例格式 |
@@ -226,7 +226,7 @@ Phase 1 禁止：
 | P1-004 | Indexed RAG Provider | P1 | 飞书 CLI 查询性能不足时接 LanceDB / Qdrant / PGVector 之一 |
 | P1-005 | 数据质量规则 | P1 | 规则明确后接 Great Expectations 或轻量规则引擎 |
 | P1-006 | 数据画像报告 | P1 | 需要一键概览时接 ydata-profiling 或同类工具 |
-| P1-007 | SK / MAF Tool Adapter | P1 | 将稳定的 `/api/v1/tools` 契约映射为成熟 Agent 框架工具 |
+| P1-007 | Semantic Kernel Tool Adapter | P1 | Copilot 提问经 Semantic Kernel 选择只读 REST 工具，由 Gateway 执行并返回结果、引用和工具调用记录；未配置模型时保留可测试的确定性回退 |
 | P2-001 | Schema 动态 UI | P2 | LLM 只生成 JSON Schema / UI Schema，前端成熟组件渲染 |
 
 ## 9. 开发完成标准

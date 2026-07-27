@@ -10,8 +10,9 @@
     "preview": "vite preview --host 127.0.0.1"
   },
   "dependencies": {
-    "@copilotkit/react-core": "1.63.2",
-    "@copilotkit/react-ui": "1.63.2",
+    "@assistant-ui/react": "0.14.28",
+    "@assistant-ui/react-markdown": "0.14.7",
+    "@assistant-ui/react-ui": "0.2.1",
     "@fluentui/react-components": "9.74.4",
     "@fluentui/react-icons": "2.0.334",
     "react": "19.2.8",

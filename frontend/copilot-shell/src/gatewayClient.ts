@@ -1,5 +1,5 @@
 import type {
-  AnalysisResponse,
+  AgentResponse,
   CompareResponse,
   GatewayErrorBody,
   HostContext,
@@ -59,15 +59,8 @@ export const gatewayClient = {
     return payload.result;
   },
 
-  analyze(question: string, context: HostContext): Promise<AnalysisResponse> {
-    const source = context.source_asset_id
-      ? { source_asset_id: context.source_asset_id }
-      : { source_file: context.source_file };
-    return postJson<AnalysisResponse>(sessionPath("/api/v1/analyze"), {
-      question,
-      project_id: context.project_id,
-      ...source,
-    });
+  queryAgent(question: string): Promise<AgentResponse> {
+    return postJson<AgentResponse>(sessionPath("/api/v1/agent/query"), { question });
   },
 
   insights(context: HostContext): Promise<InsightsResponse> {

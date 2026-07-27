@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { ComponentProps } from "react";
-import { CopilotChatView } from "@copilotkit/react-core/v2";
+import {
+  AssistantRuntimeProvider,
+  useExternalStoreRuntime,
+  type AppendMessage,
+  type ThreadMessageLike,
+} from "@assistant-ui/react";
+import { makeMarkdownText, Thread } from "@assistant-ui/react-ui";
 import {
   Badge,
   Button,
@@ -19,16 +24,20 @@ import {
 } from "@fluentui/react-icons";
 import { GatewayRequestError, gatewayClient, hostSessionId } from "./gatewayClient";
 import type {
-  AnalysisResponse,
+  AgentResponse,
   HostContext,
   HostContextMessage,
   InsightsResponse,
 } from "./types";
 
-type ChatMessages = NonNullable<ComponentProps<typeof CopilotChatView>["messages"]>;
-type ChatMessage = ChatMessages[number];
+interface ChatMessage {
+  id: string;
+  role: "assistant" | "user";
+  content: string;
+}
 
 const parentOrigin = resolveParentOrigin();
+const MarkdownText = makeMarkdownText();
 
 const emptyContext: HostContext = {
   host_session_id: hostSessionId,
@@ -38,7 +47,7 @@ const emptyContext: HostContext = {
   user_id: "",
 };
 
-const initialMessages: ChatMessages = [
+const initialMessages: ChatMessage[] = [
   {
     id: crypto.randomUUID(),
     role: "assistant",
@@ -55,7 +64,25 @@ function userMessage(content: string): ChatMessage {
   return { id: crypto.randomUUID(), role: "user", content };
 }
 
-function formatAnalysis(payload: AnalysisResponse): string {
+function convertMessage(message: ChatMessage): ThreadMessageLike {
+  return {
+    id: message.id,
+    role: message.role,
+    content: message.content,
+    status:
+      message.role === "assistant" ? { type: "complete", reason: "stop" } : undefined,
+  };
+}
+
+function messageText(message: AppendMessage): string {
+  return message.content
+    .filter((part) => part.type === "text")
+    .map((part) => part.text)
+    .join("\n")
+    .trim();
+}
+
+function formatAgentResponse(payload: AgentResponse): string {
   const citation = payload.citations[0];
   const source = citation
     ? `\n\n**参考**：[${citation.title}](${citation.source_url}) · ${citation.provider}`
@@ -96,7 +123,7 @@ function formatComparison(payload: Record<string, unknown>, requestId: string): 
 
 export default function App() {
   const [context, setContext] = useState<HostContext>(emptyContext);
-  const [messages, setMessages] = useState<ChatMessages>(initialMessages);
+  const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [isRunning, setIsRunning] = useState(false);
   const [contextLoading, setContextLoading] = useState(true);
 
@@ -168,8 +195,8 @@ export default function App() {
 
   const analyze = useCallback(
     (question: string) =>
-      run(question, async () => formatAnalysis(await gatewayClient.analyze(question, context))),
-    [context, run],
+      run(question, async () => formatAgentResponse(await gatewayClient.queryAgent(question))),
+    [run],
   );
 
   const suggestions = useMemo(
@@ -183,6 +210,17 @@ export default function App() {
     ],
     [],
   );
+
+  const runtime = useExternalStoreRuntime<ChatMessage>({
+    messages,
+    isRunning,
+    convertMessage,
+    onNew: async (message) => {
+      const question = messageText(message);
+      if (question) await analyze(question);
+    },
+    suggestions: suggestions.map((suggestion) => ({ prompt: suggestion.message })),
+  });
 
   return (
     <FluentProvider theme={webLightTheme} className="app-provider">
@@ -265,15 +303,30 @@ export default function App() {
         </div>
 
         <section className="chat-region" aria-label="Copilot 对话">
-          <CopilotChatView
-            messages={messages}
-            isRunning={isRunning}
-            suggestions={suggestions}
-            onSelectSuggestion={(suggestion) => void analyze(suggestion.message)}
-            onSubmitMessage={(value) => void analyze(value)}
-            input={{ textArea: { placeholder: "询问当前测试数据..." } }}
-            autoScroll="pin-to-bottom"
-          />
+          <AssistantRuntimeProvider runtime={runtime}>
+            <Thread
+              welcome={{ message: null }}
+              userMessage={{ allowEdit: false }}
+              assistantMessage={{
+                allowReload: false,
+                allowCopy: true,
+                allowSpeak: false,
+                allowFeedbackPositive: false,
+                allowFeedbackNegative: false,
+                components: { Text: MarkdownText },
+              }}
+              composer={{ allowAttachments: false }}
+              strings={{
+                thread: { scrollToBottom: { tooltip: "滚动到底部" } },
+                composer: {
+                  input: { placeholder: "询问当前测试数据..." },
+                  send: { tooltip: "发送" },
+                  cancel: { tooltip: "停止" },
+                },
+                assistantMessage: { copy: { tooltip: "复制" } },
+              }}
+            />
+          </AssistantRuntimeProvider>
         </section>
       </main>
     </FluentProvider>

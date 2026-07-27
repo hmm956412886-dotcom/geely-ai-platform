@@ -13,10 +13,10 @@
 当前默认下一步是：
 
 ```text
-P0-019：宿主嵌入与会话契约
+P1-007：Semantic Kernel Tool Adapter
 ```
 
-方向：CopilotKit + Fluent UI 前端和现有 AI Gateway REST 契约已经保留。下一步解决网站 iframe 和桌面 WebView 的会话隔离与 `postMessage` 宿主上下文，不扩展 AG-UI、SK / Microsoft Agent Framework 或 RAG。
+方向：assistant-ui + Fluent UI 前端、宿主会话隔离、真实飞书查询和 Semantic Kernel 只读工具编排已经跑通。继续保留 AI Gateway REST API 作为稳定集成协议。Microsoft Agent Framework 仅作为未来多 Agent / 工作流兼容方向，不在当前任务引入。
 
 ## 1. 先想清楚再写代码
 
@@ -68,9 +68,9 @@ P0 只做：
 
 ## 5. 开源复用优先级
 
-- Copilot 前端：优先 CopilotKit，过重时用 assistant-ui。
+- Copilot 前端：使用 assistant-ui External Store Runtime；CopilotKit 因强制 Runtime / 许可耦合不采用。
 - Agent 前端协议：AG-UI 放到后续阶段，不在 P0 强上。
-- 后端编排：SK / Microsoft Agent Framework 后续接 Tool Registry。
+- 后端编排：当前只用 Semantic Kernel 接 Tool Registry；Microsoft Agent Framework 留到出现多 Agent / 工作流需求后再评估。
 - 数据分析：DuckDB / Polars / Pandas 藏在 Adapter 后。
 - RAG：飞书 CLI 跑通后再评估 LlamaIndex / Haystack / LanceDB / Qdrant。
 

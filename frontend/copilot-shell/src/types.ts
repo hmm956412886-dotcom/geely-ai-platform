@@ -36,6 +36,20 @@ export interface AnalysisResponse {
   warnings: string[];
 }
 
+export interface AgentResponse extends AnalysisResponse {
+  data: Record<string, unknown>;
+  tool_calls: Array<{
+    name: string;
+    path: string;
+    request_id?: string;
+  }>;
+  orchestrator: {
+    framework: string;
+    mode: string;
+    model?: string;
+  };
+}
+
 export interface InsightsResponse {
   request_id: string;
   result: {

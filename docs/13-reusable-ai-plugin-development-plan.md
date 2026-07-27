@@ -11,7 +11,7 @@ Geely AI Platform 的产品定位调整为：
   -> Host Connector / Plugin SDK
   -> Tool Registry / OpenAPI / Plugin Manifest
   -> 测试数据分析 Adapter
-  -> 后续接 SK / Microsoft Agent Framework / RAG / AG-UI
+  -> 后续接 Semantic Kernel / RAG / AG-UI
 ```
 
 不要继续把项目做成一堆自研小功能。现有 AI Gateway 继续保留，作为后端契约和业务 Adapter；前端 Copilot 插件、Agent UI、动态交互尽量复用成熟开源项目。
@@ -57,15 +57,15 @@ flowchart LR
     Gateway --> Audit["Audit Log"]
     Data --> DuckDB["DuckDB / stdlib / future Polars"]
     Knowledge --> Feishu["Feishu CLI / future RAG"]
-    Tools --> SK["future SK / Microsoft Agent Framework"]
+    Tools --> SK["Semantic Kernel Tool Adapter"]
 ```
 
 模块职责：
 
 | 模块 | 当前职责 | 后续演进 |
 | --- | --- | --- |
-| Copilot 前端 | 展示侧边栏、触发分析和数据洞察 | 接入 CopilotKit 或 assistant-ui |
-| AI Gateway | 暴露稳定 HTTP 契约、统一错误、审计、配置 | 接 SK / Microsoft Agent Framework |
+| Copilot 前端 | assistant-ui 提供对话线程，Fluent UI 提供侧边栏产品外壳 | 通过 External Store Runtime 对接稳定 Gateway REST API |
+| AI Gateway | 暴露稳定 HTTP 契约、统一错误、审计、配置 | 通过 Semantic Kernel 编排只读 REST 工具 |
 | Host SDK | 宿主传上下文、调用分析接口 | 扩展 C# / Java / C++ SDK |
 | TestDataAdapter | 解析 JSON / CSV，输出标准模型 | 接 Excel、PDX 官方工具或 SDK |
 | KnowledgeProvider | 当前返回飞书演示引用 | 接 lark-cli，再决定是否索引 RAG |
@@ -95,7 +95,7 @@ flowchart LR
 | P0-015 | 测试数据洞察接口 | Done |
 | P0-016 | Host Connector / Plugin SDK 样例 | Done |
 | P0-017 | 客户部署配置最小化 | Done |
-| P0-018 | 开源 Copilot 插件底座 | Done：React + CopilotKit + Fluent UI 已构建并由 Gateway 提供 |
+| P0-018 | 开源 Copilot 插件底座 | Done：React + assistant-ui + Fluent UI 已构建并由 Gateway 提供 |
 | P0-019 | 宿主嵌入与会话契约 | Done：会话隔离、`postMessage`、Host Asset 和 SDK 已验证 |
 | P0-020 | 演示交付包 | Done：Gateway、独立前端和双 URL 检查脚本已验证 |
 | P1-003 | Feishu CLI Provider | Done：真实搜索、关键词原文读取和 Gateway 引用已验证 |
@@ -113,28 +113,29 @@ http://127.0.0.1:8765/copilot-shell/
 
 | 项目 | 适合做什么 | 结论 |
 | --- | --- | --- |
-| CopilotKit | in-app Copilot、Generative UI、人机协同、Agent 前端 | 首选 Spike，最贴近插件产品形态 |
-| assistant-ui | React Chat UI、tool rendering、流式消息、附件 | 备选，界面控制更轻 |
+| CopilotKit | in-app Copilot、Generative UI、人机协同、Agent 前端 | 已完成 Spike；需要独立 Runtime / 云许可，不适合直接对接当前 Gateway REST 契约 |
+| assistant-ui | React Chat UI、tool rendering、流式消息、附件 | 当前采用；External Store Runtime 可直接承接 Gateway 状态和请求 |
 | AG-UI | Agent 和 UI 的事件协议 | 后续协议层，不先强上 |
 
 选择原则：
 
-- 如果 CopilotKit 能快速嵌入并调用我们现有 Gateway，优先用 CopilotKit。
-- 如果 CopilotKit 过重或侵入太强，退回 assistant-ui。
+- 当前固定使用 assistant-ui，不同时保留 CopilotKit 依赖。
+- Fluent UI 负责侧边栏布局、宿主上下文和快捷操作，assistant-ui 负责线程、消息、Composer 和 Markdown。
 - AG-UI 先作为后端协议目标，不在 P0 阶段强制实现。
 
 ### 5.2 Agent 编排层
 
 | 项目 | 适合做什么 | 结论 |
 | --- | --- | --- |
-| Semantic Kernel | Plugin / Function Calling / 企业应用编排 | 仍作为后端工具编排候选 |
-| Microsoft Agent Framework | 微软后续 Agent Runtime 方向 | P1 开始调研，不急于替换当前 Gateway |
+| Semantic Kernel | Plugin / Function Calling / 企业应用编排 | P1-007 采用，映射现有 REST Tool Registry |
+| Microsoft Agent Framework | 多 Agent / 复杂工作流运行时 | 当前不引入；出现明确多 Agent 或长流程需求后再评估兼容 |
 
-当前不马上接 SK 的原因：
+当前采用 Semantic Kernel 而不采用 Microsoft Agent Framework 的原因：
 
-- 现有 REST / Tool Registry 已能支撑 MVP。
-- 先把可嵌入 Copilot 产品形态做出来更重要。
-- SK 接入应发生在工具契约稳定之后。
+- 现有 REST / Tool Registry 已稳定，适合直接映射为 SK Plugin / Function。
+- 当前需要的是单 Agent 的函数选择和调用，不需要多 Agent、长流程状态或复杂运行时。
+- Gateway REST API 保持框架无关；以后更换编排框架不影响宿主网站和桌面软件。
+- Python `semantic-kernel` 固定为可选依赖，基础 Gateway 不因编排层增加部署负担。
 
 ### 5.3 RAG 和数据分析层
 
@@ -184,24 +185,24 @@ http://127.0.0.1:8765/copilot-shell/
 ```text
 frontend/copilot-shell
   -> React + TypeScript + Vite
-  -> CopilotKit 现成 Copilot 交互组件
+  -> assistant-ui 现成 Thread / Message / Composer / Markdown
   -> Microsoft Fluent UI / Fluent Icons
   -> gatewayClient 调用稳定 AI Gateway REST API
   -> Vite dist 输出，由 Gateway 提供 iframe / WebView 页面
 ```
 
-开源边界：CopilotKit、Fluent UI、React 和 Vite 使用固定版本；不同时引入 assistant-ui。业务代码只负责宿主上下文、Gateway Adapter 和测试数据结果展示，不重写开源项目已有的聊天基础能力。
+开源边界：assistant-ui、Fluent UI、React 和 Vite 使用固定版本；不同时引入 CopilotKit。业务代码只负责宿主上下文、Gateway Adapter 和测试数据结果展示，不重写开源项目已有的线程、消息、Composer 和 Markdown 能力。
 
 验收标准：
 
 - `frontend/copilot-shell` 是可安装、可构建的 React TypeScript 项目。
-- UI 实际引用 CopilotKit 和 Fluent UI，不接受仅在 README 中写“以后接入”。
+- UI 实际引用 assistant-ui 和 Fluent UI，不接受仅在 README 中写“以后接入”。
 - `pnpm build` 生成可部署产物，Gateway 直接提供 `/copilot-shell/`。
 - 页面具备 Microsoft Copilot 风格侧边栏、消息区、快捷操作、上下文状态、加载状态和错误 `request_id` 展示。
 - 所有 Gateway 调用集中在 TypeScript `gatewayClient`，组件中不散落裸 `fetch`。
 - 能调用：
   - `/api/v1/host/context`
-  - `/api/v1/analyze`
+  - `/api/v1/agent/query`
   - `/api/v1/test-data/insights`
   - `/api/v1/test-data/compare`
 - `/showcase` 实际嵌入构建后的 Copilot，不接受“提供替换路径”代替完成。
@@ -248,7 +249,7 @@ frontend/copilot-shell
 | P1-004 | Indexed RAG Provider | 飞书 CLI 查询性能不足 | 支持 LanceDB / Qdrant / PGVector 之一 |
 | P1-005 | 数据质量规则 | 测试规则明确 | 接 Great Expectations 或轻量规则引擎 |
 | P1-006 | 数据画像报告 | 需要一键数据概览 | 接 ydata-profiling 或同类工具 |
-| P1-007 | SK / MAF Tool Adapter | 工具契约稳定 | 将 `/api/v1/tools` 映射为 SK / MAF 工具 |
+| P1-007 | Semantic Kernel Tool Adapter | 工具契约稳定 | Copilot 问题经 SK 选择只读 REST 工具，Gateway 执行后返回结果、引用和调用记录 |
 
 ## 9. 🔒 安全边界
 
@@ -322,10 +323,18 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\check-ai-gateway.p
 默认下一步：
 
 ```text
-P1-007：SK / MAF Tool Adapter
+P1-007：Semantic Kernel Tool Adapter
 ```
 
 P1-001 / P1-002 等待脱敏 PDX 样例或官方工具说明；P1-004 只在 CLI 查询性能不足时启动，P1-005 / P1-006 等待真实规则或画像需求。在此之前优先把稳定的 REST Tool Registry 接入成熟 Agent 框架。
+
+P1-007 验收标准：
+
+- `/api/v1/tools` 中的只读工具动态映射为 Semantic Kernel OpenAPI Plugin，不复制分析、飞书或 Host 业务逻辑。
+- Copilot 自由文本通过 `/api/v1/agent/query` 进入编排链路，快捷确定性操作继续直接调用稳定 REST API。
+- 配置 OpenAI-compatible 模型时由 Semantic Kernel 自动选择并调用工具；未配置模型时使用确定性选择器保证离线演示和测试。
+- 响应包含 `answer`、`citations`、`request_id`、`tool_calls` 和编排模式，工具调用继续进入 Gateway Audit Log。
+- `semantic-kernel` 固定版本并作为可选依赖；不安装 Microsoft Agent Framework，不改变现有 REST 工具契约。
 
 除非用户明确改变方向，否则不要回到“继续手写 HTML 小功能”的路线。
 

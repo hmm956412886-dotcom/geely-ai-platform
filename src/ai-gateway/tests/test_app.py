@@ -117,7 +117,7 @@ class AppTests(unittest.TestCase):
                 '<link href="/copilot-shell/assets/index-test.css" rel="stylesheet">',
                 encoding="utf-8",
             )
-            (assets / "index-test.js").write_text("/api/v1/analyze", encoding="utf-8")
+            (assets / "index-test.js").write_text("/api/v1/agent/query", encoding="utf-8")
             (assets / "index-test.css").write_text("body {}", encoding="utf-8")
             (assets / "font-test.woff2").write_bytes(b"font")
 
@@ -136,7 +136,7 @@ class AppTests(unittest.TestCase):
                 styles = handle_request("GET", style_path.group(1))
                 self.assertEqual(script.status, 200)
                 self.assertEqual(script.content_type, "application/javascript; charset=utf-8")
-                self.assertIn("/api/v1/analyze", script.body)
+                self.assertIn("/api/v1/agent/query", script.body)
                 self.assertEqual(styles.status, 200)
                 self.assertEqual(styles.content_type, "text/css; charset=utf-8")
 
@@ -287,6 +287,7 @@ class AppTests(unittest.TestCase):
         self.assertIn("get_host_context", operation_ids)
         self.assertIn("update_host_context", operation_ids)
         self.assertIn("list_audit_events", operation_ids)
+        self.assertIn("query_agent", operation_ids)
 
     def test_tools_endpoint_describes_agent_contracts(self) -> None:
         response = handle_request("GET", "/api/v1/tools")

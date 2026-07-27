@@ -76,7 +76,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\check-ai-gateway.p
 
 | 编号 | 任务 | 触发条件 |
 | --- | --- | --- |
-| P0-018 | 开源 Copilot 插件底座 Spike | 立即开始，优先 CopilotKit，过重则退回 assistant-ui |
+| P0-018 | 开源 Copilot 插件底座 | Done：CopilotKit Spike 暴露强制 Runtime 耦合，最终采用 assistant-ui External Store Runtime |
 | P0-019 | 前后端契约稳定化 | P0-018 跑通后，把前端 API 调用集中成 client |
 | P0-020 | 演示交付包 | 前后端都能启动后，整理一键演示脚本 |
 | P1-001 | PDX 工具链调研 | 拿到真实脱敏 PDX 样例或官方工具信息后 |

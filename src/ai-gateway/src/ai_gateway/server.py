@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import argparse
+import os
 from typing import Sequence
 
 from .app import Response, handle_request
@@ -35,6 +36,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", default=8765, type=int)
     args = parser.parse_args(argv)
+    os.environ.setdefault(
+        "AI_GATEWAY_INTERNAL_BASE_URL",
+        f"http://127.0.0.1:{args.port}",
+    )
     server = ThreadingHTTPServer((args.host, args.port), GatewayHandler)
     print(f"Geely AI Gateway listening on http://{args.host}:{args.port}")
     try:

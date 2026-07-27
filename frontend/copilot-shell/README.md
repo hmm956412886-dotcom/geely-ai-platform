@@ -1,6 +1,6 @@
 # Copilot Shell
 
-React + TypeScript embeddable Copilot UI built with CopilotKit and Microsoft Fluent UI.
+React + TypeScript embeddable Copilot UI built with assistant-ui and Microsoft Fluent UI.
 
 ```powershell
 pnpm install

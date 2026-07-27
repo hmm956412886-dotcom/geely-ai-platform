@@ -1,6 +1,6 @@
 # AI Gateway
 
-这是第一版产品 MVP：一个无依赖 Python HTTP 服务，用来展示“客户软件如何集成 AI Runtime”。后续可以替换为 C# / ASP.NET Core + Semantic Kernel，但外部接口尽量保持稳定。
+这是第一版产品 MVP：基础 Gateway 保持无依赖 Python HTTP 服务，Semantic Kernel 作为可选工具编排层，客户软件始终通过稳定 REST API 集成。
 
 ## 接口
 
@@ -21,6 +21,7 @@ POST /api/v1/test-data/summary
 POST /api/v1/test-data/compare
 POST /api/v1/test-data/insights
 POST /api/v1/knowledge/query
+POST /api/v1/agent/query
 ```
 
 ## 本地运行
@@ -38,6 +39,14 @@ python -m pip install -e .[analytics]
 ```
 
 备注：不安装 DuckDB 也能运行，`/api/v1/test-data/insights` 会自动回退到标准库统计。安装 DuckDB 后，CSV 洞察会走 SQL 引擎，更适合后续大文件和多维分析。
+
+启用 Semantic Kernel 模型工具编排：
+
+```powershell
+python -m pip install -e .[agent]
+```
+
+不安装该可选依赖或不配置模型时，`/api/v1/agent/query` 使用确定性只读工具选择器，Copilot 仍可离线演示。
 
 打开产品展示页：
 
@@ -225,7 +234,7 @@ failure_reasons
 
 ## 模型 API 配置
 
-默认不调用外部模型，`/api/v1/analyze` 会返回本地确定性分析。客户需要接入自己的模型 API 时，配置环境变量：
+默认不调用外部模型，`/api/v1/agent/query` 使用本地确定性选择器。安装 `agent` 可选依赖并配置模型后，Semantic Kernel 会从 `/api/v1/tools` 选择只读 REST 工具：
 
 ```powershell
 $env:AI_MODEL_BASE_URL='https://api.example.com/v1'

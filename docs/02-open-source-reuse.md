@@ -24,9 +24,9 @@
 | 漂移/评测监控 | Evidently | 评测/监控 | P1 | 可用于测试数据分布变化、LLM/RAG 质量指标 |
 | 可视化探索 | PyGWalker / Graphic Walker | 嵌入式分析 UI | P1 | DataFrame 拖拽分析，不用自己写 BI 小工具 |
 | Text-to-SQL | Vanna | 参考或可选组件 | P1 | 适合关系库自然语言查询；注意 2026-03-29 GitHub 仓库已归档 |
-| Chat UI | assistant-ui | 前端组件 | P0 | React AI 对话 UI，作为 CopilotKit 过重时的回退方案 |
+| Chat UI | assistant-ui | 前端组件 | P0 | 当前采用，通过 External Store Runtime 对接 Gateway REST |
 | Agent 前端协议 | AG-UI | 协议 | P1 | 适合后续 Agent 与前端状态/事件流对接 |
-| 生成式 UI / Copilot 插件 | CopilotKit / OpenGenerativeUI | 框架/范例 | P0 | P0-018 首选 Spike；动态 UI 能力后续再打开 |
+| 生成式 UI / Copilot 插件 | CopilotKit / OpenGenerativeUI | 框架/范例 | P1+ | CopilotKit Spike 已完成但不采用；动态 UI 能力有真实需求后再评估 |
 | JSON Schema 表单 | react-jsonschema-form / JSON Forms | 前端组件 | P2 | 动态表单优先走 Schema，不让模型直接写业务代码 |
 | 企业低代码 | amis / Appsmith / Budibase / ToolJet | 独立平台或参考 | P2 | 适合管理台/配置台，不建议嵌入工业测试主流程 |
 | 汽车诊断 PDX/ODX | odxtools | Parser 候选 | P1 | 只适用于 ODX/PDX 诊断描述类文件；测试结果 PDX 要先确认格式 |
@@ -164,13 +164,12 @@ DuckDB / Polars / ydata-profiling / Great Expectations
 
 ## 7. 下一步开发建议
 
-P0 下一步先接入开源 Copilot 插件底座，而不是继续手写前端小功能：
+P0 已完成开源 Copilot 插件底座，不再继续手写前端小功能：
 
-1. 建 `frontend/copilot-shell`。
-2. 优先 Spike CopilotKit。
-3. 如果 CopilotKit 过重或侵入太强，退回 assistant-ui。
-4. 先调用现有 AI Gateway REST API，不重写后端。
-5. 跑通嵌入 `/showcase` 或给出清晰替换路径。
+1. `frontend/copilot-shell` 使用 assistant-ui + Fluent UI。
+2. CopilotKit Spike 因强制 Runtime / 许可耦合退出当前方案。
+3. 前端继续调用稳定 AI Gateway REST API，不重写后端。
+4. `/showcase` 和 `/copilot-shell/` 作为固定产品验收入口。
 
 文件分析链路已具备 JSON / CSV / insights / compare 的 MVP 基线。后续只有在客户给 Excel、PDX 样例或真实测试导出格式后，才继续扩展 TestDataAdapter。
 

@@ -2,7 +2,7 @@
 
 ## 1. 产品入口
 
-同一个 React + CopilotKit 侧边栏用于公司网站 iframe 和桌面软件 WebView：
+同一个 React + assistant-ui + Fluent UI 侧边栏用于公司网站 iframe 和桌面软件 WebView：
 
 ```text
 http://127.0.0.1:8765/copilot-shell/?host_session_id=<宿主会话ID>&host_origin=<宿主网页Origin>

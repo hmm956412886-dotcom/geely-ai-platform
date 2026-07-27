@@ -25,6 +25,13 @@
     "host_assets": "/api/v1/host/assets",
     "operations": [
       {
+        "operation_id": "query_agent",
+        "method": "POST",
+        "path": "/api/v1/agent/query",
+        "side_effect": "read_only",
+        "requires_confirmation": false
+      },
+      {
         "operation_id": "analyze_test_run",
         "method": "POST",
         "path": "/api/v1/analyze",

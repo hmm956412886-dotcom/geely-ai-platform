@@ -10,6 +10,7 @@ from urllib.parse import parse_qs, unquote, urlsplit
 from uuid import uuid4
 
 from .audit_log import append_audit_event, list_audit_events
+from .agent_orchestrator import run_agent_query
 from .host_assets import register_host_asset, resolve_host_asset
 from .host_context import get_host_context, normalize_host_session_id, update_host_context
 from .knowledge_provider import query_knowledge as query_knowledge_provider
@@ -91,6 +92,18 @@ def _handle_request(
         return json_response(_test_data_insights(_read_json(body), host_session_id))
     if method == "POST" and path == "/api/v1/knowledge/query":
         return json_response(_knowledge_query(_read_json(body)))
+    if method == "POST" and path == "/api/v1/agent/query":
+        payload = _read_json(body)
+        try:
+            return json_response(
+                run_agent_query(
+                    str(payload.get("question") or ""),
+                    get_host_context(host_session_id),
+                    host_session_id=host_session_id,
+                )
+            )
+        except RuntimeError as exc:
+            return error_response("agent_unavailable", str(exc), status=502)
     if method == "POST" and path == "/api/v1/analyze":
         return json_response(_analyze(_read_json(body), host_session_id))
     return error_response("not_found", f"No route for {method} {path}", status=404)
@@ -781,6 +794,7 @@ def _openapi() -> dict[str, Any]:
             "/api/v1/test-data/compare": {"post": {"summary": "Compare two test run files"}},
             "/api/v1/test-data/insights": {"post": {"summary": "Return deterministic test data insights"}},
             "/api/v1/knowledge/query": {"post": {"summary": "Query knowledge provider"}},
+            "/api/v1/agent/query": {"post": {"summary": "Select and execute a read-only Gateway tool"}},
         },
     }
 
@@ -807,6 +821,15 @@ def _plugin_manifest() -> dict[str, Any]:
             "base_path": "/api/v1",
             "tools": "/api/v1/tools",
             "host_assets": "/api/v1/host/assets",
-            "operations": manifest_operations(),
+            "operations": [
+                {
+                    "operation_id": "query_agent",
+                    "method": "POST",
+                    "path": "/api/v1/agent/query",
+                    "side_effect": "read_only",
+                    "requires_confirmation": False,
+                },
+                *manifest_operations(),
+            ],
         },
     }

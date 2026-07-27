@@ -150,6 +150,25 @@
     }
   },
   {
+    "name": "agent_selects_insights_tool",
+    "method": "POST",
+    "path": "/api/v1/agent/query",
+    "body": {
+      "question": "生成当前测试状态分布洞察"
+    },
+    "expect_status": 200,
+    "expect": {
+      "tool_calls.0.name": "analyze_test_data_insights",
+      "orchestrator.mode": "deterministic"
+    },
+    "contains": {
+      "answer": "failed 1 个"
+    },
+    "prefix": {
+      "request_id": "req_"
+    }
+  },
+  {
     "name": "knowledge_query_demo",
     "method": "POST",
     "path": "/api/v1/knowledge/query",

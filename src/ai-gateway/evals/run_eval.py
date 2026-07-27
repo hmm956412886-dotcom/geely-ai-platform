@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 import sys
+from http.server import ThreadingHTTPServer
+from threading import Thread
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -11,6 +14,7 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from ai_gateway.app import handle_request  # noqa: E402
+from ai_gateway.server import GatewayHandler  # noqa: E402
 
 
 FIXTURES = ROOT / "tests" / "fixtures"
@@ -18,17 +22,38 @@ CASES = Path(__file__).with_name("eval_cases.json")
 
 
 def main() -> int:
+    server = ThreadingHTTPServer(("127.0.0.1", 0), GatewayHandler)
+    server_thread = Thread(target=server.serve_forever, daemon=True)
+    server_thread.start()
+    previous_base_url = os.environ.get("AI_GATEWAY_INTERNAL_BASE_URL")
+    previous_agent_mode = os.environ.get("AI_AGENT_MODE")
+    os.environ["AI_GATEWAY_INTERNAL_BASE_URL"] = f"http://127.0.0.1:{server.server_port}"
+    os.environ["AI_AGENT_MODE"] = "deterministic"
     cases = json.loads(CASES.read_text(encoding="utf-8"))
     failures = 0
-    for case in cases:
-        error = run_case(case)
-        if error:
-            failures += 1
-            print(f"FAIL {case['name']}: {error}")
-        else:
-            print(f"PASS {case['name']}")
+    try:
+        for case in cases:
+            error = run_case(case)
+            if error:
+                failures += 1
+                print(f"FAIL {case['name']}: {error}")
+            else:
+                print(f"PASS {case['name']}")
+    finally:
+        server.shutdown()
+        server.server_close()
+        server_thread.join(timeout=5)
+        _restore_env("AI_GATEWAY_INTERNAL_BASE_URL", previous_base_url)
+        _restore_env("AI_AGENT_MODE", previous_agent_mode)
     print(f"{len(cases) - failures} passed, {failures} failed")
     return 1 if failures else 0
+
+
+def _restore_env(name: str, value: str | None) -> None:
+    if value is None:
+        os.environ.pop(name, None)
+    else:
+        os.environ[name] = value
 
 
 def run_case(case: dict[str, Any]) -> str | None:

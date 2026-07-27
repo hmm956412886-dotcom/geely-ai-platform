@@ -87,6 +87,11 @@
       "post": {
         "summary": "Query knowledge provider"
       }
+    },
+    "/api/v1/agent/query": {
+      "post": {
+        "summary": "Select and execute a read-only Gateway tool"
+      }
     }
   }
 }
