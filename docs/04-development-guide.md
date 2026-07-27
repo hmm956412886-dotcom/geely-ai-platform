@@ -217,6 +217,9 @@ Phase 1 禁止：
 | P0-015 | DuckDB 测试数据分析 Spike | Done | `/api/v1/test-data/insights` 可返回状态分布和 Top 失败原因；DuckDB 为可选引擎，未安装时回退标准库 |
 | P0-016 | Host Connector / Plugin SDK 样例 | Done | `samples/host-integration` 提供 PowerShell 调用样例和 Python Host SDK，宿主侧可完成上下文写入、分析、洞察、对比和 Copilot URL 获取 |
 | P0-017 | 客户部署配置最小化 | Done | 按 `docs/11-mvp-delivery-plan.md` 提供 env 模板、启动脚本、检查脚本和客户部署指南 |
+| P0-018 | 开源 Copilot 插件底座 Spike | P0 | 按 `docs/13-reusable-ai-plugin-development-plan.md` 建 `frontend/copilot-shell`，优先 CopilotKit，过重则退回 assistant-ui |
+| P0-019 | 前后端契约稳定化 | P0 | 将前端调用集中到 Gateway client，错误展示 `request_id`，不散落裸 `fetch` |
+| P0-020 | 演示交付包 | P0 | 一套脚本启动 Gateway 和 Copilot 前端，并提供检查命令 |
 | P1-001 | PDX 工具链调研 | P1 | 找到官方工具、SDK 或样例格式 |
 | P1-002 | PDX Adapter | P1 | 能解析脱敏 PDX 样例 |
 | P1-003 | IndexedRagProvider | P1 | 向量检索作为可选后端 |

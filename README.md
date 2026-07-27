@@ -1,6 +1,8 @@
 # Geely AI Platform
 
-面向吉利汽车测试软件的通用 AI 能力底座。当前策略是先做可展示、可嵌入、可替换模型 API 的产品 MVP，再逐步接入真实飞书知识库、测试数据文件和 Semantic Kernel 编排。
+面向吉利汽车测试软件的通用 AI 插件底座。当前策略是先做可展示、可嵌入、可替换模型 API 的产品 MVP，再逐步接入成熟开源 Copilot 前端、真实飞书知识库、测试数据文件和 Agent 编排。
+
+主开发计划见：[可复用 AI 插件完整开发计划](docs/13-reusable-ai-plugin-development-plan.md)。
 
 ## 当前方向
 
@@ -31,8 +33,9 @@
 10. `/copilot` 作为可复用侧边栏组件，`/showcase` 只负责演示嵌入效果。
 11. `/api/v1/test-data/insights` 提供确定性数据洞察，优先用 DuckDB，未安装时回退标准库。
 12. `scripts/start-ai-gateway.ps1` 和 `scripts/check-ai-gateway.ps1` 提供客户部署启动与验收入口。
+13. 下一步主线改为 P0-018：开源 Copilot 插件底座 Spike，优先 CopilotKit，过重则退回 assistant-ui。
 
-暂不做：动态 UI、多 Agent、写入类工具、设备控制、全量向量库迁移。
+暂不做：动态 UI、多 Agent、写入类工具、设备控制、全量向量库迁移、继续手写零散 Copilot UI。
 
 ## 运行 AI Gateway MVP
 
@@ -105,3 +108,4 @@ Invoke-RestMethod `
 - [可复用 Copilot 嵌入契约](docs/10-reusable-copilot-embed.md)
 - [MVP 交付计划](docs/11-mvp-delivery-plan.md)
 - [客户部署指南](docs/12-customer-deployment-guide.md)
+- [可复用 AI 插件完整开发计划](docs/13-reusable-ai-plugin-development-plan.md)

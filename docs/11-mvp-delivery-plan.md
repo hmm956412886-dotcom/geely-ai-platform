@@ -76,8 +76,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\check-ai-gateway.p
 
 | 编号 | 任务 | 触发条件 |
 | --- | --- | --- |
-| P0-018 | 演示数据选择器 | 需要在前端直接切换不同 CSV/JSON 样例时 |
-| P0-019 | 最小报告草稿接口 | 需要把分析结果导出成可复制报告时 |
+| P0-018 | 开源 Copilot 插件底座 Spike | 立即开始，优先 CopilotKit，过重则退回 assistant-ui |
+| P0-019 | 前后端契约稳定化 | P0-018 跑通后，把前端 API 调用集中成 client |
+| P0-020 | 演示交付包 | 前后端都能启动后，整理一键演示脚本 |
 | P1-001 | PDX 工具链调研 | 拿到真实脱敏 PDX 样例或官方工具信息后 |
 | P1-003 | Indexed RAG Provider | 飞书 CLI 查询不能满足性能或离线检索要求时 |
 | P2-001 | Schema 动态 UI | P0 产品闭环稳定后再启动 |

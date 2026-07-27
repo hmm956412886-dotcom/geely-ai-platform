@@ -1,0 +1,338 @@
+# 可复用 AI 插件完整开发计划
+
+## 1. 📌 当前结论
+
+Geely AI Platform 的产品定位调整为：
+
+```text
+可复用 AI 插件底座
+  -> 可嵌入 Copilot 前端
+  -> AI Gateway 后端契约
+  -> Host Connector / Plugin SDK
+  -> Tool Registry / OpenAPI / Plugin Manifest
+  -> 测试数据分析 Adapter
+  -> 后续接 SK / Microsoft Agent Framework / RAG / AG-UI
+```
+
+不要继续把项目做成一堆自研小功能。现有 AI Gateway 继续保留，作为后端契约和业务 Adapter；前端 Copilot 插件、Agent UI、动态交互尽量复用成熟开源项目。
+
+白话备注：我们自己做“AI 插件底座”和“业务接线”，不要自己从 0 写完整 Copilot 框架、Chat UI 框架、RAG 平台和低代码平台。
+
+## 2. 🎯 产品目标
+
+第一版要展示的是一个可嵌入、可替换模型、可复用到其他软件的 AI 插件产品。
+
+目标效果：
+
+```text
+客户测试软件 / 公司网站
+  -> WebView / iframe 嵌入 Copilot 插件
+  -> Host SDK 写入当前项目、Run、测试文件路径
+  -> Copilot 调用 AI Gateway
+  -> Gateway 调用数据分析、知识检索、模型 API
+  -> 返回结构化结果、引用、request_id
+```
+
+对客户来说，交付物应该像这样：
+
+- 一个能启动的 AI Gateway。
+- 一个能嵌入的软件侧边 Copilot。
+- 一套 HTTP / OpenAPI / Plugin Manifest 契约。
+- 一套 Host SDK 样例。
+- 一套配置和验收脚本。
+- 一套清楚的只读安全边界。
+
+## 3. 🧭 总体架构
+
+```mermaid
+flowchart LR
+    Host["宿主软件 / 公司网站"] --> Embed["Copilot WebView / iframe"]
+    Host --> SDK["Host Connector / Plugin SDK"]
+    Embed --> Gateway["AI Gateway"]
+    SDK --> Gateway
+    Gateway --> Tools["Tool Registry / OpenAPI"]
+    Gateway --> Data["Test Data Adapter"]
+    Gateway --> Knowledge["Knowledge Provider"]
+    Gateway --> Model["OpenAI-compatible Model API"]
+    Gateway --> Audit["Audit Log"]
+    Data --> DuckDB["DuckDB / stdlib / future Polars"]
+    Knowledge --> Feishu["Feishu CLI / future RAG"]
+    Tools --> SK["future SK / Microsoft Agent Framework"]
+```
+
+模块职责：
+
+| 模块 | 当前职责 | 后续演进 |
+| --- | --- | --- |
+| Copilot 前端 | 展示侧边栏、触发分析和数据洞察 | 接入 CopilotKit 或 assistant-ui |
+| AI Gateway | 暴露稳定 HTTP 契约、统一错误、审计、配置 | 接 SK / Microsoft Agent Framework |
+| Host SDK | 宿主传上下文、调用分析接口 | 扩展 C# / Java / C++ SDK |
+| TestDataAdapter | 解析 JSON / CSV，输出标准模型 | 接 Excel、PDX 官方工具或 SDK |
+| KnowledgeProvider | 当前返回飞书演示引用 | 接 lark-cli，再决定是否索引 RAG |
+| Tool Registry | 描述 Agent 可调用工具 | 映射 SK Function / MAF Tool / AG-UI Tool |
+| Delivery Scripts | 客户启动和检查 | 后续做安装包或服务注册 |
+
+## 4. ✅ 已完成基线
+
+当前已经完成：
+
+| 编号 | 能力 | 状态 |
+| --- | --- | --- |
+| P0-001 | Feishu CLI Provider 方向 | 暂停，飞书不做全量迁移 |
+| P0-002 | `TestDataFileAdapter` 契约 | Done |
+| P0-003 | JSON fixture / CSV 解析 | Done |
+| P0-004 | `get_test_run_summary` | Done |
+| P0-005 | `compare_test_runs` | Done |
+| P0-006 | 模型 API 配置 | Done |
+| P0-007 | AI Gateway 查询接口 | Done |
+| P0-008 | MVP 评测和审计 | Done |
+| P0-009 | Host Context 接入契约 | Done |
+| P0-010 | 最小 Audit Log | Done |
+| P0-011 | Tool Registry 契约 | Done |
+| P0-012 | 宿主集成 Demo 包 | Done |
+| P0-013 | 产品展示前端 | Done |
+| P0-014 | 可复用 Copilot Shell | Done |
+| P0-015 | 测试数据洞察接口 | Done |
+| P0-016 | Host Connector / Plugin SDK 样例 | Done |
+| P0-017 | 客户部署配置最小化 | Done |
+
+当前可运行入口：
+
+```text
+http://127.0.0.1:8783/showcase
+http://127.0.0.1:8783/copilot
+```
+
+## 5. 🧩 开源项目选型
+
+### 5.1 Copilot 前端层
+
+| 项目 | 适合做什么 | 结论 |
+| --- | --- | --- |
+| CopilotKit | in-app Copilot、Generative UI、人机协同、Agent 前端 | 首选 Spike，最贴近插件产品形态 |
+| assistant-ui | React Chat UI、tool rendering、流式消息、附件 | 备选，界面控制更轻 |
+| AG-UI | Agent 和 UI 的事件协议 | 后续协议层，不先强上 |
+
+选择原则：
+
+- 如果 CopilotKit 能快速嵌入并调用我们现有 Gateway，优先用 CopilotKit。
+- 如果 CopilotKit 过重或侵入太强，退回 assistant-ui。
+- AG-UI 先作为后端协议目标，不在 P0 阶段强制实现。
+
+### 5.2 Agent 编排层
+
+| 项目 | 适合做什么 | 结论 |
+| --- | --- | --- |
+| Semantic Kernel | Plugin / Function Calling / 企业应用编排 | 仍作为后端工具编排候选 |
+| Microsoft Agent Framework | 微软后续 Agent Runtime 方向 | P1 开始调研，不急于替换当前 Gateway |
+
+当前不马上接 SK 的原因：
+
+- 现有 REST / Tool Registry 已能支撑 MVP。
+- 先把可嵌入 Copilot 产品形态做出来更重要。
+- SK 接入应发生在工具契约稳定之后。
+
+### 5.3 RAG 和数据分析层
+
+| 项目 | 用途 | 采用时机 |
+| --- | --- | --- |
+| DuckDB | CSV / JSON / Parquet 本地 SQL 分析 | 已做可选引擎 |
+| Polars / Pandas | DataFrame 分析 | P1，客户数据复杂后再接 |
+| LlamaIndex / Haystack | RAG pipeline | P1，飞书知识查询确定后再选 |
+| LanceDB / Qdrant / PGVector | 向量检索 | P1，不作为 MVP 必需 |
+| Dify / Flowise | 低代码 AI 工作流参考 | 只做参考或 PoC，不作为核心插件底座 |
+| Great Expectations / Evidently | 数据质量和漂移分析 | P1，测试指标规则明确后接 |
+
+## 6. 🛠️ 开发顺序规则
+
+以后每个任务必须按这个顺序做：
+
+```text
+1. 写清本任务计划
+2. 明确采用或不采用哪些开源项目
+3. 明确验收标准
+4. 实现最小代码
+5. 跑测试和产品检查
+6. 同步 D 盘、CodeGraph、GitHub
+```
+
+不允许：
+
+- 先写代码，最后补文档解释。
+- 为了“以后可能用”添加抽象。
+- 同时引入多个大框架。
+- 把 CopilotKit、assistant-ui、Dify、SK 一起塞进来。
+- 在没有真实 PDX 样例时猜 PDX 格式。
+- 让 AI 直接写客户系统、测试配置或设备控制。
+
+## 7. 🚧 下一阶段路线
+
+### P0-018：开源 Copilot 插件底座 Spike
+
+目标：用成熟前端框架替换当前手写 Copilot HTML，形成真正可复用的嵌入式 AI 插件壳。
+
+优先方案：
+
+```text
+frontend/copilot-shell
+  -> CopilotKit 或 assistant-ui
+  -> 调用 AI Gateway REST API
+  -> 输出可嵌入 iframe / WebView 页面
+```
+
+验收标准：
+
+- 新增 `frontend/copilot-shell`。
+- 可以本地启动前端。
+- 页面是 Microsoft Copilot 风格右侧栏。
+- 能调用：
+  - `/api/v1/host/context`
+  - `/api/v1/analyze`
+  - `/api/v1/test-data/insights`
+  - `/api/v1/test-data/compare`
+- `/showcase` 可嵌入新的 Copilot 前端，或提供清楚的替换路径。
+- 不删除现有 Gateway API。
+
+非目标：
+
+- 不做完整设计系统。
+- 不做动态 UI。
+- 不做多 Agent。
+- 不接真实飞书。
+- 不做 RAG 索引。
+
+决策点：
+
+| 问题 | 默认选择 | 回退 |
+| --- | --- | --- |
+| 前端框架 | CopilotKit | assistant-ui |
+| 包管理 | npm / pnpm，跟随框架模板 | 最小 Vite React |
+| 后端协议 | 现有 REST | 后续 AG-UI |
+| 样式目标 | Microsoft Copilot 侧边栏 | 保持现有 iframe 壳 |
+
+### P0-019：前后端契约稳定化
+
+目标：把前端调用 Gateway 的契约沉淀为一个小 TypeScript client。
+
+验收标准：
+
+- `frontend/copilot-shell` 不散落裸 `fetch`。
+- 所有 API 调用集中到 `gatewayClient`。
+- 错误响应展示 `request_id`。
+- 模型未配置时仍能 fallback。
+
+### P0-020：演示交付包
+
+目标：让内部演示人员能一键启动 Gateway 和 Copilot 前端。
+
+验收标准：
+
+- 一个脚本启动 Gateway。
+- 一个脚本启动 Copilot 前端。
+- 检查脚本验证 Gateway 和前端 URL。
+- 文档说明客户如何嵌入。
+
+## 8. 📊 P1 路线
+
+| 编号 | 任务 | 触发条件 | 验收标准 |
+| --- | --- | --- | --- |
+| P1-001 | PDX 工具链调研 | 拿到脱敏 PDX 样例或官方说明 | 找到官方工具、SDK、CLI 或确认无法解析 |
+| P1-002 | PDX Adapter | PDX 格式明确 | 能解析脱敏样例并输出 TestRunSummary |
+| P1-003 | Feishu CLI Provider | 需要真实知识查询 | 可读取有权限飞书文档并返回引用 |
+| P1-004 | Indexed RAG Provider | 飞书 CLI 查询性能不足 | 支持 LanceDB / Qdrant / PGVector 之一 |
+| P1-005 | 数据质量规则 | 测试规则明确 | 接 Great Expectations 或轻量规则引擎 |
+| P1-006 | 数据画像报告 | 需要一键数据概览 | 接 ydata-profiling 或同类工具 |
+| P1-007 | SK / MAF Tool Adapter | 工具契约稳定 | 将 `/api/v1/tools` 映射为 SK / MAF 工具 |
+
+## 9. 🔒 安全边界
+
+P0 和 P1 默认只读。
+
+禁止：
+
+- 修改客户数据库。
+- 修改测试配置。
+- 控制测试设备。
+- 删除或上传客户测试文件。
+- 将客户真实数据提交到 GitHub。
+- 在日志或响应中输出 API Key。
+- 让 LLM 直接生成并执行宿主软件插件代码。
+
+需要二次确认后才能进入后续阶段：
+
+- 写入类工具。
+- 自动生成正式 UI 模块。
+- 自动修改测试流程。
+- Text-to-SQL 查询客户生产数据库。
+- 长期存储客户知识库向量。
+
+## 10. 🧪 固定验收命令
+
+Gateway 单测：
+
+```powershell
+cd D:\geely-ai-platform\src\ai-gateway
+$env:PYTHONPATH='src'
+python -m unittest discover -s tests -p "test_*.py"
+```
+
+Gateway eval：
+
+```powershell
+cd D:\geely-ai-platform\src\ai-gateway
+python evals\run_eval.py
+```
+
+Host SDK 测试：
+
+```powershell
+cd D:\geely-ai-platform\samples\host-integration
+python -m unittest discover -s . -p "test_python_host_sdk.py"
+```
+
+部署检查：
+
+```powershell
+cd D:\geely-ai-platform
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\check-ai-gateway.ps1 -GatewayUrl http://127.0.0.1:8783
+```
+
+## 11. 🔁 换对话接手规则
+
+新对话或新 AI 接手时，先读：
+
+1. `AGENTS.md`
+2. `docs/13-reusable-ai-plugin-development-plan.md`
+3. `docs/04-development-guide.md`
+4. `README.md`
+
+接手后先确认：
+
+- 当前最新 Git commit。
+- `D:\geely-ai-platform` 是否干净。
+- `http://127.0.0.1:8783/showcase` 是否仍可用。
+- 当前任务编号是什么。
+
+默认下一步：
+
+```text
+P0-018：开源 Copilot 插件底座 Spike
+```
+
+除非用户明确改变方向，否则不要回到“继续手写 HTML 小功能”的路线。
+
+## 12. 🔗 参考链接
+
+- CopilotKit：https://github.com/CopilotKit/CopilotKit
+- CopilotKit Docs：https://docs.copilotkit.ai/
+- assistant-ui：https://github.com/assistant-ui/assistant-ui
+- assistant-ui Docs：https://www.assistant-ui.com/
+- AG-UI：https://github.com/ag-ui-protocol/ag-ui
+- Semantic Kernel：https://github.com/microsoft/semantic-kernel
+- Microsoft Agent Framework Docs：https://learn.microsoft.com/semantic-kernel/frameworks/agent/?pivots=programming-language-csharp
+- Dify：https://github.com/langgenius/dify
+- Flowise：https://github.com/FlowiseAI/Flowise
+- LlamaIndex：https://github.com/run-llama/llama_index
+- Haystack：https://github.com/deepset-ai/haystack
+- LanceDB：https://github.com/lancedb/lancedb
+- Qdrant：https://github.com/qdrant/qdrant
