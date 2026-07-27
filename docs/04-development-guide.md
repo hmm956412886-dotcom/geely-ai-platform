@@ -30,6 +30,8 @@
 
 ### 1.4 先契约，后实现
 
+- 新功能必须先写清计划、边界和验收标准，再进入代码实现。
+- 文档用于约束未来开发，不作为事后补说明。
 - 没有客户源码时，先固定 HTTP/OpenAPI、CLI 或文件契约。
 - 用 Mock Host 或 JSON fixture 验证 AI 逻辑，不猜测客户软件内部实现。
 - 真实客户接口出现后，只替换 Adapter 和配置。
@@ -214,6 +216,7 @@ Phase 1 禁止：
 | P0-014 | 可复用 Copilot Shell | Done | `/copilot` 作为独立 iframe/WebView 侧边栏，`/showcase` 只嵌入它，不复制 UI |
 | P0-015 | DuckDB 测试数据分析 Spike | Done | `/api/v1/test-data/insights` 可返回状态分布和 Top 失败原因；DuckDB 为可选引擎，未安装时回退标准库 |
 | P0-016 | Host Connector / Plugin SDK 样例 | Done | `samples/host-integration` 提供 PowerShell 调用样例和 Python Host SDK，宿主侧可完成上下文写入、分析、洞察、对比和 Copilot URL 获取 |
+| P0-017 | 客户部署配置最小化 | Done | 按 `docs/11-mvp-delivery-plan.md` 提供 env 模板、启动脚本、检查脚本和客户部署指南 |
 | P1-001 | PDX 工具链调研 | P1 | 找到官方工具、SDK 或样例格式 |
 | P1-002 | PDX Adapter | P1 | 能解析脱敏 PDX 样例 |
 | P1-003 | IndexedRagProvider | P1 | 向量检索作为可选后端 |

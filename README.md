@@ -30,6 +30,7 @@
 9. `samples/host-integration` 提供无源码集成样例和 Python Host SDK 样板。
 10. `/copilot` 作为可复用侧边栏组件，`/showcase` 只负责演示嵌入效果。
 11. `/api/v1/test-data/insights` 提供确定性数据洞察，优先用 DuckDB，未安装时回退标准库。
+12. `scripts/start-ai-gateway.ps1` 和 `scripts/check-ai-gateway.ps1` 提供客户部署启动与验收入口。
 
 暂不做：动态 UI、多 Agent、写入类工具、设备控制、全量向量库迁移。
 
@@ -82,6 +83,7 @@ Invoke-RestMethod `
 ├── docs/                     # 架构、开发和集成文档
 ├── infra/                    # 本地基础设施配置
 ├── samples/                  # 宿主软件集成样例
+├── scripts/                  # 启动和部署检查脚本
 ├── src/
 │   └── ai-gateway/           # 当前产品 MVP：外置 AI Gateway
 └── workers/
@@ -101,3 +103,5 @@ Invoke-RestMethod `
 - [测试数据文件分析方案](docs/08-test-data-file-analysis.md)
 - [产品 MVP 集成契约](docs/09-product-mvp-contract.md)
 - [可复用 Copilot 嵌入契约](docs/10-reusable-copilot-embed.md)
+- [MVP 交付计划](docs/11-mvp-delivery-plan.md)
+- [客户部署指南](docs/12-customer-deployment-guide.md)
