@@ -95,12 +95,13 @@ flowchart LR
 | P0-015 | 测试数据洞察接口 | Done |
 | P0-016 | Host Connector / Plugin SDK 样例 | Done |
 | P0-017 | 客户部署配置最小化 | Done |
+| P0-018 | 开源 Copilot 插件底座 | Done：React + CopilotKit + Fluent UI 已构建并由 Gateway 提供 |
 
 当前可运行入口：
 
 ```text
-http://127.0.0.1:8783/showcase
-http://127.0.0.1:8783/copilot
+http://127.0.0.1:8765/showcase
+http://127.0.0.1:8765/copilot-shell/
 ```
 
 ## 5. 🧩 开源项目选型
@@ -156,41 +157,52 @@ http://127.0.0.1:8783/copilot
 6. 同步 D 盘、CodeGraph、GitHub
 ```
 
+任务只有在用户可以打开并使用最终产品入口、自动化验收通过后才算完成。Spike、占位页面、临时手写 UI 和“以后再替换”的实现不能标记为 Done。
+
 不允许：
 
 - 先写代码，最后补文档解释。
 - 为了“以后可能用”添加抽象。
 - 同时引入多个大框架。
 - 把 CopilotKit、assistant-ui、Dify、SK 一起塞进来。
+- 在已有成熟组件时继续手写聊天消息、线程、Markdown、工具状态、按钮和设计系统。
+- 为了先过测试提交一个后续必须整体删除的产品实现。
 - 在没有真实 PDX 样例时猜 PDX 格式。
 - 让 AI 直接写客户系统、测试配置或设备控制。
 
 ## 7. 🚧 下一阶段路线
 
-### P0-018：开源 Copilot 插件底座 Spike
+### P0-018：开源 Copilot 插件底座产品化
 
-目标：用成熟前端框架替换当前手写 Copilot HTML，形成真正可复用的嵌入式 AI 插件壳。
+目标：交付用户可以直接打开、嵌入和操作的侧边栏 Copilot。当前手写 HTML/CSS/DOM 只作为接线路径验证，不作为最终实现保留。
 
-优先方案：
+已确定技术方案：
 
 ```text
 frontend/copilot-shell
-  -> CopilotKit 或 assistant-ui
-  -> 调用 AI Gateway REST API
-  -> 输出可嵌入 iframe / WebView 页面
+  -> React + TypeScript + Vite
+  -> CopilotKit 现成 Copilot 交互组件
+  -> Microsoft Fluent UI / Fluent Icons
+  -> gatewayClient 调用稳定 AI Gateway REST API
+  -> Vite dist 输出，由 Gateway 提供 iframe / WebView 页面
 ```
+
+开源边界：CopilotKit、Fluent UI、React 和 Vite 使用固定版本；不同时引入 assistant-ui。业务代码只负责宿主上下文、Gateway Adapter 和测试数据结果展示，不重写开源项目已有的聊天基础能力。
 
 验收标准：
 
-- 新增 `frontend/copilot-shell`。
-- 可以本地启动前端。
-- 页面是 Microsoft Copilot 风格右侧栏。
+- `frontend/copilot-shell` 是可安装、可构建的 React TypeScript 项目。
+- UI 实际引用 CopilotKit 和 Fluent UI，不接受仅在 README 中写“以后接入”。
+- `pnpm build` 生成可部署产物，Gateway 直接提供 `/copilot-shell/`。
+- 页面具备 Microsoft Copilot 风格侧边栏、消息区、快捷操作、上下文状态、加载状态和错误 `request_id` 展示。
+- 所有 Gateway 调用集中在 TypeScript `gatewayClient`，组件中不散落裸 `fetch`。
 - 能调用：
   - `/api/v1/host/context`
   - `/api/v1/analyze`
   - `/api/v1/test-data/insights`
   - `/api/v1/test-data/compare`
-- `/showcase` 可嵌入新的 Copilot 前端，或提供清楚的替换路径。
+- `/showcase` 实际嵌入构建后的 Copilot，不接受“提供替换路径”代替完成。
+- Gateway 单测、eval、前端构建和部署检查全部通过。
 - 不删除现有 Gateway API。
 
 非目标：
@@ -201,25 +213,16 @@ frontend/copilot-shell
 - 不接真实飞书。
 - 不做 RAG 索引。
 
-决策点：
+### P0-019：宿主嵌入与会话契约
 
-| 问题 | 默认选择 | 回退 |
-| --- | --- | --- |
-| 前端框架 | CopilotKit | assistant-ui |
-| 包管理 | npm / pnpm，跟随框架模板 | 最小 Vite React |
-| 后端协议 | 现有 REST | 后续 AG-UI |
-| 样式目标 | Microsoft Copilot 侧边栏 | 保持现有 iframe 壳 |
-
-### P0-019：前后端契约稳定化
-
-目标：把前端调用 Gateway 的契约沉淀为一个小 TypeScript client。
+目标：让同一 Copilot 可以安全地服务网站 iframe 和桌面 WebView，而不是共享一个进程级全局上下文。
 
 验收标准：
 
-- `frontend/copilot-shell` 不散落裸 `fetch`。
-- 所有 API 调用集中到 `gatewayClient`。
-- 错误响应展示 `request_id`。
-- 模型未配置时仍能 fallback。
+- Host 创建 `host_session_id`，上下文按会话隔离。
+- 网站和桌面宿主通过 `postMessage` 或 Host SDK 更新当前会话上下文。
+- 浏览器不直接依赖服务端本地绝对路径；数据通过 `asset_id`、Connector 或桌面 Sidecar 解析。
+- 保留现有 REST 工具接口，新增契约不破坏 Host SDK。
 
 ### P0-020：演示交付包
 
@@ -310,13 +313,13 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\check-ai-gateway.p
 
 - 当前最新 Git commit。
 - `D:\geely-ai-platform` 是否干净。
-- `http://127.0.0.1:8783/showcase` 是否仍可用。
+- `http://127.0.0.1:8765/showcase` 是否仍可用。
 - 当前任务编号是什么。
 
 默认下一步：
 
 ```text
-P0-018：开源 Copilot 插件底座 Spike
+P0-019：宿主嵌入与会话契约
 ```
 
 除非用户明确改变方向，否则不要回到“继续手写 HTML 小功能”的路线。

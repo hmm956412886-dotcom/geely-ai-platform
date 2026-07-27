@@ -1,6 +1,9 @@
 import json
 from pathlib import Path
+import re
+from tempfile import TemporaryDirectory
 import unittest
+from unittest.mock import patch
 
 from ai_gateway.app import handle_request
 from ai_gateway.audit_log import clear_audit_events
@@ -101,6 +104,45 @@ class AppTests(unittest.TestCase):
         self.assertIn("/api/v1/test-data/compare", response.body)
         self.assertIn("/api/v1/host/context", response.body)
 
+    def test_copilot_shell_assets_are_available(self) -> None:
+        with TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            assets = root / "frontend" / "copilot-shell" / "dist" / "assets"
+            assets.mkdir(parents=True)
+            (assets.parent / "index.html").write_text(
+                '<title>Geely AI Copilot Shell</title>'
+                '<script src="/copilot-shell/assets/index-test.js"></script>'
+                '<link href="/copilot-shell/assets/index-test.css" rel="stylesheet">',
+                encoding="utf-8",
+            )
+            (assets / "index-test.js").write_text("/api/v1/analyze", encoding="utf-8")
+            (assets / "index-test.css").write_text("body {}", encoding="utf-8")
+            (assets / "font-test.woff2").write_bytes(b"font")
+
+            with patch("ai_gateway.app._repo_root", return_value=root):
+                page = handle_request("GET", "/copilot-shell/")
+                self.assertEqual(page.status, 200)
+                self.assertEqual(page.content_type, "text/html; charset=utf-8")
+                self.assertIsInstance(page.body, str)
+                self.assertIn("Geely AI Copilot Shell", page.body)
+                script_path = re.search(r'src="(/copilot-shell/assets/[^"]+\.js)"', page.body)
+                style_path = re.search(r'href="(/copilot-shell/assets/[^"]+\.css)"', page.body)
+                self.assertIsNotNone(script_path)
+                self.assertIsNotNone(style_path)
+
+                script = handle_request("GET", script_path.group(1))
+                styles = handle_request("GET", style_path.group(1))
+                self.assertEqual(script.status, 200)
+                self.assertEqual(script.content_type, "application/javascript; charset=utf-8")
+                self.assertIn("/api/v1/analyze", script.body)
+                self.assertEqual(styles.status, 200)
+                self.assertEqual(styles.content_type, "text/css; charset=utf-8")
+
+                font_response = handle_request("GET", "/copilot-shell/assets/font-test.woff2")
+                self.assertEqual(font_response.status, 200)
+                self.assertEqual(font_response.content_type, "font/woff2")
+                self.assertIsInstance(font_response.body, bytes)
+
     def test_showcase_page_is_available(self) -> None:
         response = handle_request("GET", "/showcase")
 
@@ -108,7 +150,7 @@ class AppTests(unittest.TestCase):
         self.assertEqual(response.content_type, "text/html; charset=utf-8")
         self.assertIn("Geely Test AI Workbench", response.body)
         self.assertIn("Reusable Geely AI Copilot", response.body)
-        self.assertIn('src="/copilot"', response.body)
+        self.assertIn('src="/copilot-shell/"', response.body)
         self.assertIn("/api/v1/host/context", response.body)
 
     def test_host_context_roundtrip(self) -> None:
@@ -179,7 +221,8 @@ class AppTests(unittest.TestCase):
         payload = json.loads(response.body)
         self.assertEqual(response.status, 200)
         self.assertIn("webview", payload["integration_modes"])
-        self.assertEqual(payload["webview"]["entry"], "/copilot")
+        self.assertEqual(payload["webview"]["entry"], "/copilot-shell/")
+        self.assertEqual(payload["webview"]["fallback_entry"], "/copilot")
         self.assertEqual(payload["api"]["tools"], "/api/v1/tools")
         self.assertEqual(payload["api"]["operations"][0]["side_effect"], "read_only")
         operation_ids = {operation["operation_id"] for operation in payload["api"]["operations"]}

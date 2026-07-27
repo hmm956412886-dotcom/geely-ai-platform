@@ -25,6 +25,11 @@
         "summary": "Embeddable Copilot side panel"
       }
     },
+    "/copilot-shell/": {
+      "get": {
+        "summary": "Embeddable frontend Copilot shell"
+      }
+    },
     "/plugin-manifest.json": {
       "get": {
         "summary": "Host integration manifest"

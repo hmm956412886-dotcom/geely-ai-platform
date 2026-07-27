@@ -30,10 +30,10 @@
 7. 飞书先通过 CLI 查询，不做全量迁移。
 8. 测试数据先通过 JSON fixture 或文件 Adapter 接入，不猜 PDX 内部格式。
 9. `samples/host-integration` 提供无源码集成样例和 Python Host SDK 样板。
-10. `/copilot` 作为可复用侧边栏组件，`/showcase` 只负责演示嵌入效果。
+10. `/copilot-shell/` 作为 React + CopilotKit 可复用侧边栏，`/showcase` 只负责演示嵌入效果。
 11. `/api/v1/test-data/insights` 提供确定性数据洞察，优先用 DuckDB，未安装时回退标准库。
 12. `scripts/start-ai-gateway.ps1` 和 `scripts/check-ai-gateway.ps1` 提供客户部署启动与验收入口。
-13. 下一步主线改为 P0-018：开源 Copilot 插件底座 Spike，优先 CopilotKit，过重则退回 assistant-ui。
+13. P0-018 已采用 CopilotKit + Microsoft Fluent UI，下一步主线是 P0-019 宿主嵌入与会话契约。
 
 暂不做：动态 UI、多 Agent、写入类工具、设备控制、全量向量库迁移、继续手写零散 Copilot UI。
 
@@ -54,7 +54,7 @@ http://127.0.0.1:8765/showcase
 只看右侧 Copilot 面板：
 
 ```text
-http://127.0.0.1:8765/copilot
+http://127.0.0.1:8765/copilot-shell/
 ```
 
 查看集成契约：

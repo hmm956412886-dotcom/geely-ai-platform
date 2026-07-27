@@ -7,6 +7,13 @@
     "body_contains": "Geely AI Copilot"
   },
   {
+    "name": "copilot_shell_page",
+    "method": "GET",
+    "path": "/copilot-shell/",
+    "expect_status": 200,
+    "body_contains": "Geely AI Copilot Shell"
+  },
+  {
     "name": "showcase_page",
     "method": "GET",
     "path": "/showcase",

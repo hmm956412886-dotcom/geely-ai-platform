@@ -22,7 +22,7 @@ class GatewayHandler(BaseHTTPRequestHandler):
         return
 
     def _send(self, response: Response) -> None:
-        encoded = response.body.encode("utf-8")
+        encoded = response.body.encode("utf-8") if isinstance(response.body, str) else response.body
         self.send_response(response.status)
         self.send_header("Content-Type", response.content_type)
         self.send_header("Content-Length", str(len(encoded)))

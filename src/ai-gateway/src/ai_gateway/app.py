@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
+from pathlib import Path
 from typing import Any
+from urllib.parse import unquote
 from uuid import uuid4
 
 from .audit_log import append_audit_event, list_audit_events
@@ -17,7 +19,7 @@ from .tool_registry import list_tools, manifest_operations
 @dataclass(frozen=True)
 class Response:
     status: int
-    body: str
+    body: str | bytes
     content_type: str = "application/json; charset=utf-8"
 
 
@@ -41,6 +43,10 @@ def _handle_request(method: str, path: str, body: str = "") -> Response:
         return Response(200, _showcase_html(), "text/html; charset=utf-8")
     if method == "GET" and path == "/copilot":
         return Response(200, _copilot_html(), "text/html; charset=utf-8")
+    if method == "GET" and (path == "/copilot-shell" or path == "/copilot-shell/"):
+        return _copilot_shell_file("index.html")
+    if method == "GET" and path.startswith("/copilot-shell/"):
+        return _copilot_shell_file(unquote(path.removeprefix("/copilot-shell/")))
     if method == "GET" and path == "/openapi.json":
         return json_response(_openapi())
     if method == "GET" and path == "/plugin-manifest.json":
@@ -79,9 +85,48 @@ def error_response(code: str, message: str, *, status: int) -> Response:
     )
 
 
+def _copilot_shell_file(relative_path: str) -> Response:
+    requested = Path(relative_path)
+    if not relative_path or requested.is_absolute() or ".." in requested.parts:
+        return error_response("not_found", "Copilot shell asset not found", status=404)
+    root = _repo_root() / "frontend" / "copilot-shell" / "dist"
+    target = root / requested
+    if not target.is_file():
+        return error_response("not_found", "Copilot shell asset not found", status=404)
+    content_type = _content_type(target.suffix)
+    if target.suffix.lower() in {".html", ".css", ".js", ".json", ".map", ".svg"}:
+        return Response(200, target.read_text(encoding="utf-8"), content_type)
+    return Response(200, target.read_bytes(), content_type)
+
+
+def _repo_root() -> Path:
+    current = Path(__file__).resolve()
+    for parent in current.parents:
+        if (parent / "frontend" / "copilot-shell").exists():
+            return parent
+    return current.parents[4]
+
+
+def _content_type(suffix: str) -> str:
+    return {
+        ".html": "text/html; charset=utf-8",
+        ".css": "text/css; charset=utf-8",
+        ".js": "application/javascript; charset=utf-8",
+        ".json": "application/json; charset=utf-8",
+        ".map": "application/json; charset=utf-8",
+        ".svg": "image/svg+xml; charset=utf-8",
+        ".png": "image/png",
+        ".woff": "font/woff",
+        ".woff2": "font/woff2",
+        ".ttf": "font/ttf",
+        ".wasm": "application/wasm",
+    }.get(suffix.lower(), "application/octet-stream")
+
+
 def _append_request_audit(method: str, path: str, response: Response) -> None:
     if not path.startswith("/api/v1/") or path in {"/api/v1/audit/events", "/api/v1/tools"}:
         return
+    assert isinstance(response.body, str)
     payload = json.loads(response.body)
     append_audit_event(
         method=method,
@@ -621,7 +666,7 @@ def _showcase_html() -> str:
       </div>
     </main>
     <aside>
-      <iframe class="copilot-frame" id="copilotFrame" title="Reusable Geely AI Copilot" src="/copilot"></iframe>
+      <iframe class="copilot-frame" id="copilotFrame" title="Reusable Geely AI Copilot" src="/copilot-shell/"></iframe>
     </aside>
   </div>
   <script>
@@ -671,6 +716,7 @@ def _openapi() -> dict[str, Any]:
             "/demo": {"get": {"summary": "Embeddable demo panel"}},
             "/showcase": {"get": {"summary": "Host software showcase with Copilot side panel"}},
             "/copilot": {"get": {"summary": "Embeddable Copilot side panel"}},
+            "/copilot-shell/": {"get": {"summary": "Embeddable frontend Copilot shell"}},
             "/plugin-manifest.json": {"get": {"summary": "Host integration manifest"}},
             "/api/v1/tools": {"get": {"summary": "Return machine-readable AI tool contracts"}},
             "/api/v1/model/config": {"get": {"summary": "Return public model runtime config"}},
@@ -691,7 +737,7 @@ def _plugin_manifest() -> dict[str, Any]:
         "version": "0.1.0",
         "display_name": "Geely AI Assistant",
         "integration_modes": ["webview", "http-api", "cli-launch"],
-        "webview": {"entry": "/copilot", "preferred_width": 460, "preferred_height": 720},
+        "webview": {"entry": "/copilot-shell/", "fallback_entry": "/copilot", "preferred_width": 460, "preferred_height": 720},
         "api": {
             "base_path": "/api/v1",
             "tools": "/api/v1/tools",

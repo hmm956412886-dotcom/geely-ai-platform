@@ -8,6 +8,12 @@ __pycache__/
 .venv/
 *.py[cod]
 
+# Frontend
+node_modules/
+dist/
+.pnpm-store/
+*.tsbuildinfo
+
 # Local configuration and secrets
 .env
 .env.local

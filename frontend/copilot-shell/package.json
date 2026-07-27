@@ -1,0 +1,28 @@
+{
+  "name": "@geely-ai/copilot-shell",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "tsc -b && vite build",
+    "typecheck": "tsc -b",
+    "preview": "vite preview --host 127.0.0.1"
+  },
+  "dependencies": {
+    "@copilotkit/react-core": "1.63.2",
+    "@copilotkit/react-ui": "1.63.2",
+    "@fluentui/react-components": "9.74.4",
+    "@fluentui/react-icons": "2.0.334",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.17",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "6.0.4",
+    "typescript": "7.0.2",
+    "vite": "8.1.5"
+  },
+  "packageManager": "pnpm@11.9.0"
+}

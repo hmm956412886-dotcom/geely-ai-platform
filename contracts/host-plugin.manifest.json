@@ -8,7 +8,8 @@
     "cli-launch"
   ],
   "webview": {
-    "entry": "/copilot",
+    "entry": "/copilot-shell/",
+    "fallback_entry": "/copilot",
     "preferred_width": 460,
     "preferred_height": 720
   },

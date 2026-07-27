@@ -13,10 +13,10 @@
 当前默认下一步是：
 
 ```text
-P0-018：开源 Copilot 插件底座 Spike
+P0-019：宿主嵌入与会话契约
 ```
 
-方向：不要继续手写零散 HTML 小功能。现有 AI Gateway 作为后端契约保留，前端 Copilot 插件优先调研并接入 CopilotKit；如果过重，再退回 assistant-ui。AG-UI、SK / Microsoft Agent Framework、RAG 都放在后续阶段。
+方向：CopilotKit + Fluent UI 前端和现有 AI Gateway REST 契约已经保留。下一步解决网站 iframe 和桌面 WebView 的会话隔离与 `postMessage` 宿主上下文，不扩展 AG-UI、SK / Microsoft Agent Framework 或 RAG。
 
 ## 1. 先想清楚再写代码
 
