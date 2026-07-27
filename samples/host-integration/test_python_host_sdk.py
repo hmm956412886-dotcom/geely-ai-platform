@@ -7,7 +7,7 @@ from python_host_sdk import GeelyAIGatewayClient, HostContext
 
 class FakeClient(GeelyAIGatewayClient):
     def __init__(self) -> None:
-        super().__init__("http://example.test/")
+        super().__init__("http://example.test/", host_session_id="test-session")
         self.calls: list[tuple[str, str, dict | None]] = []
 
     def _request(self, method: str, path: str, payload: dict | None = None) -> dict:
@@ -17,14 +17,14 @@ class FakeClient(GeelyAIGatewayClient):
 
 class PythonHostSdkTests(unittest.TestCase):
     def test_host_context_omits_none_values(self) -> None:
-        context = HostContext(project_id="P", run_id="R", source_file="run.csv")
+        context = HostContext(project_id="P", run_id="R", source_asset_id="current-run")
 
         self.assertEqual(
             context.to_payload(),
             {
                 "project_id": "P",
                 "run_id": "R",
-                "source_file": "run.csv",
+                "source_asset_id": "current-run",
                 "current_view": "test_result_detail",
             },
         )
@@ -32,16 +32,23 @@ class PythonHostSdkTests(unittest.TestCase):
     def test_client_uses_stable_gateway_paths(self) -> None:
         client = FakeClient()
 
-        client.update_host_context(HostContext(project_id="P", run_id="R", source_file="run.csv"))
-        client.analyze(source_file="run.csv", question="why")
-        client.insights(source_file="run.csv")
-        client.compare(baseline_file="a.csv", target_file="b.csv")
+        client.register_asset("run.csv", asset_id="current-run")
+        client.update_host_context(
+            HostContext(project_id="P", run_id="R", source_asset_id="current-run")
+        )
+        client.analyze(source_asset_id="current-run", question="why")
+        client.insights(source_asset_id="current-run")
+        client.compare(baseline_asset_id="baseline", target_asset_id="target")
 
-        self.assertEqual(client.copilot_url, "http://example.test/copilot")
-        self.assertEqual(client.calls[0][1], "/api/v1/host/context")
-        self.assertEqual(client.calls[1][1], "/api/v1/analyze")
-        self.assertEqual(client.calls[2][1], "/api/v1/test-data/insights")
-        self.assertEqual(client.calls[3][1], "/api/v1/test-data/compare")
+        self.assertEqual(
+            client.copilot_url,
+            "http://example.test/copilot-shell/?host_session_id=test-session",
+        )
+        self.assertEqual(client.calls[0][1], "/api/v1/host/assets?host_session_id=test-session")
+        self.assertEqual(client.calls[1][1], "/api/v1/host/context?host_session_id=test-session")
+        self.assertEqual(client.calls[2][1], "/api/v1/analyze?host_session_id=test-session")
+        self.assertEqual(client.calls[3][1], "/api/v1/test-data/insights?host_session_id=test-session")
+        self.assertEqual(client.calls[4][1], "/api/v1/test-data/compare?host_session_id=test-session")
 
 
 if __name__ == "__main__":

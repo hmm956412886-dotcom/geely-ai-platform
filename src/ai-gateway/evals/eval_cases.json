@@ -75,6 +75,33 @@
     }
   },
   {
+    "name": "register_host_asset",
+    "method": "POST",
+    "path": "/api/v1/host/assets?host_session_id=eval-session",
+    "body": {
+      "asset_id": "eval-current",
+      "file_path": "${FIXTURES}/test-run-cases.csv"
+    },
+    "expect_status": 200,
+    "expect": {
+      "result.asset_id": "eval-current",
+      "result.media_type": "text/csv"
+    }
+  },
+  {
+    "name": "analyze_host_asset",
+    "method": "POST",
+    "path": "/api/v1/analyze?host_session_id=eval-session",
+    "body": {
+      "source_asset_id": "eval-current"
+    },
+    "expect_status": 200,
+    "expect": {
+      "data.source.type": "host_asset",
+      "data.source.ref": "eval-current"
+    }
+  },
+  {
     "name": "compare_runs",
     "method": "POST",
     "path": "/api/v1/test-data/compare",

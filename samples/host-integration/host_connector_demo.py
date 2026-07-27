@@ -17,11 +17,13 @@ def main() -> None:
     target_file = args.target_file or str(repo_root / "src/ai-gateway/tests/fixtures/test-run-cases-target.csv")
 
     client = GeelyAIGatewayClient(args.gateway_url)
+    source_asset_id = client.register_asset(source_file)["result"]["asset_id"]
+    target_asset_id = client.register_asset(target_file)["result"]["asset_id"]
     context = HostContext(
         project_id=args.project_id,
         run_id=args.run_id,
-        source_file=source_file,
-        target_file=target_file,
+        source_asset_id=source_asset_id,
+        target_asset_id=target_asset_id,
         user_id=args.user_id,
     )
 
@@ -29,9 +31,12 @@ def main() -> None:
     print_json("update_host_context", client.update_host_context(context))
     print_json("plugin_manifest", client.plugin_manifest())
     print_json("tools", client.tools())
-    print_json("analyze", client.analyze(source_file=source_file, question=args.question))
-    print_json("insights", client.insights(source_file=source_file))
-    print_json("compare", client.compare(baseline_file=source_file, target_file=target_file))
+    print_json("analyze", client.analyze(source_asset_id=source_asset_id, question=args.question))
+    print_json("insights", client.insights(source_asset_id=source_asset_id))
+    print_json(
+        "compare",
+        client.compare(baseline_asset_id=source_asset_id, target_asset_id=target_asset_id),
+    )
 
     if args.open_copilot:
         webbrowser.open(client.copilot_url)

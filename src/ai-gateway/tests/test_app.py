@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 from ai_gateway.app import handle_request
 from ai_gateway.audit_log import clear_audit_events
+from ai_gateway.host_assets import reset_host_assets
 from ai_gateway.host_context import reset_host_context
 
 
@@ -16,6 +17,7 @@ FIXTURES = Path(__file__).parent / "fixtures"
 class AppTests(unittest.TestCase):
     def tearDown(self) -> None:
         reset_host_context()
+        reset_host_assets()
         clear_audit_events()
 
     def test_health(self) -> None:
@@ -150,8 +152,10 @@ class AppTests(unittest.TestCase):
         self.assertEqual(response.content_type, "text/html; charset=utf-8")
         self.assertIn("Geely Test AI Workbench", response.body)
         self.assertIn("Reusable Geely AI Copilot", response.body)
-        self.assertIn('src="/copilot-shell/"', response.body)
-        self.assertIn("/api/v1/host/context", response.body)
+        self.assertIn('src="/copilot-shell/?host_session_id=showcase-demo"', response.body)
+        self.assertIn("geely-ai.host-context", response.body)
+        self.assertIn('source_asset_id: "demo-current"', response.body)
+        self.assertNotIn("D:/geely-ai-platform", response.body)
 
     def test_host_context_roundtrip(self) -> None:
         update = handle_request(
@@ -176,6 +180,50 @@ class AppTests(unittest.TestCase):
         self.assertEqual(read.status, 200)
         self.assertEqual(update_payload["result"]["run_id"], "RUN_HOST_001")
         self.assertEqual(read_payload["result"]["source_file"], str(FIXTURES / "test-run-cases.csv"))
+
+    def test_host_context_is_isolated_by_session(self) -> None:
+        handle_request(
+            "POST",
+            "/api/v1/host/context?host_session_id=session-a",
+            json.dumps({"project_id": "PROJECT_A", "run_id": "RUN_A"}),
+        )
+        handle_request(
+            "POST",
+            "/api/v1/host/context?host_session_id=session-b",
+            json.dumps({"project_id": "PROJECT_B", "run_id": "RUN_B"}),
+        )
+
+        session_a = handle_request("GET", "/api/v1/host/context?host_session_id=session-a")
+        session_b = handle_request("GET", "/api/v1/host/context?host_session_id=session-b")
+        payload_a = json.loads(session_a.body)["result"]
+        payload_b = json.loads(session_b.body)["result"]
+
+        self.assertEqual(payload_a["host_session_id"], "session-a")
+        self.assertEqual(payload_a["project_id"], "PROJECT_A")
+        self.assertEqual(payload_b["host_session_id"], "session-b")
+        self.assertEqual(payload_b["project_id"], "PROJECT_B")
+
+    def test_host_asset_analysis_uses_asset_id_without_exposing_file_path(self) -> None:
+        source_file = str(FIXTURES / "test-run-cases.csv")
+        registration = handle_request(
+            "POST",
+            "/api/v1/host/assets?host_session_id=session-assets",
+            json.dumps({"asset_id": "current-run", "file_path": source_file}),
+        )
+        analysis = handle_request(
+            "POST",
+            "/api/v1/analyze?host_session_id=session-assets",
+            json.dumps({"source_asset_id": "current-run", "question": "分析失败原因"}),
+        )
+
+        registration_payload = json.loads(registration.body)
+        analysis_payload = json.loads(analysis.body)
+        self.assertEqual(registration.status, 200)
+        self.assertEqual(registration_payload["result"]["asset_id"], "current-run")
+        self.assertNotIn("file_path", registration_payload["result"])
+        self.assertEqual(analysis.status, 200)
+        self.assertEqual(analysis_payload["data"]["source"], {"type": "host_asset", "ref": "current-run"})
+        self.assertNotIn(source_file, analysis.body)
 
     def test_host_context_rejects_unknown_fields(self) -> None:
         response = handle_request(
@@ -223,7 +271,13 @@ class AppTests(unittest.TestCase):
         self.assertIn("webview", payload["integration_modes"])
         self.assertEqual(payload["webview"]["entry"], "/copilot-shell/")
         self.assertEqual(payload["webview"]["fallback_entry"], "/copilot")
+        self.assertEqual(payload["webview"]["host_session_query_parameter"], "host_session_id")
+        self.assertEqual(
+            payload["webview"]["post_message"]["host_to_copilot"],
+            "geely-ai.host-context",
+        )
         self.assertEqual(payload["api"]["tools"], "/api/v1/tools")
+        self.assertEqual(payload["api"]["host_assets"], "/api/v1/host/assets")
         self.assertEqual(payload["api"]["operations"][0]["side_effect"], "read_only")
         operation_ids = {operation["operation_id"] for operation in payload["api"]["operations"]}
         self.assertIn("compare_test_runs", operation_ids)
@@ -245,6 +299,9 @@ class AppTests(unittest.TestCase):
         self.assertIn("analyze_test_data_insights", by_name)
         self.assertIn("input_schema", by_name["analyze_test_run"])
         self.assertIn("output_schema", by_name["analyze_test_run"])
+        self.assertIn(
+            "source_asset_id", by_name["analyze_test_run"]["input_schema"]["properties"]
+        )
         self.assertEqual(by_name["update_host_context"]["risk_level"], "medium")
         self.assertEqual(by_name["list_audit_events"]["audit_level"], "debug")
         self.assertFalse(by_name["compare_test_runs"]["requires_confirmation"])

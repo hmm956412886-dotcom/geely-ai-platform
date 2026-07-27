@@ -53,6 +53,11 @@
         "summary": "Update host software context"
       }
     },
+    "/api/v1/host/assets": {
+      "post": {
+        "summary": "Register a host-local file and return a browser-safe asset ID"
+      }
+    },
     "/api/v1/audit/events": {
       "get": {
         "summary": "Return recent audit events"

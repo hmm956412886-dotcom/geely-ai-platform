@@ -17,17 +17,21 @@ import {
   ShieldCheckmark20Regular,
   Sparkle20Filled,
 } from "@fluentui/react-icons";
-import { GatewayRequestError, gatewayClient } from "./gatewayClient";
-import type { AnalysisResponse, HostContext, InsightsResponse } from "./types";
+import { GatewayRequestError, gatewayClient, hostSessionId } from "./gatewayClient";
+import type {
+  AnalysisResponse,
+  HostContext,
+  HostContextMessage,
+  InsightsResponse,
+} from "./types";
 
 type ChatMessages = NonNullable<ComponentProps<typeof CopilotChatView>["messages"]>;
 type ChatMessage = ChatMessages[number];
 
 const emptyContext: HostContext = {
+  host_session_id: hostSessionId,
   project_id: "未连接",
   run_id: "未选择",
-  source_file: "",
-  target_file: "",
   current_view: "",
   user_id: "",
 };
@@ -124,6 +128,26 @@ export default function App() {
     void refreshContext();
   }, [refreshContext]);
 
+  useEffect(() => {
+    const receiveHostContext = (event: MessageEvent<HostContextMessage>) => {
+      if (event.source !== window.parent || event.origin !== window.location.origin) return;
+      if (event.data?.type !== "geely-ai.host-context") return;
+      if (event.data.host_session_id !== hostSessionId) return;
+      void gatewayClient
+        .updateHostContext(event.data.context)
+        .then(setContext)
+        .catch(reportError);
+    };
+    window.addEventListener("message", receiveHostContext);
+    if (window.parent !== window) {
+      window.parent.postMessage(
+        { type: "geely-ai.copilot-ready", host_session_id: hostSessionId },
+        window.location.origin,
+      );
+    }
+    return () => window.removeEventListener("message", receiveHostContext);
+  }, [reportError]);
+
   const run = useCallback(
     async (label: string, action: () => Promise<string>) => {
       if (isRunning) return;
@@ -210,7 +234,7 @@ export default function App() {
           <Button
             appearance="secondary"
             icon={<DataTrending20Regular />}
-            disabled={isRunning || !context.source_file}
+            disabled={isRunning || (!context.source_asset_id && !context.source_file)}
             onClick={() =>
               void run("生成当前测试的数据洞察", async () =>
                 formatInsights(await gatewayClient.insights(context)),
@@ -222,7 +246,11 @@ export default function App() {
           <Button
             appearance="secondary"
             icon={<ArrowSwap20Regular />}
-            disabled={isRunning || !context.source_file || !context.target_file}
+            disabled={
+              isRunning ||
+              (!context.source_asset_id && !context.source_file) ||
+              (!context.target_asset_id && !context.target_file)
+            }
             onClick={() =>
               void run("比较当前测试与目标测试", async () => {
                 const payload = await gatewayClient.compare(context);

@@ -2,7 +2,7 @@
 
 这个目录演示“宿主测试软件如何接入 AI Gateway”。它不需要客户软件源码，只用 HTTP 调用模拟宿主软件的插件按钮。
 
-白话备注：真正集成时，客户软件要做的事情和这个脚本一样：先把当前测试上下文传给 AI Gateway，再调用分析接口，最后打开 `/copilot` 或展示返回结果。
+真正集成时，宿主先注册本地文件取得 `asset_id`，再把会话上下文传给 AI Gateway，最后打开带 `host_session_id` 的 `/copilot-shell/` 或展示返回结果。
 
 ## 1. 启动 AI Gateway
 
@@ -52,18 +52,20 @@ python .\host_connector_demo.py --gateway-url http://127.0.0.1:8765
 from python_host_sdk import GeelyAIGatewayClient, HostContext
 
 client = GeelyAIGatewayClient("http://127.0.0.1:8765")
+source_asset_id = client.register_asset(r"D:\test-results\run_001.csv")["result"]["asset_id"]
+target_asset_id = client.register_asset(r"D:\test-results\run_000.csv")["result"]["asset_id"]
 context = HostContext(
     project_id="GEELY_TEST",
     run_id="RUN_001",
-    source_file=r"D:\test-results\run_001.csv",
-    target_file=r"D:\test-results\run_000.csv",
+    source_asset_id=source_asset_id,
+    target_asset_id=target_asset_id,
     user_id="tester",
 )
 
 client.update_host_context(context)
-analysis = client.analyze(source_file=context.source_file, question="分析失败原因")
-insights = client.insights(source_file=context.source_file)
-compare = client.compare(baseline_file=context.source_file, target_file=context.target_file)
+analysis = client.analyze(source_asset_id=source_asset_id, question="分析失败原因")
+insights = client.insights(source_asset_id=source_asset_id)
+compare = client.compare(baseline_asset_id=source_asset_id, target_asset_id=target_asset_id)
 ```
 
 白话备注：SDK 不做 AI，只负责把宿主软件的“当前上下文”和“按钮动作”稳定地转成 HTTP 调用。C#、Java、C++ 插件也可以照这个类的接口移植。
@@ -71,12 +73,13 @@ compare = client.compare(baseline_file=context.source_file, target_file=context.
 ## 4. 样例做了什么
 
 1. `GET /health` 检查 AI Gateway 是否可用。
-2. `POST /api/v1/host/context` 写入当前项目、Run、文件路径和用户。
-3. `GET /api/v1/tools` 读取 Agent / SK 可调用的工具契约。
-4. `POST /api/v1/analyze` 分析当前测试文件。
-5. `POST /api/v1/test-data/insights` 生成状态分布和 Top 失败原因。
-6. `POST /api/v1/test-data/compare` 对比两次测试结果。
-7. 可选打开 `/copilot` 侧边栏面板。
+2. `POST /api/v1/host/assets` 把本地文件注册为浏览器安全的 `asset_id`。
+3. `POST /api/v1/host/context?host_session_id=...` 写入当前项目、Run、资产和用户。
+4. `GET /api/v1/tools` 读取 Agent / SK 可调用的工具契约。
+5. `POST /api/v1/analyze` 分析当前测试文件。
+6. `POST /api/v1/test-data/insights` 生成状态分布和 Top 失败原因。
+7. `POST /api/v1/test-data/compare` 对比两次测试结果。
+8. 可选打开 `/copilot-shell/?host_session_id=...` 侧边栏面板。
 
 ## 5. 客户软件怎么替换
 
@@ -86,7 +89,8 @@ compare = client.compare(baseline_file=context.source_file, target_file=context.
 
 ```text
 客户软件按钮点击
-  -> POST /api/v1/host/context
+  -> POST /api/v1/host/assets
+  -> POST /api/v1/host/context?host_session_id=...
   -> POST /api/v1/analyze
   -> 显示 answer / data / citations / request_id
 ```
@@ -95,7 +99,7 @@ compare = client.compare(baseline_file=context.source_file, target_file=context.
 
 ```text
 客户软件右侧面板
-  -> 打开 http://127.0.0.1:8765/copilot
+  -> 打开 http://127.0.0.1:8765/copilot-shell/?host_session_id=...
 ```
 
 如果客户软件暂时只能导出文件：

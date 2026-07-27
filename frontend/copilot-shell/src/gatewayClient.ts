@@ -6,6 +6,14 @@ import type {
   InsightsResponse,
 } from "./types";
 
+const querySessionId = new URLSearchParams(window.location.search).get("host_session_id");
+export const hostSessionId = querySessionId || "default";
+
+function sessionPath(path: string): string {
+  const separator = path.includes("?") ? "&" : "?";
+  return `${path}${separator}host_session_id=${encodeURIComponent(hostSessionId)}`;
+}
+
 export class GatewayRequestError extends Error {
   readonly requestId?: string;
 
@@ -38,28 +46,44 @@ function postJson<T>(path: string, body: unknown): Promise<T> {
 
 export const gatewayClient = {
   async getHostContext(): Promise<HostContext> {
-    const payload = await requestJson<{ result: HostContext }>("/api/v1/host/context");
+    const payload = await requestJson<{ result: HostContext }>(sessionPath("/api/v1/host/context"));
+    return payload.result;
+  },
+
+  async updateHostContext(context: Partial<HostContext>): Promise<HostContext> {
+    const { host_session_id: _, ...payloadContext } = context;
+    const payload = await postJson<{ result: HostContext }>(
+      sessionPath("/api/v1/host/context"),
+      payloadContext,
+    );
     return payload.result;
   },
 
   analyze(question: string, context: HostContext): Promise<AnalysisResponse> {
-    return postJson<AnalysisResponse>("/api/v1/analyze", {
+    const source = context.source_asset_id
+      ? { source_asset_id: context.source_asset_id }
+      : { source_file: context.source_file };
+    return postJson<AnalysisResponse>(sessionPath("/api/v1/analyze"), {
       question,
       project_id: context.project_id,
-      source_file: context.source_file,
+      ...source,
     });
   },
 
   insights(context: HostContext): Promise<InsightsResponse> {
-    return postJson<InsightsResponse>("/api/v1/test-data/insights", {
-      source_file: context.source_file,
-    });
+    const source = context.source_asset_id
+      ? { source_asset_id: context.source_asset_id }
+      : { source_file: context.source_file };
+    return postJson<InsightsResponse>(sessionPath("/api/v1/test-data/insights"), source);
   },
 
   compare(context: HostContext): Promise<CompareResponse> {
-    return postJson<CompareResponse>("/api/v1/test-data/compare", {
-      baseline_file: context.source_file,
-      target_file: context.target_file,
-    });
+    const sources = context.source_asset_id
+      ? {
+          baseline_asset_id: context.source_asset_id,
+          target_asset_id: context.target_asset_id,
+        }
+      : { baseline_file: context.source_file, target_file: context.target_file };
+    return postJson<CompareResponse>(sessionPath("/api/v1/test-data/compare"), sources);
   },
 };

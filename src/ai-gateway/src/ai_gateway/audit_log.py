@@ -30,6 +30,7 @@ def append_audit_event(
         "status": status,
         "request_id": request_id,
         "error_code": error_code,
+        "host_session_id": context.get("host_session_id"),
         "project_id": context.get("project_id"),
         "run_id": context.get("run_id"),
         "user_id": context.get("user_id"),

@@ -10,12 +10,18 @@
   "webview": {
     "entry": "/copilot-shell/",
     "fallback_entry": "/copilot",
+    "host_session_query_parameter": "host_session_id",
+    "post_message": {
+      "host_to_copilot": "geely-ai.host-context",
+      "copilot_to_host": "geely-ai.copilot-ready"
+    },
     "preferred_width": 460,
     "preferred_height": 720
   },
   "api": {
     "base_path": "/api/v1",
     "tools": "/api/v1/tools",
+    "host_assets": "/api/v1/host/assets",
     "operations": [
       {
         "operation_id": "analyze_test_run",

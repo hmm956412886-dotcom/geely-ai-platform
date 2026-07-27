@@ -12,6 +12,7 @@
         "properties": {
           "question": { "type": "string" },
           "source_file": { "type": "string" },
+          "source_asset_id": { "type": "string" },
           "knowledge_query": { "type": "string" },
           "use_model": { "type": "boolean" },
           "test_data": { "type": "object" }
@@ -43,6 +44,7 @@
         "type": "object",
         "properties": {
           "source_file": { "type": "string" },
+          "source_asset_id": { "type": "string" },
           "run_id": { "type": "string" },
           "source_ref": { "type": "string" },
           "total_cases": { "type": "integer" },
@@ -70,10 +72,11 @@
       "path": "/api/v1/test-data/compare",
       "input_schema": {
         "type": "object",
-        "required": ["baseline_file", "target_file"],
         "properties": {
           "baseline_file": { "type": "string" },
-          "target_file": { "type": "string" }
+          "target_file": { "type": "string" },
+          "baseline_asset_id": { "type": "string" },
+          "target_asset_id": { "type": "string" }
         },
         "additionalProperties": false
       },
@@ -97,9 +100,9 @@
       "path": "/api/v1/test-data/insights",
       "input_schema": {
         "type": "object",
-        "required": ["source_file"],
         "properties": {
-          "source_file": { "type": "string" }
+          "source_file": { "type": "string" },
+          "source_asset_id": { "type": "string" }
         },
         "additionalProperties": false
       },
@@ -199,6 +202,9 @@
         "properties": {
           "project_id": { "type": "string" },
           "run_id": { "type": "string" },
+          "source_asset_id": { "type": "string" },
+          "target_asset_id": { "type": "string" },
+          "baseline_asset_id": { "type": "string" },
           "source_file": { "type": "string" },
           "target_file": { "type": "string" },
           "baseline_file": { "type": "string" },

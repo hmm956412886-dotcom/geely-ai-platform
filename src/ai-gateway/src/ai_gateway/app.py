@@ -6,11 +6,12 @@ from dataclasses import dataclass
 import json
 from pathlib import Path
 from typing import Any
-from urllib.parse import unquote
+from urllib.parse import parse_qs, unquote, urlsplit
 from uuid import uuid4
 
 from .audit_log import append_audit_event, list_audit_events
-from .host_context import get_host_context, update_host_context
+from .host_assets import register_host_asset, resolve_host_asset
+from .host_context import get_host_context, normalize_host_session_id, update_host_context
 from .model_client import chat_completion, load_model_config
 from .test_data_adapter import compare_test_runs, load_test_data_insights, load_test_run_summary
 from .tool_registry import list_tools, manifest_operations
@@ -24,17 +25,23 @@ class Response:
 
 
 def handle_request(method: str, path: str, body: str = "") -> Response:
+    parsed_url = urlsplit(path)
+    route_path = parsed_url.path
+    host_session_id = None
     try:
-        response = _handle_request(method, path, body)
+        host_session_id = _query_value(parsed_url.query, "host_session_id")
+        response = _handle_request(method, route_path, body, host_session_id)
     except json.JSONDecodeError as exc:
         response = error_response("invalid_json", f"Invalid JSON request body: {exc.msg}", status=400)
     except ValueError as exc:
         response = error_response("bad_request", str(exc), status=400)
-    _append_request_audit(method, path, response)
+    _append_request_audit(method, route_path, response, host_session_id)
     return response
 
 
-def _handle_request(method: str, path: str, body: str = "") -> Response:
+def _handle_request(
+    method: str, path: str, body: str = "", host_session_id: str | None = None
+) -> Response:
     if method == "GET" and path == "/health":
         return json_response({"status": "ok", "service": "geely-ai-gateway"})
     if method == "GET" and path == "/demo":
@@ -56,21 +63,35 @@ def _handle_request(method: str, path: str, body: str = "") -> Response:
     if method == "GET" and path == "/api/v1/model/config":
         return json_response({"request_id": _request_id(), "result": load_model_config().public_dict()})
     if method == "GET" and path == "/api/v1/host/context":
-        return json_response({"request_id": _request_id(), "result": get_host_context()})
+        return json_response(
+            {"request_id": _request_id(), "result": get_host_context(host_session_id)}
+        )
     if method == "POST" and path == "/api/v1/host/context":
-        return json_response({"request_id": _request_id(), "result": update_host_context(_read_json(body))})
+        return json_response(
+            {
+                "request_id": _request_id(),
+                "result": update_host_context(_read_json(body), host_session_id),
+            }
+        )
+    if method == "POST" and path == "/api/v1/host/assets":
+        return json_response(
+            {
+                "request_id": _request_id(),
+                "result": register_host_asset(_read_json(body), host_session_id),
+            }
+        )
     if method == "GET" and path == "/api/v1/audit/events":
         return json_response({"request_id": _request_id(), "result": {"events": list_audit_events()}})
     if method == "POST" and path == "/api/v1/test-data/summary":
-        return json_response(_test_data_summary(_read_json(body)))
+        return json_response(_test_data_summary(_read_json(body), host_session_id))
     if method == "POST" and path == "/api/v1/test-data/compare":
-        return json_response(_test_data_compare(_read_json(body)))
+        return json_response(_test_data_compare(_read_json(body), host_session_id))
     if method == "POST" and path == "/api/v1/test-data/insights":
-        return json_response(_test_data_insights(_read_json(body)))
+        return json_response(_test_data_insights(_read_json(body), host_session_id))
     if method == "POST" and path == "/api/v1/knowledge/query":
         return json_response(_knowledge_query(_read_json(body)))
     if method == "POST" and path == "/api/v1/analyze":
-        return json_response(_analyze(_read_json(body)))
+        return json_response(_analyze(_read_json(body), host_session_id))
     return error_response("not_found", f"No route for {method} {path}", status=404)
 
 
@@ -123,7 +144,9 @@ def _content_type(suffix: str) -> str:
     }.get(suffix.lower(), "application/octet-stream")
 
 
-def _append_request_audit(method: str, path: str, response: Response) -> None:
+def _append_request_audit(
+    method: str, path: str, response: Response, host_session_id: str | None = None
+) -> None:
     if not path.startswith("/api/v1/") or path in {"/api/v1/audit/events", "/api/v1/tools"}:
         return
     assert isinstance(response.body, str)
@@ -133,7 +156,7 @@ def _append_request_audit(method: str, path: str, response: Response) -> None:
         path=path,
         status=response.status,
         request_id=payload.get("request_id"),
-        context=get_host_context(),
+        context=get_host_context(host_session_id),
         error_code=(payload.get("error") or {}).get("code"),
     )
 
@@ -147,9 +170,23 @@ def _read_json(body: str) -> dict[str, Any]:
     return payload
 
 
-def _test_data_summary(payload: dict[str, Any]) -> dict[str, Any]:
-    if payload.get("source_file"):
-        return {"request_id": _request_id(), "result": load_test_run_summary(str(payload["source_file"]))}
+def _query_value(query: str, name: str) -> str | None:
+    values = parse_qs(query).get(name)
+    if not values:
+        return None
+    return normalize_host_session_id(values[0])
+
+
+def _test_data_summary(
+    payload: dict[str, Any], host_session_id: str | None = None
+) -> dict[str, Any]:
+    source_file, source_asset_id = _resolve_source(
+        payload, "source_file", "source_asset_id", host_session_id
+    )
+    if source_file:
+        result = load_test_run_summary(source_file)
+        _mask_asset_source(result, source_asset_id)
+        return {"request_id": _request_id(), "result": result}
 
     run_id = str(payload.get("run_id") or "RUN_DEMO_001")
     source_ref = str(payload.get("source_ref") or "demo-fixture.json")
@@ -183,15 +220,30 @@ def _test_data_summary(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _test_data_compare(payload: dict[str, Any]) -> dict[str, Any]:
-    baseline_file = str(payload.get("baseline_file") or "")
-    target_file = str(payload.get("target_file") or "")
-    return {"request_id": _request_id(), "result": compare_test_runs(baseline_file, target_file)}
+def _test_data_compare(
+    payload: dict[str, Any], host_session_id: str | None = None
+) -> dict[str, Any]:
+    baseline_file, baseline_asset_id = _resolve_source(
+        payload, "baseline_file", "baseline_asset_id", host_session_id
+    )
+    target_file, target_asset_id = _resolve_source(
+        payload, "target_file", "target_asset_id", host_session_id
+    )
+    result = compare_test_runs(baseline_file, target_file)
+    _mask_asset_source(result["baseline"], baseline_asset_id)
+    _mask_asset_source(result["target"], target_asset_id)
+    return {"request_id": _request_id(), "result": result}
 
 
-def _test_data_insights(payload: dict[str, Any]) -> dict[str, Any]:
-    source_file = str(payload.get("source_file") or "")
-    return {"request_id": _request_id(), "result": load_test_data_insights(source_file)}
+def _test_data_insights(
+    payload: dict[str, Any], host_session_id: str | None = None
+) -> dict[str, Any]:
+    source_file, source_asset_id = _resolve_source(
+        payload, "source_file", "source_asset_id", host_session_id
+    )
+    result = load_test_data_insights(source_file)
+    _mask_asset_source(result, source_asset_id)
+    return {"request_id": _request_id(), "result": result}
 
 
 def _knowledge_query(payload: dict[str, Any]) -> dict[str, Any]:
@@ -211,12 +263,16 @@ def _knowledge_query(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _analyze(payload: dict[str, Any]) -> dict[str, Any]:
+def _analyze(payload: dict[str, Any], host_session_id: str | None = None) -> dict[str, Any]:
     question = str(payload.get("question") or "分析本次测试失败原因")
     summary_payload = payload.get("test_data", {})
-    if payload.get("source_file"):
-        summary_payload = {"source_file": payload["source_file"]}
-    summary = _test_data_summary(summary_payload)
+    if payload.get("source_file") or payload.get("source_asset_id"):
+        summary_payload = {
+            key: payload[key]
+            for key in ("source_file", "source_asset_id")
+            if payload.get(key)
+        }
+    summary = _test_data_summary(summary_payload, host_session_id)
     knowledge = _knowledge_query({"query": payload.get("knowledge_query", question)})
     result = summary["result"]
     answer = _fallback_analysis_answer(result)
@@ -239,6 +295,23 @@ def _analyze(payload: dict[str, Any]) -> dict[str, Any]:
         ],
         "question": question,
     }
+
+
+def _resolve_source(
+    payload: dict[str, Any],
+    file_field: str,
+    asset_field: str,
+    host_session_id: str | None,
+) -> tuple[str, str | None]:
+    asset_id = str(payload.get(asset_field) or "").strip()
+    if asset_id:
+        return resolve_host_asset(asset_id, host_session_id), asset_id
+    return str(payload.get(file_field) or ""), None
+
+
+def _mask_asset_source(result: dict[str, Any], asset_id: str | None) -> None:
+    if asset_id and isinstance(result.get("source"), dict):
+        result["source"] = {"type": "host_asset", "ref": asset_id}
 
 
 def _fallback_analysis_answer(result: dict[str, Any]) -> str:
@@ -666,41 +739,32 @@ def _showcase_html() -> str:
       </div>
     </main>
     <aside>
-      <iframe class="copilot-frame" id="copilotFrame" title="Reusable Geely AI Copilot" src="/copilot-shell/"></iframe>
+      <iframe class="copilot-frame" id="copilotFrame" title="Reusable Geely AI Copilot" src="/copilot-shell/?host_session_id=showcase-demo"></iframe>
     </aside>
   </div>
   <script>
     const copilotFrame = document.getElementById("copilotFrame");
+    const hostSessionId = "showcase-demo";
     const context = {
       project_id: "GEELY_TEST",
       run_id: "RUN_CSV_001",
-      source_file: "D:/geely-ai-platform/src/ai-gateway/tests/fixtures/test-run-cases.csv",
-      target_file: "D:/geely-ai-platform/src/ai-gateway/tests/fixtures/test-run-cases-target.csv",
+      source_asset_id: "demo-current",
+      target_asset_id: "demo-target",
       current_view: "test_result_detail",
       user_id: "demo_user"
     };
 
-    async function postJson(path, body) {
-      const response = await fetch(path, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body)
-      });
-      return response.json();
-    }
-
-    async function syncContext() {
-      await postJson("/api/v1/host/context", context);
-    }
-
-    async function reloadCopilot() {
-      await syncContext();
-      copilotFrame.contentWindow.location.reload();
+    function syncContext() {
+      copilotFrame.contentWindow.postMessage({
+        type: "geely-ai.host-context",
+        host_session_id: hostSessionId,
+        context
+      }, window.location.origin);
     }
 
     document.getElementById("sync").addEventListener("click", syncContext);
-    document.getElementById("quickAnalyze").addEventListener("click", reloadCopilot);
-    syncContext();
+    document.getElementById("quickAnalyze").addEventListener("click", syncContext);
+    copilotFrame.addEventListener("load", syncContext);
   </script>
 </body>
 </html>
@@ -721,6 +785,7 @@ def _openapi() -> dict[str, Any]:
             "/api/v1/tools": {"get": {"summary": "Return machine-readable AI tool contracts"}},
             "/api/v1/model/config": {"get": {"summary": "Return public model runtime config"}},
             "/api/v1/host/context": {"get": {"summary": "Return host software context"}, "post": {"summary": "Update host software context"}},
+            "/api/v1/host/assets": {"post": {"summary": "Register a host-local file and return a browser-safe asset ID"}},
             "/api/v1/audit/events": {"get": {"summary": "Return recent audit events"}},
             "/api/v1/analyze": {"post": {"summary": "Analyze test data with knowledge citations"}},
             "/api/v1/test-data/summary": {"post": {"summary": "Return a test run summary"}},
@@ -737,10 +802,21 @@ def _plugin_manifest() -> dict[str, Any]:
         "version": "0.1.0",
         "display_name": "Geely AI Assistant",
         "integration_modes": ["webview", "http-api", "cli-launch"],
-        "webview": {"entry": "/copilot-shell/", "fallback_entry": "/copilot", "preferred_width": 460, "preferred_height": 720},
+        "webview": {
+            "entry": "/copilot-shell/",
+            "fallback_entry": "/copilot",
+            "host_session_query_parameter": "host_session_id",
+            "post_message": {
+                "host_to_copilot": "geely-ai.host-context",
+                "copilot_to_host": "geely-ai.copilot-ready",
+            },
+            "preferred_width": 460,
+            "preferred_height": 720,
+        },
         "api": {
             "base_path": "/api/v1",
             "tools": "/api/v1/tools",
+            "host_assets": "/api/v1/host/assets",
             "operations": manifest_operations(),
         },
     }

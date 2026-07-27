@@ -96,6 +96,7 @@ flowchart LR
 | P0-016 | Host Connector / Plugin SDK 样例 | Done |
 | P0-017 | 客户部署配置最小化 | Done |
 | P0-018 | 开源 Copilot 插件底座 | Done：React + CopilotKit + Fluent UI 已构建并由 Gateway 提供 |
+| P0-019 | 宿主嵌入与会话契约 | Done：会话隔离、`postMessage`、Host Asset 和 SDK 已验证 |
 
 当前可运行入口：
 
@@ -319,7 +320,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\check-ai-gateway.p
 默认下一步：
 
 ```text
-P0-019：宿主嵌入与会话契约
+P0-020：演示交付包
 ```
 
 除非用户明确改变方向，否则不要回到“继续手写 HTML 小功能”的路线。

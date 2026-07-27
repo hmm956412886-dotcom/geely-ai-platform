@@ -45,7 +45,7 @@ $env:PYTHONPATH = "src"
 Write-Host "Starting Geely AI Gateway..."
 Write-Host "URL: http://$HostName`:$Port"
 Write-Host "Showcase: http://$HostName`:$Port/showcase"
-Write-Host "Copilot: http://$HostName`:$Port/copilot"
+Write-Host "Copilot: http://$HostName`:$Port/copilot-shell/"
 Write-Host "Model configured: $([bool]($env:AI_MODEL_BASE_URL -and $env:AI_MODEL_API_KEY -and $env:AI_MODEL_NAME))"
 
 Push-Location $GatewayRoot

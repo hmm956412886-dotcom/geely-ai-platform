@@ -1,10 +1,20 @@
 export interface HostContext {
+  host_session_id: string;
   project_id: string;
   run_id: string;
-  source_file: string;
-  target_file: string;
+  source_asset_id?: string;
+  target_asset_id?: string;
+  baseline_asset_id?: string;
+  source_file?: string;
+  target_file?: string;
   current_view: string;
   user_id: string;
+}
+
+export interface HostContextMessage {
+  type: "geely-ai.host-context";
+  host_session_id: string;
+  context: Partial<Omit<HostContext, "host_session_id">>;
 }
 
 export interface GatewayErrorBody {

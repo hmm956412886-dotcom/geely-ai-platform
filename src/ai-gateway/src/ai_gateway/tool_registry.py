@@ -21,6 +21,7 @@ _TOOLS: list[dict[str, Any]] = [
             "properties": {
                 "question": _STRING,
                 "source_file": _STRING,
+                "source_asset_id": _STRING,
                 "knowledge_query": _STRING,
                 "use_model": _BOOLEAN,
                 "test_data": {"type": "object"},
@@ -52,6 +53,7 @@ _TOOLS: list[dict[str, Any]] = [
             "type": "object",
             "properties": {
                 "source_file": _STRING,
+                "source_asset_id": _STRING,
                 "run_id": _STRING,
                 "source_ref": _STRING,
                 "total_cases": {"type": "integer"},
@@ -76,8 +78,12 @@ _TOOLS: list[dict[str, Any]] = [
         "path": "/api/v1/test-data/compare",
         "input_schema": {
             "type": "object",
-            "required": ["baseline_file", "target_file"],
-            "properties": {"baseline_file": _STRING, "target_file": _STRING},
+            "properties": {
+                "baseline_file": _STRING,
+                "target_file": _STRING,
+                "baseline_asset_id": _STRING,
+                "target_asset_id": _STRING,
+            },
             "additionalProperties": False,
         },
         "output_schema": {
@@ -97,8 +103,7 @@ _TOOLS: list[dict[str, Any]] = [
         "path": "/api/v1/test-data/insights",
         "input_schema": {
             "type": "object",
-            "required": ["source_file"],
-            "properties": {"source_file": _STRING},
+            "properties": {"source_file": _STRING, "source_asset_id": _STRING},
             "additionalProperties": False,
         },
         "output_schema": {
@@ -178,6 +183,9 @@ _TOOLS: list[dict[str, Any]] = [
             "properties": {
                 "project_id": _STRING,
                 "run_id": _STRING,
+                "source_asset_id": _STRING,
+                "target_asset_id": _STRING,
+                "baseline_asset_id": _STRING,
                 "source_file": _STRING,
                 "target_file": _STRING,
                 "baseline_file": _STRING,
