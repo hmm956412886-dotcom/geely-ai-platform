@@ -37,16 +37,48 @@ cd D:\geely-ai-platform
   -TargetFile "D:\test-results\run_000.csv"
 ```
 
-## 3. 样例做了什么
+## 3. 使用 Python Host SDK
+
+如果宿主软件插件、内部服务或自动化脚本使用 Python，可以直接复用这个最小 SDK：
+
+```powershell
+cd D:\geely-ai-platform\samples\host-integration
+python .\host_connector_demo.py --gateway-url http://127.0.0.1:8765
+```
+
+核心调用方式：
+
+```python
+from python_host_sdk import GeelyAIGatewayClient, HostContext
+
+client = GeelyAIGatewayClient("http://127.0.0.1:8765")
+context = HostContext(
+    project_id="GEELY_TEST",
+    run_id="RUN_001",
+    source_file=r"D:\test-results\run_001.csv",
+    target_file=r"D:\test-results\run_000.csv",
+    user_id="tester",
+)
+
+client.update_host_context(context)
+analysis = client.analyze(source_file=context.source_file, question="分析失败原因")
+insights = client.insights(source_file=context.source_file)
+compare = client.compare(baseline_file=context.source_file, target_file=context.target_file)
+```
+
+白话备注：SDK 不做 AI，只负责把宿主软件的“当前上下文”和“按钮动作”稳定地转成 HTTP 调用。C#、Java、C++ 插件也可以照这个类的接口移植。
+
+## 4. 样例做了什么
 
 1. `GET /health` 检查 AI Gateway 是否可用。
 2. `POST /api/v1/host/context` 写入当前项目、Run、文件路径和用户。
 3. `GET /api/v1/tools` 读取 Agent / SK 可调用的工具契约。
 4. `POST /api/v1/analyze` 分析当前测试文件。
-5. `POST /api/v1/test-data/compare` 对比两次测试结果。
-6. 可选打开 `/copilot` 侧边栏面板。
+5. `POST /api/v1/test-data/insights` 生成状态分布和 Top 失败原因。
+6. `POST /api/v1/test-data/compare` 对比两次测试结果。
+7. 可选打开 `/copilot` 侧边栏面板。
 
-## 4. 客户软件怎么替换
+## 5. 客户软件怎么替换
 
 如果客户软件能写插件或按钮，把脚本里的 HTTP 调用换成客户软件语言即可。
 
@@ -74,7 +106,7 @@ cd D:\geely-ai-platform
   -> AI Gateway 只读分析
 ```
 
-## 5. 当前边界
+## 6. 当前边界
 
 - 只读分析，不修改测试配置。
 - 不控制测试设备。

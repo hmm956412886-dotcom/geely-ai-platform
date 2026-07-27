@@ -67,6 +67,13 @@ Invoke-GatewayJson `
     -Body @{ source_file = $SourceFile; question = $Question } |
     ConvertTo-Json -Depth 20
 
+Write-Host "`nGenerating test data insights..."
+Invoke-GatewayJson `
+    -Method "POST" `
+    -Path "/api/v1/test-data/insights" `
+    -Body @{ source_file = $SourceFile } |
+    ConvertTo-Json -Depth 20
+
 Write-Host "`nComparing test runs..."
 Invoke-GatewayJson `
     -Method "POST" `

@@ -38,6 +38,7 @@ MVP 使用外置 AI Gateway：
 6. 模型 API Base URL、API Key、模型名通过配置提供。
 7. 飞书知识库先走 CLI 查询，不做全量迁移。
 8. 测试数据先走文件 Adapter 或 JSON fixture。
+9. `samples/host-integration` 提供 PowerShell 和 Python Host SDK 两种宿主接入样例。
 
 ## 4. 明确不做
 
@@ -81,6 +82,7 @@ GET /api/test-runs/compare?baseline={id}&target={id}
 - 配置模板。
 - 启动脚本。
 - 宿主集成样例：`samples/host-integration`。
+- Python Host SDK：封装 `host/context`、`analyze`、`insights`、`compare` 等最小接口。
 - 飞书 CLI 登录/授权说明。
 - 测试数据 Adapter 说明。
 - AGENTS.md / 运维约束文档。
@@ -102,7 +104,28 @@ GET /api/test-runs/compare?baseline={id}&target={id}
 | 可展示 | 打开 `/showcase` 能看到宿主软件模拟台和 AI 面板，并完成一次分析 |
 | 可集成 | `/plugin-manifest.json` 能说明宿主软件如何接入 |
 | 可调用 | `/api/v1/analyze` 能返回结构化结果 |
+| 可复用 | Python Host SDK 能模拟宿主插件完整调用链 |
 | 可配置 | 不改代码即可切换模型 API |
 | 可追踪 | 每次响应包含 `request_id` |
 | 可替换 | 演示数据可替换成真实文件 Adapter 或客户 API |
 | 安全 | 第一版只读，不写配置，不控设备 |
+
+## 8. Host SDK 最小代码形态
+
+当前样例：
+
+```text
+samples/host-integration/python_host_sdk.py
+samples/host-integration/host_connector_demo.py
+```
+
+宿主软件侧只需要完成四步：
+
+```text
+1. 创建 Gateway Client
+2. 写入 Host Context
+3. 调用 analyze / insights / compare
+4. 打开 /copilot 或展示 API 返回
+```
+
+白话备注：这个 SDK 不是最终产品包，而是“接口长什么样”的样板。未来做 C# SDK、Java SDK、C++ 插件时，都按这几个方法对齐，AI Gateway 内部怎么升级都不会影响宿主软件。

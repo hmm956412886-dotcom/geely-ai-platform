@@ -27,7 +27,7 @@
 6. `/openapi.json` 描述 HTTP API。
 7. 飞书先通过 CLI 查询，不做全量迁移。
 8. 测试数据先通过 JSON fixture 或文件 Adapter 接入，不猜 PDX 内部格式。
-9. `samples/host-integration` 提供无源码集成样例。
+9. `samples/host-integration` 提供无源码集成样例和 Python Host SDK 样板。
 10. `/copilot` 作为可复用侧边栏组件，`/showcase` 只负责演示嵌入效果。
 11. `/api/v1/test-data/insights` 提供确定性数据洞察，优先用 DuckDB，未安装时回退标准库。
 
