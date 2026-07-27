@@ -20,7 +20,7 @@
 ## MVP 先做什么
 
 1. AI Gateway 可启动。
-2. `/demo` 可作为 WebView 嵌入展示。
+2. `/showcase` 可展示宿主软件 + Copilot 的完整产品形态。
 3. `/api/v1/analyze` 可被宿主软件或插件按钮调用。
 4. `/plugin-manifest.json` 描述宿主软件如何集成。
 5. `/api/v1/tools` 描述 Agent / SK 可调用的工具契约。
@@ -39,10 +39,16 @@ $env:PYTHONPATH='src'
 python -m ai_gateway.server --port 8765
 ```
 
-打开演示面板：
+打开产品展示页：
 
 ```text
-http://127.0.0.1:8765/demo
+http://127.0.0.1:8765/showcase
+```
+
+只看右侧 Copilot 面板：
+
+```text
+http://127.0.0.1:8765/copilot
 ```
 
 查看集成契约：

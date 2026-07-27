@@ -31,7 +31,7 @@ MVP 使用外置 AI Gateway：
 ## 3. MVP 必须完成
 
 1. AI Gateway 可以独立启动。
-2. `/copilot` 可以嵌入宿主软件 WebView。
+2. `/showcase` 可以展示完整产品形态，`/copilot` 可以嵌入宿主软件 WebView。
 3. `/plugin-manifest.json` 描述集成入口。
 4. `/openapi.json` 描述接口。
 5. `/api/v1/analyze` 返回测试分析结论、数据依据、飞书引用和 `request_id`。
@@ -99,7 +99,7 @@ GET /api/test-runs/compare?baseline={id}&target={id}
 
 | 项目 | 验收标准 |
 | --- | --- |
-| 可展示 | 打开 `/copilot` 能看到 AI 面板并完成一次分析 |
+| 可展示 | 打开 `/showcase` 能看到宿主软件模拟台和 AI 面板，并完成一次分析 |
 | 可集成 | `/plugin-manifest.json` 能说明宿主软件如何接入 |
 | 可调用 | `/api/v1/analyze` 能返回结构化结果 |
 | 可配置 | 不改代码即可切换模型 API |

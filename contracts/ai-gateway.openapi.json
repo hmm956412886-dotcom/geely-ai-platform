@@ -15,6 +15,11 @@
         "summary": "Embeddable demo panel"
       }
     },
+    "/showcase": {
+      "get": {
+        "summary": "Host software showcase with Copilot side panel"
+      }
+    },
     "/copilot": {
       "get": {
         "summary": "Embeddable Copilot side panel"

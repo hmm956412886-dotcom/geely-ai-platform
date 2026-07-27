@@ -7,6 +7,7 @@
 ```text
 GET  /health
 GET  /demo
+GET  /showcase
 GET  /copilot
 GET  /openapi.json
 GET  /plugin-manifest.json
@@ -29,10 +30,10 @@ $env:PYTHONPATH='src'
 python -m ai_gateway.server --port 8765
 ```
 
-打开：
+打开产品展示页：
 
 ```text
-http://127.0.0.1:8765/demo
+http://127.0.0.1:8765/showcase
 ```
 
 侧边栏 Copilot 面板：
@@ -53,6 +54,7 @@ python evals\run_eval.py
 
 ```text
 PASS copilot_page
+PASS showcase_page
 PASS tools_registry
 PASS analyze_csv
 PASS host_context_roundtrip
@@ -61,17 +63,17 @@ PASS model_fallback
 PASS audit_events
 PASS invalid_json_error
 PASS missing_file_error
-9 passed, 0 failed
+10 passed, 0 failed
 ```
 
-这组自检覆盖 Copilot 页面、Host Context、CSV 分析、两次测试对比、模型 fallback、审计事件、坏 JSON 和缺文件错误响应。
+这组自检覆盖产品展示页、Copilot 页面、Host Context、CSV 分析、两次测试对比、模型 fallback、审计事件、坏 JSON 和缺文件错误响应。
 
 ## 宿主软件怎么接
 
 优先顺序：
 
 1. 宿主软件先调用 `POST /api/v1/host/context`，传入当前项目、Run 和测试文件路径。
-2. WebView 打开 `/copilot`，作为宿主软件右侧 AI 面板。
+2. 演示时打开 `/showcase`，真实嵌入时 WebView 打开 `/copilot`，作为宿主软件右侧 AI 面板。
 3. 插件按钮调用 `POST /api/v1/analyze`，传入当前测试文件路径、`run_id` 或导出后的 JSON。
 4. 宿主软件读取 `/plugin-manifest.json`，按 manifest 自动注册 AI 面板和 API 操作。
 5. 客户没有源码时，用外部启动脚本或桌面快捷方式启动 AI Gateway。

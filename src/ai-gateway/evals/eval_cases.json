@@ -7,6 +7,13 @@
     "body_contains": "Geely AI Copilot"
   },
   {
+    "name": "showcase_page",
+    "method": "GET",
+    "path": "/showcase",
+    "expect_status": 200,
+    "body_contains": "Geely Test AI Workbench"
+  },
+  {
     "name": "tools_registry",
     "method": "GET",
     "path": "/api/v1/tools",

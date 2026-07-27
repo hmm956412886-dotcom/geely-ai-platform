@@ -101,6 +101,17 @@ class AppTests(unittest.TestCase):
         self.assertIn("/api/v1/test-data/compare", response.body)
         self.assertIn("/api/v1/host/context", response.body)
 
+    def test_showcase_page_is_available(self) -> None:
+        response = handle_request("GET", "/showcase")
+
+        self.assertEqual(response.status, 200)
+        self.assertEqual(response.content_type, "text/html; charset=utf-8")
+        self.assertIn("Geely Test AI Workbench", response.body)
+        self.assertIn("AI Copilot", response.body)
+        self.assertIn("/api/v1/analyze", response.body)
+        self.assertIn("/api/v1/test-data/compare", response.body)
+        self.assertIn("/api/v1/host/context", response.body)
+
     def test_host_context_roundtrip(self) -> None:
         update = handle_request(
             "POST",

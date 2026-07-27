@@ -208,6 +208,7 @@ Phase 1 禁止：
 | P0-010 | 最小 Audit Log | Done | `/api/v1/audit/events` 可查看最近 API 调用、request_id、状态和错误码 |
 | P0-011 | Tool Registry 契约 | Done | `/api/v1/tools` 暴露 Agent/SK 可消费的工具名、schema、风险和审计等级 |
 | P0-012 | 宿主集成 Demo 包 | Done | `samples/host-integration` 可模拟宿主软件传入上下文、调用分析、对比结果和打开 Copilot |
+| P0-013 | 产品展示前端 | Done | `/showcase` 展示宿主软件模拟台 + Copilot 右侧栏，并能调用分析、对比和 Host Context |
 | P1-001 | PDX 工具链调研 | P1 | 找到官方工具、SDK 或样例格式 |
 | P1-002 | PDX Adapter | P1 | 能解析脱敏 PDX 样例 |
 | P1-003 | IndexedRagProvider | P1 | 向量检索作为可选后端 |
@@ -240,6 +241,7 @@ python evals\run_eval.py
 
 当前覆盖：
 
+- 产品展示页可访问。
 - Copilot 页面可访问。
 - Tool Registry 可读取。
 - Host Context 可写入和读取。
