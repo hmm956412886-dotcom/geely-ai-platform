@@ -1,6 +1,6 @@
 # Geely AI Platform
 
-面向吉利汽车测试软件的通用 AI 插件底座。当前策略是先做可展示、可嵌入、可替换模型 API 的产品 MVP，再逐步接入成熟开源 Copilot 前端、真实飞书知识库、测试数据文件和 Agent 编排。
+面向测试软件的通用 AI 插件底座。当前策略是先做可展示、可嵌入、可替换模型 API 的产品 MVP，再逐步接入成熟开源 Copilot 前端、真实飞书知识库、测试数据文件和 Agent 编排。
 
 主开发计划见：[可复用 AI 插件完整开发计划](docs/13-reusable-ai-plugin-development-plan.md)。
 
