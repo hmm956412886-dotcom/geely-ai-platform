@@ -98,6 +98,7 @@ flowchart LR
 | P0-018 | 开源 Copilot 插件底座 | Done：React + CopilotKit + Fluent UI 已构建并由 Gateway 提供 |
 | P0-019 | 宿主嵌入与会话契约 | Done：会话隔离、`postMessage`、Host Asset 和 SDK 已验证 |
 | P0-020 | 演示交付包 | Done：Gateway、独立前端和双 URL 检查脚本已验证 |
+| P1-003 | Feishu CLI Provider | Done：真实搜索、关键词原文读取和 Gateway 引用已验证 |
 
 当前可运行入口：
 
@@ -321,10 +322,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\check-ai-gateway.p
 默认下一步：
 
 ```text
-P1-003：Feishu CLI Provider
+P1-007：SK / MAF Tool Adapter
 ```
 
-P1-001 / P1-002 等待脱敏 PDX 样例或官方工具说明，不猜格式；在此之前先跑通真实飞书知识查询。
+P1-001 / P1-002 等待脱敏 PDX 样例或官方工具说明；P1-004 只在 CLI 查询性能不足时启动，P1-005 / P1-006 等待真实规则或画像需求。在此之前优先把稳定的 REST Tool Registry 接入成熟 Agent 框架。
 
 除非用户明确改变方向，否则不要回到“继续手写 HTML 小功能”的路线。
 

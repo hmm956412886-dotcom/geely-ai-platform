@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from html.parser import HTMLParser
 import json
 import os
 import subprocess
@@ -22,6 +23,14 @@ class KnowledgeHit:
     source_url: str | None
     snippet: str | None
     source_type: str | None
+
+
+@dataclass(frozen=True)
+class KnowledgeExcerpt:
+    document_id: str
+    revision_id: int | None
+    content: str
+    text: str
 
 
 @dataclass(frozen=True)
@@ -51,8 +60,11 @@ class FeishuCliProvider:
         self._runner = runner or self._run_process
 
     def search(self, query: str, *, limit: int = 10) -> list[KnowledgeHit]:
-        if not query.strip():
+        cleaned_query = query.strip()
+        if not cleaned_query:
             raise ValueError("query must not be empty")
+        if len(cleaned_query) > 30:
+            raise ValueError("query must be 30 characters or fewer")
         if limit < 1:
             raise ValueError("limit must be greater than zero")
 
@@ -62,7 +74,7 @@ class FeishuCliProvider:
                 "drive",
                 "+search",
                 "--query",
-                query,
+                cleaned_query,
                 "--format",
                 "json",
                 "--as",
@@ -72,6 +84,9 @@ class FeishuCliProvider:
         items = _extract_items(_decode_json(response.stdout))
         hits: list[KnowledgeHit] = []
         for item in items:
+            metadata = item.get("result_meta")
+            if not isinstance(metadata, dict):
+                metadata = {}
             document_ref = _first_string(
                 item,
                 "document_ref",
@@ -80,17 +95,31 @@ class FeishuCliProvider:
                 "file_token",
                 "url",
                 "source_url",
-            )
-            title = _first_string(item, "title", "name") or document_ref
+            ) or _first_string(metadata, "token", "url")
+            title = _plain_text(
+                _first_string(item, "title", "title_highlighted", "name")
+            ) or document_ref
             if not document_ref or not title:
                 continue
             hits.append(
                 KnowledgeHit(
                     document_ref=document_ref,
                     title=title,
-                    source_url=_first_string(item, "source_url", "url"),
-                    snippet=_first_string(item, "snippet", "content", "text"),
-                    source_type=_first_string(item, "obj_type", "source_type"),
+                    source_url=_first_string(item, "source_url", "url")
+                    or _first_string(metadata, "url"),
+                    snippet=_plain_text(
+                        _first_string(
+                            item,
+                            "snippet",
+                            "summary_highlighted",
+                            "content",
+                            "text",
+                        )
+                    ),
+                    source_type=_first_string(
+                        item, "obj_type", "source_type", "entity_type"
+                    )
+                    or _first_string(metadata, "doc_types"),
                 )
             )
             if len(hits) >= limit:
@@ -117,6 +146,52 @@ class FeishuCliProvider:
         payload = _decode_json(response.stdout)
         return normalize_snapshot(_to_snapshot(payload, document_ref))
 
+    def fetch_excerpt(self, document_ref: str, *, keyword: str) -> KnowledgeExcerpt:
+        cleaned_ref = document_ref.strip()
+        cleaned_keyword = keyword.strip()
+        if not cleaned_ref:
+            raise ValueError("document_ref must not be empty")
+        if not cleaned_keyword:
+            raise ValueError("keyword must not be empty")
+        if len(cleaned_keyword) > 30:
+            raise ValueError("keyword must be 30 characters or fewer")
+
+        response = self._run(
+            [
+                self.executable,
+                "docs",
+                "+fetch",
+                "--doc",
+                cleaned_ref,
+                "--scope",
+                "keyword",
+                "--keyword",
+                cleaned_keyword,
+                "--context-after",
+                "1",
+                "--format",
+                "json",
+                "--as",
+                self.identity,
+            ]
+        )
+        payload = _decode_json(response.stdout)
+        root = payload.get("data", payload) if isinstance(payload, dict) else payload
+        document = root.get("document") if isinstance(root, dict) else None
+        if not isinstance(document, dict):
+            raise FeishuCliError("Feishu CLI document output is missing document data")
+        content = document.get("content")
+        if not isinstance(content, str):
+            raise FeishuCliError("Feishu CLI document output is missing content")
+        document_id = _first_string(document, "document_id") or cleaned_ref
+        revision_id = document.get("revision_id")
+        return KnowledgeExcerpt(
+            document_id=document_id,
+            revision_id=revision_id if isinstance(revision_id, int) else None,
+            content=content,
+            text=_plain_text(content) or "",
+        )
+
     def _run(self, args: Sequence[str]) -> CliResponse:
         response = self._runner(args)
         if response.returncode != 0:
@@ -127,13 +202,18 @@ class FeishuCliProvider:
         return response
 
     def _run_process(self, args: Sequence[str]) -> CliResponse:
+        environment = dict(os.environ)
+        environment.setdefault("LARKSUITE_CLI_NO_UPDATE_NOTIFIER", "1")
+        environment.setdefault("LARKSUITE_CLI_NO_SKILLS_NOTIFIER", "1")
         try:
             completed = subprocess.run(
                 list(args),
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
                 timeout=self.timeout_seconds,
                 check=False,
+                env=environment,
             )
         except FileNotFoundError as exc:
             raise FeishuCliError(
@@ -218,3 +298,47 @@ def _first_string(value: dict[str, Any], *keys: str) -> str | None:
             return candidate.strip()
     return None
 
+
+class _TextExtractor(HTMLParser):
+    BLOCK_TAGS = {
+        "blockquote",
+        "br",
+        "code",
+        "h1",
+        "h2",
+        "h3",
+        "h4",
+        "h5",
+        "h6",
+        "li",
+        "p",
+        "pre",
+        "td",
+        "th",
+        "title",
+        "tr",
+    }
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.parts: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag in self.BLOCK_TAGS:
+            self.parts.append(" ")
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in self.BLOCK_TAGS:
+            self.parts.append(" ")
+
+    def handle_data(self, data: str) -> None:
+        self.parts.append(data)
+
+
+def _plain_text(value: str | None) -> str | None:
+    if not value:
+        return None
+    parser = _TextExtractor()
+    parser.feed(value)
+    text = " ".join("".join(parser.parts).split())
+    return text or None

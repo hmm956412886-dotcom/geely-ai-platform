@@ -222,7 +222,7 @@ Phase 1 禁止：
 | P0-020 | 演示交付包 | Done | 一套脚本启动 Gateway 和 Copilot 前端，并提供检查命令 |
 | P1-001 | PDX 工具链调研 | P1 | 找到官方工具、SDK 或样例格式 |
 | P1-002 | PDX Adapter | P1 | 能解析脱敏 PDX 样例 |
-| P1-003 | Feishu CLI Provider | P1 | 可读取有权限飞书文档并返回引用 |
+| P1-003 | Feishu CLI Provider | Done | 可读取有权限飞书文档并返回引用 |
 | P1-004 | Indexed RAG Provider | P1 | 飞书 CLI 查询性能不足时接 LanceDB / Qdrant / PGVector 之一 |
 | P1-005 | 数据质量规则 | P1 | 规则明确后接 Great Expectations 或轻量规则引擎 |
 | P1-006 | 数据画像报告 | P1 | 需要一键概览时接 ydata-profiling 或同类工具 |

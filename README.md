@@ -36,6 +36,7 @@
 13. 宿主通过 `host_session_id`、`postMessage` 和 `asset_id` 安全复用同一个 Copilot。
 14. `scripts/start-copilot-shell.ps1` 可独立启动前端联调服务，检查脚本可同时验证 Gateway 和前端 URL。
 15. P0 产品底座和演示交付已完成；PDX 样例到位前，下一主线是真实飞书 CLI 知识查询。
+16. 设置 `AI_KNOWLEDGE_PROVIDER=feishu-cli` 后，Gateway 可返回当前用户有权限的真实飞书文档片段和引用链接。
 
 暂不做：动态 UI、多 Agent、写入类工具、设备控制、全量向量库迁移、继续手写零散 Copilot UI。
 

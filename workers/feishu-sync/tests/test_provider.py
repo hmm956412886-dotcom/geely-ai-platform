@@ -108,6 +108,75 @@ class FeishuCliProviderTests(unittest.TestCase):
         self.assertEqual(document["sections"][0]["heading_path"], ["通过标准"])
         self.assertEqual(runner.calls[0][0:4], ["lark-cli", "docs", "+fetch", "--doc"])
 
+    def test_search_supports_current_lark_cli_envelope(self) -> None:
+        runner = FakeCli(
+            [
+                CliResponse(
+                    0,
+                    json.dumps(
+                        {
+                            "ok": True,
+                            "data": {
+                                "results": [
+                                    {
+                                        "entity_type": "WIKI",
+                                        "title_highlighted": "动力<h>测试</h>规范",
+                                        "summary_highlighted": "通过<hb>标准</hb>",
+                                        "result_meta": {
+                                            "token": "wikcn-001",
+                                            "url": "https://example.feishu.cn/wiki/wikcn-001",
+                                            "doc_types": "DOCX",
+                                        },
+                                    }
+                                ]
+                            },
+                        },
+                        ensure_ascii=False,
+                    ),
+                    "",
+                )
+            ]
+        )
+
+        hit = FeishuCliProvider(runner=runner).search("动力测试", limit=1)[0]
+
+        self.assertEqual(hit.document_ref, "wikcn-001")
+        self.assertEqual(hit.title, "动力测试规范")
+        self.assertEqual(hit.snippet, "通过标准")
+        self.assertEqual(hit.source_type, "WIKI")
+
+    def test_fetch_excerpt_returns_plain_text(self) -> None:
+        runner = FakeCli(
+            [
+                CliResponse(
+                    0,
+                    json.dumps(
+                        {
+                            "ok": True,
+                            "data": {
+                                "document": {
+                                    "document_id": "doxcn-001",
+                                    "revision_id": 7,
+                                    "content": "<fragment><title>测试规范</title><p>误差小于 5%。</p></fragment>",
+                                }
+                            },
+                        },
+                        ensure_ascii=False,
+                    ),
+                    "",
+                )
+            ]
+        )
+
+        excerpt = FeishuCliProvider(runner=runner).fetch_excerpt(
+            "doxcn-001", keyword="误差"
+        )
+
+        self.assertEqual(excerpt.document_id, "doxcn-001")
+        self.assertEqual(excerpt.revision_id, 7)
+        self.assertEqual(excerpt.text, "测试规范 误差小于 5%。")
+        self.assertIn("--scope", runner.calls[0])
+
     def test_nonzero_cli_exit_becomes_domain_error(self) -> None:
         runner = FakeCli([CliResponse(1, "", "permission denied")])
         provider = FeishuCliProvider(runner=runner)

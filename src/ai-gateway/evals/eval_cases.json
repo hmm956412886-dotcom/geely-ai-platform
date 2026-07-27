@@ -150,6 +150,22 @@
     }
   },
   {
+    "name": "knowledge_query_demo",
+    "method": "POST",
+    "path": "/api/v1/knowledge/query",
+    "body": {
+      "query": "测试规范"
+    },
+    "expect_status": 200,
+    "expect": {
+      "citations.0.document_id": "feishu-demo-001",
+      "citations.0.provider": "feishu-cli"
+    },
+    "prefix": {
+      "request_id": "req_"
+    }
+  },
+  {
     "name": "audit_events",
     "method": "GET",
     "path": "/api/v1/audit/events",

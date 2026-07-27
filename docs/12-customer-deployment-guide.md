@@ -40,6 +40,22 @@ AI_MODEL_TIMEOUT_SECONDS=30
 - 不要把真实 API Key 写入 `runtime.env.example`。
 - 不配置模型 API 时，系统仍可用本地确定性分析 fallback。
 
+启用真实飞书知识查询：
+
+```powershell
+pnpm add -g @larksuite/cli@1.0.77
+lark-cli.exe auth status --json --verify
+```
+
+确认用户身份可用后，在 `.env` 中配置：
+
+```text
+AI_KNOWLEDGE_PROVIDER=feishu-cli
+LARK_CLI_COMMAND=lark-cli.exe
+```
+
+Gateway 会通过当前飞书用户身份执行 `drive +search`，再用 `docs +fetch` 读取最相关文档片段。未配置时继续使用离线演示知识，不影响测试数据分析。
+
 ## 3. 启动 AI Gateway
 
 ```powershell
@@ -118,6 +134,7 @@ POST /api/v1/host/context?host_session_id=<宿主会话ID>
 POST /api/v1/analyze?host_session_id=<宿主会话ID>
 POST /api/v1/test-data/insights
 POST /api/v1/test-data/compare
+POST /api/v1/knowledge/query
 ```
 
 网站 iframe 和桌面 WebView 的完整 `postMessage`、`asset_id` 示例见 `docs/10-reusable-copilot-embed.md`。

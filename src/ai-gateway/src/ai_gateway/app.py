@@ -12,6 +12,7 @@ from uuid import uuid4
 from .audit_log import append_audit_event, list_audit_events
 from .host_assets import register_host_asset, resolve_host_asset
 from .host_context import get_host_context, normalize_host_session_id, update_host_context
+from .knowledge_provider import query_knowledge as query_knowledge_provider
 from .model_client import chat_completion, load_model_config
 from .test_data_adapter import compare_test_runs, load_test_data_insights, load_test_run_summary
 from .tool_registry import list_tools, manifest_operations
@@ -248,19 +249,7 @@ def _test_data_insights(
 
 def _knowledge_query(payload: dict[str, Any]) -> dict[str, Any]:
     query = str(payload.get("query") or "动力系统测试规范")
-    return {
-        "request_id": _request_id(),
-        "answer": f"已在飞书知识源中准备检索：{query}",
-        "citations": [
-            {
-                "title": "动力系统测试规范",
-                "source_url": "https://example.feishu.cn/wiki/demo",
-                "section_path": ["第三章", "通过标准"],
-                "provider": "feishu-cli",
-            }
-        ],
-        "warnings": ["当前 MVP 使用演示数据；接入 lark-cli 后返回真实飞书引用。"],
-    }
+    return {"request_id": _request_id(), **query_knowledge_provider(query)}
 
 
 def _analyze(payload: dict[str, Any], host_session_id: str | None = None) -> dict[str, Any]:

@@ -81,19 +81,19 @@ from feishu_sync.provider import FeishuCliProvider
 
 provider = FeishuCliProvider()
 hits = provider.search("动力系统测试规范")
-document = provider.fetch(hits[0].document_ref)
+excerpt = provider.fetch_excerpt(hits[0].source_url, keyword="动力系统")
 ```
 
 默认调用：
 
 ```text
 lark-cli drive +search --query <query> --format json --as user
-lark-cli docs +fetch --doc <document> --format json --as user
+lark-cli docs +fetch --doc <document> --scope keyword --keyword <query> --format json --as user
 ```
 
 可以通过 `LARK_CLI_COMMAND` 替换 CLI 可执行文件路径。
 
-当前 Provider 是第一阶段的主知识源。后续新增 `IndexedRagProvider` 时，只需要实现同一组 `search/fetch` 能力，不修改上层编排。
+当前 Provider 是第一阶段的主知识源，已适配 `lark-cli` 1.0.77 的 `result_meta` 搜索结果和关键词文档片段。后续新增 `IndexedRagProvider` 时，只需要实现同一组查询能力，不修改上层编排。
 
 直接通过 Worker CLI 交互：
 
