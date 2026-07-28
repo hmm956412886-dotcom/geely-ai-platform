@@ -10,13 +10,13 @@
 2. `docs/04-development-guide.md`
 3. `README.md`
 
-当前默认下一步是：
+当前唯一产品目标是：
 
 ```text
-等待真实 PDX / 身份平台 / 质量规则输入
+在真实 HK CoreTest 中交付可运行的右侧 AI Copilot：对话、文件读取和测试代码生成
 ```
 
-方向：assistant-ui + Fluent UI 前端、宿主会话生命周期、真实飞书查询、Semantic Kernel 只读工具编排和分级 Gateway Bearer 鉴权已经跑通。继续保留 AI Gateway REST API 作为稳定集成协议。PDX、RAG、质量规则和企业 SSO 等待真实输入，不能用假需求继续堆框架。
+方向：保留 assistant-ui + Fluent UI、Gateway REST API、真实飞书查询、Semantic Kernel 只读编排和分级 Bearer 鉴权。当前优先完成 CoreTest Qt Dock、文件附件问答、基于文件生成 pytest，以及 Trace/DBC/诊断日志真实分析。PDX、RAG、质量规则和企业 SSO 仍等待真实输入。
 
 ## 1. 先想清楚再写代码
 

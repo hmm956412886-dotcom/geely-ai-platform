@@ -26,9 +26,9 @@
     "path": "/api/v1/tools",
     "expect_status": 200,
     "expect": {
-      "result.tools.0.name": "analyze_test_run",
+      "result.tools.0.name": "analyze_host_snapshot",
       "result.tools.0.side_effect": "read_only",
-      "result.tools.7.risk_level": "medium"
+      "result.tools.9.risk_level": "medium"
     },
     "prefix": {
       "request_id": "req_"
@@ -73,6 +73,46 @@
     "prefix": {
       "request_id": "req_"
     }
+  },
+  {
+    "name": "publish_host_snapshot",
+    "method": "POST",
+    "path": "/api/v1/host/snapshot?host_session_id=eval-coretest",
+    "body": {
+      "kind": "trace",
+      "revision": "1",
+      "selection": { "frame_id": "0x123" },
+      "data": {
+        "total_frames": 120,
+        "duration_seconds": 2.5,
+        "error_frames": 3,
+        "top_frame_ids": [{ "frame_id": "0x123", "count": 40 }]
+      }
+    },
+    "host_privileged": true,
+    "expect_status": 200,
+    "expect": {
+      "result.kind": "trace",
+      "result.revision": "1"
+    }
+  },
+  {
+    "name": "copilot_requires_model",
+    "method": "POST",
+    "path": "/api/v1/copilot/query?host_session_id=eval-coretest",
+    "body": { "question": "解释当前项目" },
+    "expect_status": 502,
+    "expect": { "error.code": "model_unavailable" },
+    "contains": { "error.message": "model api is not configured" }
+  },
+  {
+    "name": "analyze_host_snapshot",
+    "method": "POST",
+    "path": "/api/v1/host/snapshot/analyze?host_session_id=eval-coretest",
+    "body": { "question": "分析当前 Trace" },
+    "expect_status": 200,
+    "expect": { "data.kind": "trace" },
+    "contains": { "answer": "120 帧" }
   },
   {
     "name": "register_host_asset",

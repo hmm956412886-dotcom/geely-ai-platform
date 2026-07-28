@@ -15,6 +15,7 @@ DEFAULT_MAX_HOST_SESSIONS = 256
 SESSION_ID_PATTERN = re.compile(r"^[A-Za-z0-9._-]{1,80}$")
 
 ALLOWED_FIELDS = {
+    "host_application",
     "project_id",
     "run_id",
     "source_asset_id",
@@ -25,15 +26,22 @@ ALLOWED_FIELDS = {
     "target_file",
     "current_view",
     "user_id",
+    "selection_kind",
+    "selection_label",
+    "snapshot_revision",
 }
 
 DEFAULT_CONTEXT = {
+    "host_application": "Demo Host",
     "project_id": "GEELY_TEST",
     "run_id": "RUN_CSV_001",
     "source_asset_id": "demo-current",
     "target_asset_id": "demo-target",
     "current_view": "test_result_detail",
     "user_id": None,
+    "selection_kind": None,
+    "selection_label": None,
+    "snapshot_revision": None,
 }
 
 _contexts: dict[str, dict[str, Any]] = {}

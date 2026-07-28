@@ -13,7 +13,7 @@ Host Connector 样例
 启动和检查脚本
 ```
 
-白话备注：这不是最终安装包，而是能让客户机器先跑起来的最小产品包。先证明接入方式和数据分析闭环，再决定是否做安装器、服务化或 Docker。
+当前 CoreTest 可通过 `integrations/coretest/install.ps1` 安装真实右侧 Dock；网站和其他桌面软件继续复用同一 WebView URL 和 REST 契约。
 
 ## 2. 配置环境变量
 
@@ -40,7 +40,7 @@ AI_MODEL_TIMEOUT_SECONDS=30
 
 - `.env` 已被 `.gitignore` 忽略。
 - 不要把真实 API Key 写入 `runtime.env.example`。
-- 不配置模型 API 时，系统仍可用本地确定性分析 fallback。
+- 不配置模型 API 时，系统仍可用本地确定性分析；普通对话和测试代码生成需要真实模型配置。
 - Gateway 只在当前机器使用时可以不设置 Token；绑定局域网地址或交付客户时必须同时设置访问 Token 和 Host Token，并通过 HTTPS / 反向代理暴露。
 - `AI_GATEWAY_ACCESS_TOKEN` 交给 Copilot WebView，只能调用普通 API；`AI_GATEWAY_HOST_TOKEN` 只保留在可信桌面宿主/Sidecar，用于注册服务器本地文件，不能进入 WebView URL。
 - 默认最多保留 256 个 Host Session、每个 Session 32 个 asset；可通过 `AI_GATEWAY_MAX_HOST_SESSIONS` 和 `AI_GATEWAY_MAX_ASSETS_PER_SESSION` 调整。宿主关闭窗口或任务时必须调用 `DELETE /api/v1/host/session`。
@@ -139,13 +139,15 @@ PASS Copilot shell JavaScript entry
 ```text
 POST /api/v1/host/assets?host_session_id=<宿主会话ID>
 POST /api/v1/host/context?host_session_id=<宿主会话ID>
+POST /api/v1/host/snapshot?host_session_id=<宿主会话ID>
+POST /api/v1/copilot/query?host_session_id=<宿主会话ID>
 POST /api/v1/analyze?host_session_id=<宿主会话ID>
 POST /api/v1/test-data/insights
 POST /api/v1/test-data/compare
 POST /api/v1/knowledge/query
 ```
 
-网站 iframe 和桌面 WebView 的完整 `postMessage`、`asset_id` 示例见 `docs/10-reusable-copilot-embed.md`。
+CoreTest 的完整 Qt 集成见 `integrations/coretest`；通用 Python REST 客户端见 `samples/host-integration`。
 
 客户软件暂时没有源码：
 
@@ -157,7 +159,8 @@ POST /api/v1/knowledge/query
 
 ## 6. 当前安全边界
 
-- 只读分析。
+- 汽车数据分析默认只读。
+- 生成代码只在用户明确点击保存后写入当前项目 `generated_tests`，不自动执行。
 - 不写客户数据库。
 - 不修改测试配置。
 - 不控制测试设备。

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AssistantRuntimeProvider,
   useExternalStoreRuntime,
@@ -17,17 +17,21 @@ import {
 import {
   ArrowSync20Regular,
   ChartMultiple20Regular,
-  ArrowSwap20Regular,
-  DataTrending20Regular,
+  ArrowDownload20Regular,
+  Attach20Regular,
+  Code20Regular,
+  Delete16Regular,
   ShieldCheckmark20Regular,
   Sparkle20Filled,
 } from "@fluentui/react-icons";
 import { GatewayRequestError, gatewayClient, hostSessionId } from "./gatewayClient";
 import type {
   AgentResponse,
+  CopilotArtifact,
+  CopilotAttachment,
+  CopilotResponse,
   HostContext,
   HostContextMessage,
-  InsightsResponse,
 } from "./types";
 
 interface ChatMessage {
@@ -52,7 +56,7 @@ const initialMessages: ChatMessage[] = [
     id: crypto.randomUUID(),
     role: "assistant",
     content:
-      "我是测试分析 Copilot。已连接 AI Gateway，可以分析当前测试、生成确定性数据洞察，或比较两次测试结果。",
+      "我是 CoreTest Copilot。你可以直接提问，或添加代码、配置、DBC、ASC 等文本文件，让我基于文件生成 pytest 测试代码。",
   },
 ];
 
@@ -91,34 +95,11 @@ function formatAgentResponse(payload: AgentResponse): string {
   return `${payload.answer}${source}${warning}\n\n\`request_id: ${payload.request_id}\``;
 }
 
-function formatInsights(payload: InsightsResponse): string {
-  const statuses = payload.result.status_counts
-    .map((item) => `- ${item.status}: **${item.count}**`)
-    .join("\n");
-  const reasons = payload.result.failure_reasons.length
-    ? payload.result.failure_reasons
-        .map((item) => `- ${item.reason}: **${item.count}**`)
-        .join("\n")
-    : "- 未发现失败原因";
-  return [
-    `### ${payload.result.run_id} 数据洞察`,
-    `分析引擎：\`${payload.result.engine}\``,
-    "#### 状态分布",
-    statuses,
-    "#### 失败原因",
-    reasons,
-    `\`request_id: ${payload.request_id}\``,
-  ].join("\n\n");
-}
-
-function formatComparison(payload: Record<string, unknown>, requestId: string): string {
-  return [
-    "### 测试结果对比",
-    "```json",
-    JSON.stringify(payload, null, 2),
-    "```",
-    `\`request_id: ${requestId}\``,
-  ].join("\n\n");
+function formatCopilotResponse(payload: CopilotResponse): string {
+  const generated = payload.artifacts
+    .map((artifact) => `\n\n### ${artifact.name}\n\n\`\`\`${artifact.language}\n${artifact.content}\`\`\``)
+    .join("");
+  return `${payload.answer}${generated}\n\n\`request_id: ${payload.request_id}\``;
 }
 
 export default function App() {
@@ -126,6 +107,9 @@ export default function App() {
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [isRunning, setIsRunning] = useState(false);
   const [contextLoading, setContextLoading] = useState(true);
+  const [attachments, setAttachments] = useState<CopilotAttachment[]>([]);
+  const [artifacts, setArtifacts] = useState<CopilotArtifact[]>([]);
+  const fileInput = useRef<HTMLInputElement>(null);
 
   const appendAssistant = useCallback((content: string) => {
     setMessages((current) => [...current, assistantMessage(content)]);
@@ -199,14 +183,53 @@ export default function App() {
     [run],
   );
 
+  const askCopilot = useCallback(
+    (question: string, task: "chat" | "generate_test" = "chat") =>
+      run(question, async () => {
+        const payload = await gatewayClient.queryCopilot(question, attachments, task);
+        if (payload.artifacts.length) setArtifacts(payload.artifacts);
+        return formatCopilotResponse(payload);
+      }),
+    [attachments, run],
+  );
+
+  const addFiles = useCallback(
+    async (files: FileList | null) => {
+      if (!files) return;
+      try {
+        const next = [...attachments];
+        for (const file of Array.from(files)) {
+          if (file.size > 256 * 1024) throw new Error(`${file.name} 超过 256 KiB`);
+          const content = await file.text();
+          const item = { name: file.name, content, size: file.size };
+          const index = next.findIndex((current) => current.name === file.name);
+          if (index >= 0) next[index] = item;
+          else next.push(item);
+        }
+        if (next.length > 5) throw new Error("最多添加 5 个文件");
+        setAttachments(next);
+      } catch (error) {
+        reportError(error);
+      } finally {
+        if (fileInput.current) fileInput.current.value = "";
+      }
+    },
+    [attachments, reportError],
+  );
+
+  const downloadArtifact = useCallback((artifact: CopilotArtifact) => {
+    const url = URL.createObjectURL(new Blob([artifact.content], { type: "text/x-python" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = artifact.name;
+    link.click();
+    URL.revokeObjectURL(url);
+  }, []);
+
   const suggestions = useMemo(
     () => [
-      {
-        title: "失败原因",
-        message: "分析当前测试失败原因，并给出下一步排查建议。",
-        isLoading: false,
-      },
-      { title: "风险摘要", message: "总结当前测试的主要风险和优先级。", isLoading: false },
+      { title: "解释当前文件", message: "解释已添加文件的主要逻辑和风险。", isLoading: false },
+      { title: "生成测试", message: "基于已添加文件生成覆盖关键分支的 pytest 测试。", isLoading: false },
     ],
     [],
   );
@@ -217,7 +240,7 @@ export default function App() {
     convertMessage,
     onNew: async (message) => {
       const question = messageText(message);
-      if (question) await analyze(question);
+      if (question) await askCopilot(question);
     },
     suggestions: suggestions.map((suggestion) => ({ prompt: suggestion.message })),
   });
@@ -231,8 +254,8 @@ export default function App() {
               <Sparkle20Filled />
             </span>
             <div className="brand-copy">
-              <h1>Geely AI Copilot</h1>
-              <p>测试分析助手</p>
+              <h1>CoreTest Copilot</h1>
+              <p>{context.host_application || "AI Gateway"}</p>
             </div>
           </div>
           <Tooltip content="刷新宿主上下文" relationship="label">
@@ -253,8 +276,8 @@ export default function App() {
               <strong>{context.project_id}</strong>
             </div>
             <div>
-              <span className="context-label">当前运行</span>
-              <strong>{context.run_id}</strong>
+              <span className="context-label">当前视图</span>
+              <strong>{context.selection_label || context.current_view || "未选择"}</strong>
             </div>
           </div>
           <Badge appearance="tint" color="success" icon={<ShieldCheckmark20Regular />}>
@@ -269,38 +292,62 @@ export default function App() {
             disabled={isRunning}
             onClick={() => void analyze("分析当前测试失败原因，并给出下一步排查建议。")}
           >
-            分析当前测试
+            分析当前界面
           </Button>
+          <input
+            ref={fileInput}
+            className="file-input"
+            type="file"
+            multiple
+            accept=".py,.json,.yaml,.yml,.xml,.txt,.dbc,.md,.toml,.ini,.cfg,.csv,.log,.asc"
+            onChange={(event) => void addFiles(event.target.files)}
+          />
           <Button
             appearance="secondary"
-            icon={<DataTrending20Regular />}
-            disabled={isRunning || (!context.source_asset_id && !context.source_file)}
-            onClick={() =>
-              void run("生成当前测试的数据洞察", async () =>
-                formatInsights(await gatewayClient.insights(context)),
-              )
-            }
+            icon={<Attach20Regular />}
+            disabled={isRunning}
+            onClick={() => fileInput.current?.click()}
           >
-            数据洞察
+            添加文件
           </Button>
           <Button
-            appearance="secondary"
-            icon={<ArrowSwap20Regular />}
-            disabled={
-              isRunning ||
-              (!context.source_asset_id && !context.source_file) ||
-              (!context.target_asset_id && !context.target_file)
-            }
-            onClick={() =>
-              void run("比较当前测试与目标测试", async () => {
-                const payload = await gatewayClient.compare(context);
-                return formatComparison(payload.result, payload.request_id);
-              })
-            }
+            appearance="primary"
+            icon={<Code20Regular />}
+            disabled={isRunning || attachments.length === 0}
+            onClick={() => void askCopilot("基于已添加文件生成可运行的 pytest 测试代码。", "generate_test")}
           >
-            对比结果
+            生成测试
           </Button>
         </div>
+
+        {(attachments.length > 0 || artifacts.length > 0) && (
+          <section className="work-files" aria-label="工作文件">
+            {attachments.map((attachment) => (
+              <div className="file-pill" key={attachment.name}>
+                <span title={attachment.name}>{attachment.name}</span>
+                <Button
+                  appearance="subtle"
+                  size="small"
+                  icon={<Delete16Regular />}
+                  aria-label={`移除 ${attachment.name}`}
+                  onClick={() =>
+                    setAttachments((current) => current.filter((item) => item.name !== attachment.name))
+                  }
+                />
+              </div>
+            ))}
+            {artifacts.map((artifact) => (
+              <Button
+                key={artifact.name}
+                appearance="subtle"
+                icon={<ArrowDownload20Regular />}
+                onClick={() => downloadArtifact(artifact)}
+              >
+                保存 {artifact.name}
+              </Button>
+            ))}
+          </section>
+        )}
 
         <section className="chat-region" aria-label="Copilot 对话">
           <AssistantRuntimeProvider runtime={runtime}>
@@ -319,7 +366,7 @@ export default function App() {
               strings={{
                 thread: { scrollToBottom: { tooltip: "滚动到底部" } },
                 composer: {
-                  input: { placeholder: "询问当前测试数据..." },
+                  input: { placeholder: attachments.length ? "询问已添加文件..." : "询问 CoreTest 或当前项目..." },
                   send: { tooltip: "发送" },
                   cancel: { tooltip: "停止" },
                 },

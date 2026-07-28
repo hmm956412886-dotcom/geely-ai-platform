@@ -13,14 +13,18 @@ from uuid import uuid4
 
 @dataclass(frozen=True)
 class HostContext:
-    project_id: str
-    run_id: str
+    project_id: str = ""
+    run_id: str = ""
+    host_application: str = "Demo Host"
     source_asset_id: str | None = None
     target_asset_id: str | None = None
     source_file: str | None = None
     target_file: str | None = None
     current_view: str = "test_result_detail"
     user_id: str | None = None
+    selection_kind: str | None = None
+    selection_label: str | None = None
+    snapshot_revision: str | None = None
 
     def to_payload(self) -> dict[str, Any]:
         return {key: value for key, value in asdict(self).items() if value is not None}
@@ -70,6 +74,24 @@ class GeelyAIGatewayClient:
     def update_host_context(self, context: HostContext | dict[str, Any]) -> dict[str, Any]:
         payload = context.to_payload() if isinstance(context, HostContext) else context
         return self._request("POST", self._session_path("/api/v1/host/context"), payload)
+
+    def get_host_snapshot(self) -> dict[str, Any]:
+        return self._request("GET", self._session_path("/api/v1/host/snapshot"))
+
+    def publish_snapshot(self, snapshot: dict[str, Any]) -> dict[str, Any]:
+        return self._request(
+            "POST",
+            self._session_path("/api/v1/host/snapshot"),
+            snapshot,
+            privileged=True,
+        )
+
+    def analyze_snapshot(self, question: str = "分析当前界面") -> dict[str, Any]:
+        return self._request(
+            "POST",
+            self._session_path("/api/v1/host/snapshot/analyze"),
+            {"question": question},
+        )
 
     def register_asset(self, file_path: str, *, asset_id: str | None = None) -> dict[str, Any]:
         payload = {"file_path": file_path}
@@ -133,6 +155,19 @@ class GeelyAIGatewayClient:
     def query_agent(self, *, question: str) -> dict[str, Any]:
         return self._request(
             "POST", self._session_path("/api/v1/agent/query"), {"question": question}
+        )
+
+    def query_copilot(
+        self,
+        *,
+        question: str,
+        attachments: list[dict[str, str]] | None = None,
+        task: str = "chat",
+    ) -> dict[str, Any]:
+        return self._request(
+            "POST",
+            self._session_path("/api/v1/copilot/query"),
+            {"question": question, "task": task, "attachments": attachments or []},
         )
 
     def close_session(self) -> dict[str, Any]:

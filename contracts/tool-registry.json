@@ -3,6 +3,55 @@
   "base_path": "/api/v1",
   "tools": [
     {
+      "name": "analyze_host_snapshot",
+      "description": "Analyze the current CoreTest host snapshot using deterministic read-only logic.",
+      "method": "POST",
+      "path": "/api/v1/host/snapshot/analyze",
+      "input_schema": {
+        "type": "object",
+        "properties": { "question": { "type": "string" } },
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "required": ["request_id", "answer", "data"],
+        "properties": {
+          "request_id": { "type": "string" },
+          "answer": { "type": "string" },
+          "data": { "type": "object" },
+          "citations": { "type": "array", "items": { "type": "object" } },
+          "warnings": { "type": "array", "items": { "type": "string" } }
+        }
+      },
+      "side_effect": "read_only",
+      "requires_confirmation": false,
+      "risk_level": "low",
+      "audit_level": "standard"
+    },
+    {
+      "name": "get_host_snapshot",
+      "description": "Return the current bounded snapshot published by the desktop host.",
+      "method": "GET",
+      "path": "/api/v1/host/snapshot",
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "required": ["request_id", "result"],
+        "properties": {
+          "request_id": { "type": "string" },
+          "result": { "type": "object" }
+        }
+      },
+      "side_effect": "read_only",
+      "requires_confirmation": false,
+      "risk_level": "low",
+      "audit_level": "standard"
+    },
+    {
       "name": "analyze_test_run",
       "description": "Analyze a test run and return deterministic data plus optional knowledge citations.",
       "method": "POST",
@@ -200,6 +249,7 @@
       "input_schema": {
         "type": "object",
         "properties": {
+          "host_application": { "type": "string" },
           "project_id": { "type": "string" },
           "run_id": { "type": "string" },
           "source_asset_id": { "type": "string" },
@@ -209,7 +259,10 @@
           "target_file": { "type": "string" },
           "baseline_file": { "type": "string" },
           "current_view": { "type": "string" },
-          "user_id": { "type": "string" }
+          "user_id": { "type": "string" },
+          "selection_kind": { "type": "string" },
+          "selection_label": { "type": "string" },
+          "snapshot_revision": { "type": "string" }
         },
         "additionalProperties": false
       },

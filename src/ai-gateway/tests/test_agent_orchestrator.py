@@ -101,10 +101,50 @@ class AgentOrchestratorTest(unittest.TestCase):
         self.assertEqual(payload["tool_calls"][0]["name"], "compare_test_runs")
         self.assertIn("失败用例增加 1 个", payload["answer"])
 
+    def test_deterministic_agent_prefers_current_host_snapshot(self) -> None:
+        session = "agent-coretest"
+        handle_request(
+            "POST",
+            f"/api/v1/host/context?host_session_id={session}",
+            json.dumps(
+                {
+                    "host_application": "HK CoreTest",
+                    "project_id": "vehicle-a",
+                    "run_id": "live",
+                    "current_view": "TRACE / 实时CAN TRACE",
+                    "snapshot_revision": "12",
+                },
+                ensure_ascii=False,
+            ),
+        )
+        handle_request(
+            "POST",
+            f"/api/v1/host/snapshot?host_session_id={session}",
+            json.dumps(
+                {
+                    "kind": "trace",
+                    "revision": "12",
+                    "data": {"total_frames": 10, "duration_seconds": 1, "error_frames": 0},
+                }
+            ),
+        )
+
+        response = handle_request(
+            "POST",
+            f"/api/v1/agent/query?host_session_id={session}",
+            json.dumps({"question": "分析当前界面"}, ensure_ascii=False),
+        )
+
+        payload = json.loads(response.body)
+        self.assertEqual(response.status, 200)
+        self.assertEqual(payload["tool_calls"][0]["name"], "analyze_host_snapshot")
+        self.assertIn("10 帧", payload["answer"])
+
     def test_openapi_adapter_only_exposes_read_only_tools(self) -> None:
         spec = build_openapi_spec(list_tools(), self.gateway_url)
 
         self.assertIn("/api/v1/analyze", spec["paths"])
+        self.assertIn("/api/v1/host/snapshot/analyze", spec["paths"])
         self.assertIn("get", spec["paths"]["/api/v1/host/context"])
         self.assertNotIn("post", spec["paths"]["/api/v1/host/context"])
 

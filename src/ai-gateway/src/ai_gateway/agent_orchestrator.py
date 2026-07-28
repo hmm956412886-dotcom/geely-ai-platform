@@ -89,7 +89,7 @@ def _run_deterministic(
     base_url: str,
     host_session_id: str | None,
 ) -> dict[str, Any]:
-    tool_name = _select_tool(question)
+    tool_name = _select_tool(question, context)
     tool = next(
         (
             item
@@ -208,12 +208,14 @@ async def _run_semantic_kernel(
     )
 
 
-def _select_tool(question: str) -> str:
+def _select_tool(question: str, context: dict[str, Any] | None = None) -> str:
     normalized = question.lower()
     if any(word in normalized for word in ("比较", "对比", "compare")):
         return "compare_test_runs"
     if any(word in normalized for word in ("规范", "标准", "知识", "文档", "飞书", "knowledge")):
         return "query_knowledge"
+    if context and context.get("snapshot_revision"):
+        return "analyze_host_snapshot"
     if any(word in normalized for word in ("洞察", "分布", "统计", "insight")):
         return "analyze_test_data_insights"
     return "analyze_test_run"
@@ -224,6 +226,8 @@ def _tool_arguments(name: str, question: str, context: dict[str, Any]) -> dict[s
     target = _first_present(context, "target_asset_id", "target_file")
     if name == "query_knowledge":
         return {"query": question}
+    if name == "analyze_host_snapshot":
+        return {"question": question}
     if name == "compare_test_runs":
         arguments: dict[str, Any] = {}
         _assign_source(arguments, "baseline", source)
@@ -256,7 +260,7 @@ def _assign_source(
 
 
 def _deterministic_answer(name: str, payload: dict[str, Any]) -> str:
-    if name in {"analyze_test_run", "query_knowledge"}:
+    if name in {"analyze_host_snapshot", "analyze_test_run", "query_knowledge"}:
         return str(payload.get("answer") or "Gateway 已完成查询。")
     result = payload.get("result") or {}
     if name == "compare_test_runs":

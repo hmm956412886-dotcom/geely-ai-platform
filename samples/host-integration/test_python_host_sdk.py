@@ -31,6 +31,7 @@ class PythonHostSdkTests(unittest.TestCase):
             {
                 "project_id": "P",
                 "run_id": "R",
+                "host_application": "Demo Host",
                 "source_asset_id": "current-run",
                 "current_view": "test_result_detail",
             },
@@ -46,6 +47,10 @@ class PythonHostSdkTests(unittest.TestCase):
         client.analyze(source_asset_id="current-run", question="why")
         client.insights(source_asset_id="current-run")
         client.compare(baseline_asset_id="baseline", target_asset_id="target")
+        client.publish_snapshot({"kind": "project", "revision": "1", "data": {}})
+        client.get_host_snapshot()
+        client.analyze_snapshot()
+        client.query_copilot(question="hello")
         client.close_session()
 
         self.assertEqual(
@@ -57,8 +62,12 @@ class PythonHostSdkTests(unittest.TestCase):
         self.assertEqual(client.calls[2][1], "/api/v1/analyze?host_session_id=test-session")
         self.assertEqual(client.calls[3][1], "/api/v1/test-data/insights?host_session_id=test-session")
         self.assertEqual(client.calls[4][1], "/api/v1/test-data/compare?host_session_id=test-session")
-        self.assertEqual(client.calls[5][0], "DELETE")
-        self.assertEqual(client.calls[5][1], "/api/v1/host/session?host_session_id=test-session")
+        self.assertEqual(client.calls[5][1], "/api/v1/host/snapshot?host_session_id=test-session")
+        self.assertEqual(client.calls[6][0], "GET")
+        self.assertEqual(client.calls[7][1], "/api/v1/host/snapshot/analyze?host_session_id=test-session")
+        self.assertEqual(client.calls[8][1], "/api/v1/copilot/query?host_session_id=test-session")
+        self.assertEqual(client.calls[9][0], "DELETE")
+        self.assertEqual(client.calls[9][1], "/api/v1/host/session?host_session_id=test-session")
 
     def test_client_places_access_token_in_copilot_fragment(self) -> None:
         client = GeelyAIGatewayClient(

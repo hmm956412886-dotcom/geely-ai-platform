@@ -12,6 +12,48 @@ _BOOLEAN = {"type": "boolean"}
 
 _TOOLS: list[dict[str, Any]] = [
     {
+        "name": "analyze_host_snapshot",
+        "description": "Analyze the current CoreTest host snapshot using deterministic read-only logic.",
+        "method": "POST",
+        "path": "/api/v1/host/snapshot/analyze",
+        "input_schema": {
+            "type": "object",
+            "properties": {"question": _STRING},
+            "additionalProperties": False,
+        },
+        "output_schema": {
+            "type": "object",
+            "required": ["request_id", "answer", "data"],
+            "properties": {
+                "request_id": _STRING,
+                "answer": _STRING,
+                "data": {"type": "object"},
+                "citations": {"type": "array", "items": {"type": "object"}},
+                "warnings": {"type": "array", "items": _STRING},
+            },
+        },
+        "side_effect": "read_only",
+        "requires_confirmation": False,
+        "risk_level": "low",
+        "audit_level": "standard",
+    },
+    {
+        "name": "get_host_snapshot",
+        "description": "Return the current bounded snapshot published by the desktop host.",
+        "method": "GET",
+        "path": "/api/v1/host/snapshot",
+        "input_schema": {"type": "object", "properties": {}, "additionalProperties": False},
+        "output_schema": {
+            "type": "object",
+            "required": ["request_id", "result"],
+            "properties": {"request_id": _STRING, "result": {"type": "object"}},
+        },
+        "side_effect": "read_only",
+        "requires_confirmation": False,
+        "risk_level": "low",
+        "audit_level": "standard",
+    },
+    {
         "name": "analyze_test_run",
         "description": "Analyze a test run and return deterministic data plus optional knowledge citations.",
         "method": "POST",
@@ -181,6 +223,7 @@ _TOOLS: list[dict[str, Any]] = [
         "input_schema": {
             "type": "object",
             "properties": {
+                "host_application": _STRING,
                 "project_id": _STRING,
                 "run_id": _STRING,
                 "source_asset_id": _STRING,
@@ -191,6 +234,9 @@ _TOOLS: list[dict[str, Any]] = [
                 "baseline_file": _STRING,
                 "current_view": _STRING,
                 "user_id": _STRING,
+                "selection_kind": _STRING,
+                "selection_label": _STRING,
+                "snapshot_revision": _STRING,
             },
             "additionalProperties": False,
         },

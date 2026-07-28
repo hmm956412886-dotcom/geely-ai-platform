@@ -9,6 +9,7 @@ from ai_gateway.app import handle_request
 from ai_gateway.audit_log import clear_audit_events
 from ai_gateway.host_assets import reset_host_assets
 from ai_gateway.host_context import reset_host_context
+from ai_gateway.host_snapshot import reset_host_snapshots
 
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -18,6 +19,7 @@ class AppTests(unittest.TestCase):
     def tearDown(self) -> None:
         reset_host_context()
         reset_host_assets()
+        reset_host_snapshots()
         clear_audit_events()
 
     def test_health(self) -> None:
@@ -218,6 +220,83 @@ class AppTests(unittest.TestCase):
         self.assertEqual(update_payload["result"]["run_id"], "RUN_HOST_001")
         self.assertEqual(read_payload["result"]["source_file"], str(FIXTURES / "test-run-cases.csv"))
 
+    def test_host_snapshot_roundtrip_and_trace_analysis(self) -> None:
+        session = "coretest-trace"
+        snapshot = {
+            "kind": "trace",
+            "revision": "7",
+            "selection": {"frame_id": "0x123"},
+            "data": {
+                "total_frames": 120,
+                "duration_seconds": 2.5,
+                "error_frames": 3,
+                "top_frame_ids": [{"frame_id": "0x123", "count": 40}],
+            },
+        }
+        published = handle_request(
+            "POST",
+            f"/api/v1/host/snapshot?host_session_id={session}",
+            json.dumps(snapshot),
+        )
+        read = handle_request("GET", f"/api/v1/host/snapshot?host_session_id={session}")
+        analysis = handle_request(
+            "POST",
+            f"/api/v1/host/snapshot/analyze?host_session_id={session}",
+            json.dumps({"question": "分析当前 Trace"}, ensure_ascii=False),
+        )
+
+        self.assertEqual(published.status, 200)
+        self.assertEqual(json.loads(read.body)["result"]["revision"], "7")
+        payload = json.loads(analysis.body)
+        self.assertEqual(analysis.status, 200)
+        self.assertIn("120 帧", payload["answer"])
+        self.assertIn("0x123", payload["answer"])
+        self.assertEqual(payload["data"]["kind"], "trace")
+
+    def test_host_snapshot_is_session_isolated_and_size_limited(self) -> None:
+        handle_request(
+            "POST",
+            "/api/v1/host/snapshot?host_session_id=snapshot-a",
+            json.dumps({"kind": "project", "revision": "1", "data": {"name": "A"}}),
+        )
+        other = handle_request("GET", "/api/v1/host/snapshot?host_session_id=snapshot-b")
+        with patch.dict("os.environ", {"AI_GATEWAY_MAX_HOST_SNAPSHOT_BYTES": "80"}):
+            oversized = handle_request(
+                "POST",
+                "/api/v1/host/snapshot?host_session_id=snapshot-a",
+                json.dumps(
+                    {"kind": "project", "revision": "2", "data": {"text": "x" * 200}}
+                ),
+            )
+
+        self.assertIsNone(json.loads(other.body)["result"]["kind"])
+        self.assertEqual(oversized.status, 400)
+        self.assertIn("size limit", oversized.body)
+
+    def test_copilot_token_cannot_publish_host_snapshot(self) -> None:
+        with patch.dict(
+            "os.environ",
+            {
+                "AI_GATEWAY_ACCESS_TOKEN": "copilot-secret",
+                "AI_GATEWAY_HOST_TOKEN": "host-secret",
+            },
+        ):
+            forbidden = handle_request(
+                "POST",
+                "/api/v1/host/snapshot?host_session_id=secure-snapshot",
+                json.dumps({"kind": "project", "revision": "1", "data": {}}),
+                headers={"Authorization": "Bearer copilot-secret"},
+            )
+            allowed = handle_request(
+                "POST",
+                "/api/v1/host/snapshot?host_session_id=secure-snapshot",
+                json.dumps({"kind": "project", "revision": "1", "data": {}}),
+                headers={"Authorization": "Bearer host-secret"},
+            )
+
+        self.assertEqual(forbidden.status, 403)
+        self.assertEqual(allowed.status, 200)
+
     def test_host_context_is_isolated_by_session(self) -> None:
         handle_request(
             "POST",
@@ -334,6 +413,11 @@ class AppTests(unittest.TestCase):
                 f"/api/v1/host/assets?host_session_id={session}",
                 json.dumps({"asset_id": "current", "file_path": source_file}),
             )
+            handle_request(
+                "POST",
+                f"/api/v1/host/snapshot?host_session_id={session}",
+                json.dumps({"kind": "project", "revision": "1", "data": {}}),
+            )
 
         released = handle_request(
             "DELETE", "/api/v1/host/session?host_session_id=release-a"
@@ -353,6 +437,7 @@ class AppTests(unittest.TestCase):
         self.assertEqual(released.status, 200)
         self.assertTrue(payload["released_context"])
         self.assertEqual(payload["released_assets"], 1)
+        self.assertTrue(payload["released_snapshot"])
         self.assertEqual(old_asset.status, 400)
         self.assertEqual(other_asset.status, 200)
 
@@ -441,6 +526,7 @@ class AppTests(unittest.TestCase):
         )
         self.assertEqual(payload["api"]["tools"], "/api/v1/tools")
         self.assertEqual(payload["api"]["host_assets"], "/api/v1/host/assets")
+        self.assertEqual(payload["api"]["host_snapshot"], "/api/v1/host/snapshot")
         self.assertEqual(payload["api"]["authentication"]["type"], "http-bearer")
         self.assertEqual(
             payload["api"]["authentication"]["privileged_host_env"],
@@ -455,7 +541,10 @@ class AppTests(unittest.TestCase):
         self.assertIn("update_host_context", operation_ids)
         self.assertIn("list_audit_events", operation_ids)
         self.assertIn("query_agent", operation_ids)
+        self.assertIn("query_copilot", operation_ids)
         self.assertIn("release_host_session", operation_ids)
+        self.assertIn("analyze_host_snapshot", operation_ids)
+        self.assertIn("get_host_snapshot", operation_ids)
 
     def test_openapi_describes_bearer_auth_and_public_pages(self) -> None:
         payload = json.loads(handle_request("GET", "/openapi.json").body)
@@ -475,6 +564,11 @@ class AppTests(unittest.TestCase):
             payload["paths"]["/api/v1/host/session"]["delete"]["x-required-token"],
             "host",
         )
+        self.assertEqual(
+            payload["paths"]["/api/v1/host/snapshot"]["post"]["x-required-token"],
+            "host",
+        )
+        self.assertIn("/api/v1/copilot/query", payload["paths"])
 
     def test_tools_endpoint_describes_agent_contracts(self) -> None:
         response = handle_request("GET", "/api/v1/tools")
@@ -486,6 +580,8 @@ class AppTests(unittest.TestCase):
         self.assertIn("analyze_test_run", by_name)
         self.assertIn("compare_test_runs", by_name)
         self.assertIn("analyze_test_data_insights", by_name)
+        self.assertIn("analyze_host_snapshot", by_name)
+        self.assertIn("get_host_snapshot", by_name)
         self.assertIn("input_schema", by_name["analyze_test_run"])
         self.assertIn("output_schema", by_name["analyze_test_run"])
         self.assertIn(
@@ -494,6 +590,26 @@ class AppTests(unittest.TestCase):
         self.assertEqual(by_name["update_host_context"]["risk_level"], "medium")
         self.assertEqual(by_name["list_audit_events"]["audit_level"], "debug")
         self.assertFalse(by_name["compare_test_runs"]["requires_confirmation"])
+
+    def test_static_manifest_and_tool_registry_match_runtime_contracts(self) -> None:
+        repo_root = Path(__file__).resolve().parents[3]
+        runtime_manifest = json.loads(handle_request("GET", "/plugin-manifest.json").body)
+        static_manifest = json.loads(
+            (repo_root / "contracts" / "host-plugin.manifest.json").read_text(encoding="utf-8")
+        )
+        runtime_tools = json.loads(handle_request("GET", "/api/v1/tools").body)["result"]
+        static_tools = json.loads(
+            (repo_root / "contracts" / "tool-registry.json").read_text(encoding="utf-8")
+        )
+
+        static_operations = static_manifest["api"].pop("operations")
+        runtime_operations = runtime_manifest["api"].pop("operations")
+        self.assertEqual(static_manifest, runtime_manifest)
+        self.assertEqual(
+            {item["operation_id"]: item for item in static_operations},
+            {item["operation_id"]: item for item in runtime_operations},
+        )
+        self.assertEqual(static_tools["tools"], runtime_tools["tools"])
 
     def test_test_data_insights_reads_source_file(self) -> None:
         response = handle_request(

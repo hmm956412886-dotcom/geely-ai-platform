@@ -12,6 +12,7 @@ from uuid import uuid4
 from .audit_log import append_audit_event, list_audit_events
 from .access_control import access_control_enabled, is_authorized, is_host_authorized
 from .agent_orchestrator import run_agent_query
+from .copilot_service import run_copilot
 from .host_assets import register_host_asset, release_host_assets, resolve_host_asset
 from .host_context import (
     get_host_context,
@@ -19,6 +20,12 @@ from .host_context import (
     peek_host_context,
     release_host_context,
     update_host_context,
+)
+from .host_snapshot import (
+    analyze_host_snapshot,
+    get_host_snapshot,
+    release_host_snapshot,
+    update_host_snapshot,
 )
 from .knowledge_provider import query_knowledge as query_knowledge_provider
 from .model_client import chat_completion, load_model_config
@@ -66,13 +73,14 @@ def handle_request(
             (method, route_path)
             in {
                 ("POST", "/api/v1/host/assets"),
+                ("POST", "/api/v1/host/snapshot"),
                 ("DELETE", "/api/v1/host/session"),
             }
             and not is_host_authorized(headers)
         ):
             response = error_response(
                 "host_forbidden",
-                "A valid AI Gateway host token is required to register local files",
+                "A valid AI Gateway host token is required for trusted host operations",
                 status=403,
             )
         else:
@@ -126,10 +134,22 @@ def _handle_request(
                 "result": register_host_asset(_read_json(body), host_session_id),
             }
         )
+    if method == "GET" and path == "/api/v1/host/snapshot":
+        return json_response(
+            {"request_id": _request_id(), "result": get_host_snapshot(host_session_id)}
+        )
+    if method == "POST" and path == "/api/v1/host/snapshot":
+        return json_response(
+            {
+                "request_id": _request_id(),
+                "result": update_host_snapshot(_read_json(body), host_session_id),
+            }
+        )
     if method == "DELETE" and path == "/api/v1/host/session":
         session_id = normalize_host_session_id(host_session_id)
         released_assets = release_host_assets(session_id)
         released_context = release_host_context(session_id)
+        released_snapshot = release_host_snapshot(session_id)
         return json_response(
             {
                 "request_id": _request_id(),
@@ -137,6 +157,7 @@ def _handle_request(
                     "host_session_id": session_id,
                     "released_context": released_context,
                     "released_assets": released_assets,
+                    "released_snapshot": released_snapshot,
                 },
             }
         )
@@ -162,6 +183,25 @@ def _handle_request(
             )
         except RuntimeError as exc:
             return error_response("agent_unavailable", str(exc), status=502)
+    if method == "POST" and path == "/api/v1/copilot/query":
+        try:
+            result = run_copilot(_read_json(body))
+            return json_response({"request_id": _request_id(), **result})
+        except RuntimeError as exc:
+            return error_response("model_unavailable", str(exc), status=502)
+    if method == "POST" and path == "/api/v1/host/snapshot/analyze":
+        question = str(_read_json(body).get("question") or "分析当前界面")
+        result = analyze_host_snapshot(question, host_session_id)
+        return json_response(
+            {
+                "request_id": _request_id(),
+                "answer": result["answer"],
+                "data": result["snapshot"],
+                "citations": result["citations"],
+                "warnings": result["warnings"],
+                "question": result["question"],
+            }
+        )
     if method == "POST" and path == "/api/v1/analyze":
         return json_response(_analyze(_read_json(body), host_session_id))
     return error_response("not_found", f"No route for {method} {path}", status=404)
@@ -870,9 +910,22 @@ def _openapi() -> dict[str, Any]:
                     "x-required-token": "host",
                 }
             },
+            "/api/v1/host/snapshot": {
+                "get": {"summary": "Return the current bounded host snapshot"},
+                "post": {
+                    "summary": "Publish a bounded snapshot from a trusted desktop host",
+                    "x-required-token": "host",
+                },
+            },
+            "/api/v1/host/snapshot/analyze": {
+                "post": {"summary": "Analyze the current host snapshot without side effects"}
+            },
+            "/api/v1/copilot/query": {
+                "post": {"summary": "Chat or generate pytest code from bounded text attachments"}
+            },
             "/api/v1/host/session": {
                 "delete": {
-                    "summary": "Release host context and local asset mappings",
+                    "summary": "Release host context, snapshot, and local asset mappings",
                     "x-required-token": "host",
                 }
             },
@@ -915,6 +968,7 @@ def _plugin_manifest() -> dict[str, Any]:
             },
             "tools": "/api/v1/tools",
             "host_assets": "/api/v1/host/assets",
+            "host_snapshot": "/api/v1/host/snapshot",
             "operations": [
                 {
                     "operation_id": "query_agent",
@@ -924,9 +978,23 @@ def _plugin_manifest() -> dict[str, Any]:
                     "requires_confirmation": False,
                 },
                 {
+                    "operation_id": "query_copilot",
+                    "method": "POST",
+                    "path": "/api/v1/copilot/query",
+                    "side_effect": "read_only",
+                    "requires_confirmation": False,
+                },
+                {
                     "operation_id": "release_host_session",
                     "method": "DELETE",
                     "path": "/api/v1/host/session",
+                    "side_effect": "local_state",
+                    "requires_confirmation": False,
+                },
+                {
+                    "operation_id": "publish_host_snapshot",
+                    "method": "POST",
+                    "path": "/api/v1/host/snapshot",
                     "side_effect": "local_state",
                     "requires_confirmation": False,
                 },

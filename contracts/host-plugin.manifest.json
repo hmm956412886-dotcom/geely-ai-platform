@@ -29,12 +29,41 @@
     },
     "tools": "/api/v1/tools",
     "host_assets": "/api/v1/host/assets",
+    "host_snapshot": "/api/v1/host/snapshot",
     "operations": [
       {
         "operation_id": "query_agent",
         "method": "POST",
         "path": "/api/v1/agent/query",
         "side_effect": "read_only",
+        "requires_confirmation": false
+      },
+      {
+        "operation_id": "query_copilot",
+        "method": "POST",
+        "path": "/api/v1/copilot/query",
+        "side_effect": "read_only",
+        "requires_confirmation": false
+      },
+      {
+        "operation_id": "analyze_host_snapshot",
+        "method": "POST",
+        "path": "/api/v1/host/snapshot/analyze",
+        "side_effect": "read_only",
+        "requires_confirmation": false
+      },
+      {
+        "operation_id": "get_host_snapshot",
+        "method": "GET",
+        "path": "/api/v1/host/snapshot",
+        "side_effect": "read_only",
+        "requires_confirmation": false
+      },
+      {
+        "operation_id": "publish_host_snapshot",
+        "method": "POST",
+        "path": "/api/v1/host/snapshot",
+        "side_effect": "local_state",
         "requires_confirmation": false
       },
       {

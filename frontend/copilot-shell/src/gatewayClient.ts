@@ -1,5 +1,7 @@
 import type {
   AgentResponse,
+  CopilotAttachment,
+  CopilotResponse,
   CompareResponse,
   GatewayErrorBody,
   HostContext,
@@ -64,6 +66,18 @@ export const gatewayClient = {
 
   queryAgent(question: string): Promise<AgentResponse> {
     return postJson<AgentResponse>(sessionPath("/api/v1/agent/query"), { question });
+  },
+
+  queryCopilot(
+    question: string,
+    attachments: CopilotAttachment[],
+    task: "chat" | "generate_test" = "chat",
+  ): Promise<CopilotResponse> {
+    return postJson<CopilotResponse>(sessionPath("/api/v1/copilot/query"), {
+      question,
+      task,
+      attachments: attachments.map(({ name, content }) => ({ name, content })),
+    });
   },
 
   insights(context: HostContext): Promise<InsightsResponse> {

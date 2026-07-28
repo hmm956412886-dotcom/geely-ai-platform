@@ -78,9 +78,28 @@
         "x-required-token": "host"
       }
     },
+    "/api/v1/host/snapshot": {
+      "get": {
+        "summary": "Return the current bounded host snapshot"
+      },
+      "post": {
+        "summary": "Publish a bounded snapshot from a trusted desktop host",
+        "x-required-token": "host"
+      }
+    },
+    "/api/v1/host/snapshot/analyze": {
+      "post": {
+        "summary": "Analyze the current host snapshot without side effects"
+      }
+    },
+    "/api/v1/copilot/query": {
+      "post": {
+        "summary": "Chat or generate pytest code from bounded text attachments"
+      }
+    },
     "/api/v1/host/session": {
       "delete": {
-        "summary": "Release host context and local asset mappings",
+        "summary": "Release host context, snapshot, and local asset mappings",
         "x-required-token": "host"
       }
     },

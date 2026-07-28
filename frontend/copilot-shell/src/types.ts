@@ -1,5 +1,6 @@
 export interface HostContext {
   host_session_id: string;
+  host_application?: string;
   project_id: string;
   run_id: string;
   source_asset_id?: string;
@@ -9,6 +10,9 @@ export interface HostContext {
   target_file?: string;
   current_view: string;
   user_id: string;
+  selection_kind?: string;
+  selection_label?: string;
+  snapshot_revision?: string;
 }
 
 export interface HostContextMessage {
@@ -48,6 +52,22 @@ export interface AgentResponse extends AnalysisResponse {
     mode: string;
     model?: string;
   };
+}
+
+export interface CopilotAttachment {
+  name: string;
+  content: string;
+  size: number;
+}
+
+export interface CopilotArtifact {
+  name: string;
+  language: string;
+  content: string;
+}
+
+export interface CopilotResponse extends AnalysisResponse {
+  artifacts: CopilotArtifact[];
 }
 
 export interface InsightsResponse {
