@@ -16,7 +16,11 @@ def main() -> None:
     source_file = args.source_file or str(repo_root / "src/ai-gateway/tests/fixtures/test-run-cases.csv")
     target_file = args.target_file or str(repo_root / "src/ai-gateway/tests/fixtures/test-run-cases-target.csv")
 
-    client = GeelyAIGatewayClient(args.gateway_url)
+    client = GeelyAIGatewayClient(
+        args.gateway_url,
+        access_token=args.access_token or None,
+        host_token=args.host_token or None,
+    )
     source_asset_id = client.register_asset(source_file)["result"]["asset_id"]
     target_asset_id = client.register_asset(target_file)["result"]["asset_id"]
     context = HostContext(
@@ -45,6 +49,8 @@ def main() -> None:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Simulate a host software AI plugin flow.")
     parser.add_argument("--gateway-url", default="http://127.0.0.1:8765")
+    parser.add_argument("--access-token", default="")
+    parser.add_argument("--host-token", default="")
     parser.add_argument("--project-id", default="GEELY_TEST")
     parser.add_argument("--run-id", default="RUN_HOST_DEMO")
     parser.add_argument("--source-file", default="")

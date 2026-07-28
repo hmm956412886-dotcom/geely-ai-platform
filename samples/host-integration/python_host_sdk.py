@@ -42,13 +42,18 @@ class GeelyAIGatewayClient:
         base_url: str = "http://127.0.0.1:8765",
         *,
         host_session_id: str | None = None,
+        access_token: str | None = None,
+        host_token: str | None = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.host_session_id = host_session_id or f"host-{uuid4().hex}"
+        self.access_token = access_token
+        self.host_token = host_token
 
     @property
     def copilot_url(self) -> str:
-        return f"{self.base_url}/copilot-shell/?host_session_id={quote(self.host_session_id)}"
+        url = f"{self.base_url}/copilot-shell/?host_session_id={quote(self.host_session_id)}"
+        return f"{url}#access_token={quote(self.access_token)}" if self.access_token else url
 
     def health(self) -> dict[str, Any]:
         return self._request("GET", "/health")
@@ -70,7 +75,9 @@ class GeelyAIGatewayClient:
         payload = {"file_path": file_path}
         if asset_id:
             payload["asset_id"] = asset_id
-        return self._request("POST", self._session_path("/api/v1/host/assets"), payload)
+        return self._request(
+            "POST", self._session_path("/api/v1/host/assets"), payload, privileged=True
+        )
 
     def analyze(
         self,
@@ -123,12 +130,32 @@ class GeelyAIGatewayClient:
             "POST", self._session_path("/api/v1/knowledge/query"), {"query": query}
         )
 
+    def query_agent(self, *, question: str) -> dict[str, Any]:
+        return self._request(
+            "POST", self._session_path("/api/v1/agent/query"), {"question": question}
+        )
+
+    def close_session(self) -> dict[str, Any]:
+        return self._request(
+            "DELETE", self._session_path("/api/v1/host/session"), privileged=True
+        )
+
     def _session_path(self, path: str) -> str:
         return f"{path}?host_session_id={quote(self.host_session_id)}"
 
-    def _request(self, method: str, path: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    def _request(
+        self,
+        method: str,
+        path: str,
+        payload: dict[str, Any] | None = None,
+        *,
+        privileged: bool = False,
+    ) -> dict[str, Any]:
         body = None
         headers = {"Accept": "application/json"}
+        token = self.host_token if privileged and self.host_token else self.access_token
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
         if payload is not None:
             body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
             headers["Content-Type"] = "application/json"

@@ -63,6 +63,20 @@ class AgentOrchestratorTest(unittest.TestCase):
         self.assertEqual(payload["orchestrator"]["mode"], "deterministic")
         self.assertIn("failed 1 个", payload["answer"])
 
+    def test_deterministic_agent_forwards_gateway_access_token(self) -> None:
+        session = "agent-auth"
+        os.environ["AI_GATEWAY_ACCESS_TOKEN"] = "agent-secret"
+        response = handle_request(
+            "POST",
+            f"/api/v1/agent/query?host_session_id={session}",
+            json.dumps({"question": "分析当前测试"}, ensure_ascii=False),
+            headers={"Authorization": "Bearer agent-secret"},
+        )
+
+        payload = json.loads(response.body)
+        self.assertEqual(response.status, 200)
+        self.assertEqual(payload["tool_calls"][0]["name"], "analyze_test_run")
+
     def test_deterministic_agent_selects_compare_rest_tool(self) -> None:
         session = "agent-compare"
         handle_request(

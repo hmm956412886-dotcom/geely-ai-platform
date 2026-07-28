@@ -13,10 +13,10 @@
 当前默认下一步是：
 
 ```text
-P1-007：Semantic Kernel Tool Adapter
+等待真实 PDX / 身份平台 / 质量规则输入
 ```
 
-方向：assistant-ui + Fluent UI 前端、宿主会话隔离、真实飞书查询和 Semantic Kernel 只读工具编排已经跑通。继续保留 AI Gateway REST API 作为稳定集成协议。Microsoft Agent Framework 仅作为未来多 Agent / 工作流兼容方向，不在当前任务引入。
+方向：assistant-ui + Fluent UI 前端、宿主会话生命周期、真实飞书查询、Semantic Kernel 只读工具编排和分级 Gateway Bearer 鉴权已经跑通。继续保留 AI Gateway REST API 作为稳定集成协议。PDX、RAG、质量规则和企业 SSO 等待真实输入，不能用假需求继续堆框架。
 
 ## 1. 先想清楚再写代码
 

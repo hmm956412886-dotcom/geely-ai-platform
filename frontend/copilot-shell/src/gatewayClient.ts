@@ -7,6 +7,7 @@ import type {
 } from "./types";
 
 const querySessionId = new URLSearchParams(window.location.search).get("host_session_id");
+const accessToken = new URLSearchParams(window.location.hash.slice(1)).get("access_token");
 export const hostSessionId = querySessionId || "default";
 
 function sessionPath(path: string): string {
@@ -25,7 +26,9 @@ export class GatewayRequestError extends Error {
 }
 
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, init);
+  const headers = new Headers(init?.headers);
+  if (accessToken) headers.set("Authorization", `Bearer ${accessToken}`);
+  const response = await fetch(path, { ...init, headers });
   const payload = (await response.json()) as T & GatewayErrorBody;
   if (!response.ok) {
     throw new GatewayRequestError(

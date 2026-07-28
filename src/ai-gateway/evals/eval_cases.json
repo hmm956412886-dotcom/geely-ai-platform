@@ -37,9 +37,9 @@
   {
     "name": "analyze_csv",
     "method": "POST",
-    "path": "/api/v1/analyze",
+    "path": "/api/v1/analyze?host_session_id=eval-session",
     "body": {
-      "source_file": "${FIXTURES}/test-run-cases.csv"
+      "source_asset_id": "eval-current"
     },
     "expect_status": 200,
     "expect": {
@@ -60,8 +60,8 @@
     "body": {
       "project_id": "GEELY_TEST",
       "run_id": "RUN_HOST_001",
-      "source_file": "${FIXTURES}/test-run-cases.csv",
-      "target_file": "${FIXTURES}/test-run-cases-target.csv",
+      "source_asset_id": "eval-current",
+      "target_asset_id": "eval-target",
       "current_view": "test_result_detail",
       "user_id": "tester"
     },
@@ -82,6 +82,7 @@
       "asset_id": "eval-current",
       "file_path": "${FIXTURES}/test-run-cases.csv"
     },
+    "host_privileged": true,
     "expect_status": 200,
     "expect": {
       "result.asset_id": "eval-current",
@@ -104,10 +105,10 @@
   {
     "name": "compare_runs",
     "method": "POST",
-    "path": "/api/v1/test-data/compare",
+    "path": "/api/v1/test-data/compare?host_session_id=eval-session",
     "body": {
-      "baseline_file": "${FIXTURES}/test-run-cases.csv",
-      "target_file": "${FIXTURES}/test-run-cases-target.csv"
+      "baseline_asset_id": "eval-current",
+      "target_asset_id": "eval-target"
     },
     "expect_status": 200,
     "expect": {
@@ -122,9 +123,9 @@
   {
     "name": "test_data_insights",
     "method": "POST",
-    "path": "/api/v1/test-data/insights",
+    "path": "/api/v1/test-data/insights?host_session_id=eval-session",
     "body": {
-      "source_file": "${FIXTURES}/test-run-cases.csv"
+      "source_asset_id": "eval-current"
     },
     "expect_status": 200,
     "expect": {
@@ -139,9 +140,9 @@
   {
     "name": "model_fallback",
     "method": "POST",
-    "path": "/api/v1/analyze",
+    "path": "/api/v1/analyze?host_session_id=eval-session",
     "body": {
-      "source_file": "${FIXTURES}/test-run-cases.csv",
+      "source_asset_id": "eval-current",
       "use_model": true
     },
     "expect_status": 200,
@@ -152,7 +153,7 @@
   {
     "name": "agent_selects_insights_tool",
     "method": "POST",
-    "path": "/api/v1/agent/query",
+    "path": "/api/v1/agent/query?host_session_id=eval-session",
     "body": {
       "question": "生成当前测试状态分布洞察"
     },
@@ -194,6 +195,18 @@
     }
   },
   {
+    "name": "release_host_session",
+    "method": "DELETE",
+    "path": "/api/v1/host/session?host_session_id=eval-session",
+    "host_privileged": true,
+    "expect_status": 200,
+    "expect": {
+      "result.host_session_id": "eval-session",
+      "result.released_context": true,
+      "result.released_assets": 2
+    }
+  },
+  {
     "name": "invalid_json_error",
     "method": "POST",
     "path": "/api/v1/analyze",
@@ -209,10 +222,11 @@
   {
     "name": "missing_file_error",
     "method": "POST",
-    "path": "/api/v1/test-data/summary",
+    "path": "/api/v1/host/assets?host_session_id=eval-session",
     "body": {
-      "source_file": "${FIXTURES}/missing.csv"
+      "file_path": "${FIXTURES}/missing.csv"
     },
+    "host_privileged": true,
     "expect_status": 400,
     "expect": {
       "error.code": "bad_request"

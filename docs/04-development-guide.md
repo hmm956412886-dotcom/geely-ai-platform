@@ -227,6 +227,8 @@ Phase 1 禁止：
 | P1-005 | 数据质量规则 | P1 | 规则明确后接 Great Expectations 或轻量规则引擎 |
 | P1-006 | 数据画像报告 | P1 | 需要一键概览时接 ydata-profiling 或同类工具 |
 | P1-007 | Semantic Kernel Tool Adapter | P1 | Copilot 提问经 Semantic Kernel 选择只读 REST 工具，由 Gateway 执行并返回结果、引用和工具调用记录；未配置模型时保留可测试的确定性回退 |
+| P0-021 | 生产访问边界 | Done | Copilot Token 保护普通 API，Host Token 单独保护本地文件注册；生产模式只接受会话 `asset_id`，SK 内部调用继续鉴权 |
+| P0-022 | 宿主会话与资产生命周期 | Done | `DELETE /api/v1/host/session` 同时释放 Context 和 asset 映射，并限制会话数和单会话 asset 数 |
 | P2-001 | Schema 动态 UI | P2 | LLM 只生成 JSON Schema / UI Schema，前端成熟组件渲染 |
 
 ## 9. 开发完成标准

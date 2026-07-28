@@ -14,6 +14,12 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from ai_gateway.app import handle_request  # noqa: E402
+from ai_gateway.access_control import (  # noqa: E402
+    access_control_enabled,
+    authorization_headers,
+    host_token,
+)
+from ai_gateway.audit_log import clear_audit_events  # noqa: E402
 from ai_gateway.server import GatewayHandler  # noqa: E402
 
 
@@ -29,6 +35,8 @@ def main() -> int:
     previous_agent_mode = os.environ.get("AI_AGENT_MODE")
     os.environ["AI_GATEWAY_INTERNAL_BASE_URL"] = f"http://127.0.0.1:{server.server_port}"
     os.environ["AI_AGENT_MODE"] = "deterministic"
+    _register_eval_assets()
+    clear_audit_events()
     cases = json.loads(CASES.read_text(encoding="utf-8"))
     failures = 0
     try:
@@ -60,7 +68,10 @@ def run_case(case: dict[str, Any]) -> str | None:
     body = case.get("body_raw", "")
     if "body" in case:
         body = json.dumps(_expand_paths(case["body"]), ensure_ascii=False)
-    response = handle_request(case["method"], case["path"], body)
+    headers = authorization_headers()
+    if case.get("host_privileged") and host_token():
+        headers = {"Authorization": f"Bearer {host_token()}"}
+    response = handle_request(case["method"], case["path"], body, headers=headers)
     if response.status != case["expect_status"]:
         return f"status {response.status} != {case['expect_status']}"
     payload = _json_or_text(response.body)
@@ -79,6 +90,31 @@ def run_case(case: dict[str, Any]) -> str | None:
     if case.get("body_contains") and case["body_contains"] not in response.body:
         return f"response body does not contain {case['body_contains']!r}"
     return None
+
+
+def _register_eval_assets() -> None:
+    headers = authorization_headers()
+    if access_control_enabled():
+        if not host_token():
+            raise RuntimeError(
+                "AI_GATEWAY_HOST_TOKEN is required to run evals with access control enabled"
+            )
+        headers = {"Authorization": f"Bearer {host_token()}"}
+    for asset_id, fixture in (
+        ("eval-current", "test-run-cases.csv"),
+        ("eval-target", "test-run-cases-target.csv"),
+    ):
+        response = handle_request(
+            "POST",
+            "/api/v1/host/assets?host_session_id=eval-session",
+            json.dumps(
+                {"asset_id": asset_id, "file_path": str(FIXTURES / fixture)},
+                ensure_ascii=False,
+            ),
+            headers=headers,
+        )
+        if response.status != 200:
+            raise RuntimeError(f"failed to register eval asset {asset_id}: {response.body}")
 
 
 def _expand_paths(value: Any) -> Any:

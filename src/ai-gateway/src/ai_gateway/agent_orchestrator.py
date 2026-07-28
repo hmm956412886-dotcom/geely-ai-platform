@@ -11,6 +11,7 @@ from urllib.parse import urlencode, urljoin, urlsplit, urlunsplit
 from urllib.request import Request, urlopen
 from uuid import uuid4
 
+from .access_control import authorization_headers
 from .model_client import ModelConfig, load_model_config
 
 
@@ -156,6 +157,7 @@ async def _run_semantic_kernel(
     params = {"host_session_id": host_session_id} if host_session_id else None
     async with httpx.AsyncClient(
         params=params,
+        headers=authorization_headers(),
         event_hooks={"response": [capture_response]},
         timeout=config.timeout_seconds,
     ) as tool_client:
@@ -329,7 +331,7 @@ def _request_json(
         query = urlencode({"host_session_id": host_session_id})
         url = urlunsplit((parsed.scheme, parsed.netloc, parsed.path, query, parsed.fragment))
     data = None
-    headers: dict[str, str] = {}
+    headers = authorization_headers()
     if method.upper() != "GET":
         data = json.dumps(payload or {}, ensure_ascii=False).encode("utf-8")
         headers["Content-Type"] = "application/json"

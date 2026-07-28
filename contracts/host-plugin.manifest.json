@@ -12,6 +12,7 @@
     "fallback_entry": "/copilot",
     "host_session_query_parameter": "host_session_id",
     "host_origin_query_parameter": "host_origin",
+    "access_token_fragment_parameter": "access_token",
     "post_message": {
       "host_to_copilot": "geely-ai.host-context",
       "copilot_to_host": "geely-ai.copilot-ready"
@@ -21,6 +22,11 @@
   },
   "api": {
     "base_path": "/api/v1",
+    "authentication": {
+      "type": "http-bearer",
+      "optional_env": "AI_GATEWAY_ACCESS_TOKEN",
+      "privileged_host_env": "AI_GATEWAY_HOST_TOKEN"
+    },
     "tools": "/api/v1/tools",
     "host_assets": "/api/v1/host/assets",
     "operations": [
@@ -29,6 +35,13 @@
         "method": "POST",
         "path": "/api/v1/agent/query",
         "side_effect": "read_only",
+        "requires_confirmation": false
+      },
+      {
+        "operation_id": "release_host_session",
+        "method": "DELETE",
+        "path": "/api/v1/host/session",
+        "side_effect": "local_state",
         "requires_confirmation": false
       },
       {

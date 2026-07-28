@@ -28,6 +28,8 @@ Copy-Item .\config\runtime.env.example .\.env
 ```text
 AI_GATEWAY_HOST=127.0.0.1
 AI_GATEWAY_PORT=8765
+AI_GATEWAY_ACCESS_TOKEN=生成的高强度随机Token
+AI_GATEWAY_HOST_TOKEN=另一个高强度随机Token
 AI_MODEL_BASE_URL=https://api.example.com/v1
 AI_MODEL_API_KEY=客户自己的 Key
 AI_MODEL_NAME=客户模型名
@@ -39,6 +41,10 @@ AI_MODEL_TIMEOUT_SECONDS=30
 - `.env` 已被 `.gitignore` 忽略。
 - 不要把真实 API Key 写入 `runtime.env.example`。
 - 不配置模型 API 时，系统仍可用本地确定性分析 fallback。
+- Gateway 只在当前机器使用时可以不设置 Token；绑定局域网地址或交付客户时必须同时设置访问 Token 和 Host Token，并通过 HTTPS / 反向代理暴露。
+- `AI_GATEWAY_ACCESS_TOKEN` 交给 Copilot WebView，只能调用普通 API；`AI_GATEWAY_HOST_TOKEN` 只保留在可信桌面宿主/Sidecar，用于注册服务器本地文件，不能进入 WebView URL。
+- 默认最多保留 256 个 Host Session、每个 Session 32 个 asset；可通过 `AI_GATEWAY_MAX_HOST_SESSIONS` 和 `AI_GATEWAY_MAX_ASSETS_PER_SESSION` 调整。宿主关闭窗口或任务时必须调用 `DELETE /api/v1/host/session`。
+- 启用 Token 后不要从 WebView 传本地绝对路径；桌面宿主先调用 `/api/v1/host/assets` 注册文件，再把 `asset_id` 交给 Copilot。
 
 启用真实飞书知识查询：
 
@@ -94,6 +100,8 @@ http://127.0.0.1:5173/copilot-shell/
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\check-ai-gateway.ps1 -GatewayUrl http://127.0.0.1:8765
 ```
+
+启用访问 Token 时，检查脚本会自动读取当前进程的 `AI_GATEWAY_ACCESS_TOKEN`，也可显式传入 `-AccessToken`。
 
 同时检查独立前端：
 

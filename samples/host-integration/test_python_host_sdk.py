@@ -10,7 +10,14 @@ class FakeClient(GeelyAIGatewayClient):
         super().__init__("http://example.test/", host_session_id="test-session")
         self.calls: list[tuple[str, str, dict | None]] = []
 
-    def _request(self, method: str, path: str, payload: dict | None = None) -> dict:
+    def _request(
+        self,
+        method: str,
+        path: str,
+        payload: dict | None = None,
+        *,
+        privileged: bool = False,
+    ) -> dict:
         self.calls.append((method, path, payload))
         return {"ok": True}
 
@@ -39,6 +46,7 @@ class PythonHostSdkTests(unittest.TestCase):
         client.analyze(source_asset_id="current-run", question="why")
         client.insights(source_asset_id="current-run")
         client.compare(baseline_asset_id="baseline", target_asset_id="target")
+        client.close_session()
 
         self.assertEqual(
             client.copilot_url,
@@ -49,6 +57,30 @@ class PythonHostSdkTests(unittest.TestCase):
         self.assertEqual(client.calls[2][1], "/api/v1/analyze?host_session_id=test-session")
         self.assertEqual(client.calls[3][1], "/api/v1/test-data/insights?host_session_id=test-session")
         self.assertEqual(client.calls[4][1], "/api/v1/test-data/compare?host_session_id=test-session")
+        self.assertEqual(client.calls[5][0], "DELETE")
+        self.assertEqual(client.calls[5][1], "/api/v1/host/session?host_session_id=test-session")
+
+    def test_client_places_access_token_in_copilot_fragment(self) -> None:
+        client = GeelyAIGatewayClient(
+            "http://example.test", host_session_id="test-session", access_token="a secret"
+        )
+
+        self.assertEqual(
+            client.copilot_url,
+            "http://example.test/copilot-shell/?host_session_id=test-session#access_token=a%20secret",
+        )
+        self.assertNotIn("access_token", client.copilot_url.split("#", 1)[0])
+
+    def test_host_token_is_not_added_to_copilot_url(self) -> None:
+        client = GeelyAIGatewayClient(
+            "http://example.test",
+            host_session_id="test-session",
+            access_token="copilot-token",
+            host_token="host-token",
+        )
+
+        self.assertIn("copilot-token", client.copilot_url)
+        self.assertNotIn("host-token", client.copilot_url)
 
 
 if __name__ == "__main__":

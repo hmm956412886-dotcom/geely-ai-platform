@@ -1,15 +1,17 @@
 param(
     [string]$GatewayUrl = $(if ($env:AI_GATEWAY_URL) { $env:AI_GATEWAY_URL } else { "http://127.0.0.1:8765" }),
-    [string]$CopilotUrl = ""
+    [string]$CopilotUrl = "",
+    [string]$AccessToken = $(if ($env:AI_GATEWAY_ACCESS_TOKEN) { $env:AI_GATEWAY_ACCESS_TOKEN } else { "" })
 )
 
 $ErrorActionPreference = "Stop"
 $BaseUrl = $GatewayUrl.TrimEnd("/")
 $CopilotBaseUrl = if ($CopilotUrl) { $CopilotUrl.TrimEnd("/") } else { $BaseUrl + "/copilot-shell" }
+$ApiHeaders = if ($AccessToken) { @{ Authorization = "Bearer $AccessToken" } } else { @{} }
 
 function Invoke-GatewayJson {
     param([string]$Path)
-    return Invoke-RestMethod -Method Get -Uri ($BaseUrl + $Path)
+    return Invoke-RestMethod -Method Get -Headers $ApiHeaders -Uri ($BaseUrl + $Path)
 }
 
 function Assert-Ok {

@@ -10,6 +10,14 @@ http://127.0.0.1:8765/copilot-shell/?host_session_id=<宿主会话ID>&host_origi
 
 `host_session_id` 由宿主创建。同一个侧边栏实例保持不变，不同网站页面、桌面窗口或测试任务使用不同会话，避免上下文串线。
 
+设置 `AI_GATEWAY_ACCESS_TOKEN` 后，宿主把凭证放在 WebView URL fragment：
+
+```text
+http://127.0.0.1:8765/copilot-shell/?host_session_id=<宿主会话ID>#access_token=<URL编码后的Token>
+```
+
+Copilot 只从 fragment 读取凭证并通过 `Authorization: Bearer ...` 调用 `/api/v1/*`。fragment 不会发送到 Gateway HTTP 日志。生产环境仍应使用 HTTPS，并由宿主在运行时生成 URL，不把凭证写入源码或配置仓库。
+
 产品演示入口：
 
 ```text
@@ -67,6 +75,8 @@ Content-Type: application/json
 
 Gateway 只向浏览器返回 `asset_id`、文件名、类型和大小，真实路径只保存在当前 Gateway 进程内。
 
+启用 `AI_GATEWAY_ACCESS_TOKEN` 后，分析接口和 Host Context 不再接受 `source_file` / `target_file` 绝对路径。可信桌面 Host SDK 使用单独的 `AI_GATEWAY_HOST_TOKEN` 注册文件，再把当前会话的 `asset_id` 交给 Copilot。WebView 的访问 Token 不能调用 `/api/v1/host/assets`，避免普通网页按服务器路径注册文件。
+
 ## 4. 桌面 WebView / Host SDK
 
 桌面软件可直接打开会话化 URL，并使用 `samples/host-integration/python_host_sdk.py` 完成：
@@ -75,6 +85,7 @@ Gateway 只向浏览器返回 `asset_id`、文件名、类型和大小，真实�
 - 注册本地 CSV / JSON 为 `asset_id`。
 - 更新当前项目、Run 和视图上下文。
 - 调用只读分析、洞察和对比接口。
+- 宿主窗口或测试任务关闭时调用 `close_session()`，释放该会话 Context 和本地文件映射。
 
 稳定集成协议仍是 Gateway REST API；`postMessage` 只负责 iframe/WebView 的上下文同步。
 

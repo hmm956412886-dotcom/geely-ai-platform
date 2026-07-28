@@ -4,35 +4,54 @@
     "title": "Geely AI Gateway MVP",
     "version": "0.1.0"
   },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    }
+  },
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
   "paths": {
     "/health": {
       "get": {
-        "summary": "Health check"
+        "summary": "Health check",
+        "security": []
       }
     },
     "/demo": {
       "get": {
-        "summary": "Embeddable demo panel"
+        "summary": "Embeddable demo panel",
+        "security": []
       }
     },
     "/showcase": {
       "get": {
-        "summary": "Host software showcase with Copilot side panel"
+        "summary": "Host software showcase with Copilot side panel",
+        "security": []
       }
     },
     "/copilot": {
       "get": {
-        "summary": "Embeddable Copilot side panel"
+        "summary": "Embeddable Copilot side panel",
+        "security": []
       }
     },
     "/copilot-shell/": {
       "get": {
-        "summary": "Embeddable frontend Copilot shell"
+        "summary": "Embeddable frontend Copilot shell",
+        "security": []
       }
     },
     "/plugin-manifest.json": {
       "get": {
-        "summary": "Host integration manifest"
+        "summary": "Host integration manifest",
+        "security": []
       }
     },
     "/api/v1/tools": {
@@ -55,7 +74,14 @@
     },
     "/api/v1/host/assets": {
       "post": {
-        "summary": "Register a host-local file and return a browser-safe asset ID"
+        "summary": "Register a host-local file and return a browser-safe asset ID",
+        "x-required-token": "host"
+      }
+    },
+    "/api/v1/host/session": {
+      "delete": {
+        "summary": "Release host context and local asset mappings",
+        "x-required-token": "host"
       }
     },
     "/api/v1/audit/events": {

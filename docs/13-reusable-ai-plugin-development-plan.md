@@ -11,7 +11,8 @@ Geely AI Platform 的产品定位调整为：
   -> Host Connector / Plugin SDK
   -> Tool Registry / OpenAPI / Plugin Manifest
   -> 测试数据分析 Adapter
-  -> 后续接 Semantic Kernel / RAG / AG-UI
+  -> Semantic Kernel 只读工具编排
+  -> 后续按真实需求接 RAG / AG-UI
 ```
 
 不要继续把项目做成一堆自研小功能。现有 AI Gateway 继续保留，作为后端契约和业务 Adapter；前端 Copilot 插件、Agent UI、动态交互尽量复用成熟开源项目。
@@ -98,7 +99,10 @@ flowchart LR
 | P0-018 | 开源 Copilot 插件底座 | Done：React + assistant-ui + Fluent UI 已构建并由 Gateway 提供 |
 | P0-019 | 宿主嵌入与会话契约 | Done：会话隔离、`postMessage`、Host Asset 和 SDK 已验证 |
 | P0-020 | 演示交付包 | Done：Gateway、独立前端和双 URL 检查脚本已验证 |
+| P0-021 | 生产访问边界 | Done：Copilot / Host 分级 Bearer Token、asset 文件边界和内部 SK REST 调用已接通 |
+| P0-022 | 宿主会话与资产生命周期 | Done：Host 可显式释放会话，且会话数和单会话 asset 数有硬上限 |
 | P1-003 | Feishu CLI Provider | Done：真实搜索、关键词原文读取和 Gateway 引用已验证 |
+| P1-007 | Semantic Kernel Tool Adapter | Done：模型驱动和确定性只读工具选择均已验证 |
 
 当前可运行入口：
 
@@ -251,6 +255,17 @@ frontend/copilot-shell
 | P1-006 | 数据画像报告 | 需要一键数据概览 | 接 ydata-profiling 或同类工具 |
 | P1-007 | Semantic Kernel Tool Adapter | 工具契约稳定 | Copilot 问题经 SK 选择只读 REST 工具，Gateway 执行后返回结果、引用和调用记录 |
 
+当前不足和触发条件：
+
+| 不足 | 当前判断 | 下一步触发条件 |
+| --- | --- | --- |
+| PDX / 客户测试文件 | 只有 JSON / CSV，没有依据实现真实 Adapter | 提供脱敏样例或官方 SDK / CLI 说明 |
+| 公司统一身份 | 当前 Bearer Token 适合单实例或内网部署，不等于企业 SSO | 提供 OIDC / OAuth2 身份平台、Issuer、Client 和权限模型 |
+| Indexed RAG | 飞书 CLI 已能返回真实引用，暂未证明性能不足 | 给出文档规模、延迟目标或离线检索要求 |
+| 数据质量规则 | 没有真实字段阈值和业务规则 | 提供规则样例及通过/失败判定口径 |
+| 多 Agent / 长流程 | 当前单 Agent 工具调用已覆盖业务闭环 | 出现跨角色协作、人工审批或长时间任务需求 |
+| 会话持久化 | 当前会话和 Host Asset 是有上限、可释放的进程内状态，服务重启后不会保留 | 只有出现跨进程恢复需求后才引入外部存储 |
+
 ## 9. 🔒 安全边界
 
 P0 和 P1 默认只读。
@@ -323,10 +338,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\check-ai-gateway.p
 默认下一步：
 
 ```text
-P1-007：Semantic Kernel Tool Adapter
+等待真实 PDX 样例、公司身份平台信息、明确数据质量规则或会话持久化需求
 ```
 
-P1-001 / P1-002 等待脱敏 PDX 样例或官方工具说明；P1-004 只在 CLI 查询性能不足时启动，P1-005 / P1-006 等待真实规则或画像需求。在此之前优先把稳定的 REST Tool Registry 接入成熟 Agent 框架。
+P1-001 / P1-002 等待脱敏 PDX 样例或官方工具说明；P1-004 只在 CLI 查询性能不足时启动，P1-005 / P1-006 等待真实规则或画像需求。需要公司级部署时，把当前 Bearer Token 替换或前置到客户 OIDC / API Gateway，不自研用户系统。没有这些输入时保持当前产品可运行，不继续添加占位框架。
 
 P1-007 验收标准：
 

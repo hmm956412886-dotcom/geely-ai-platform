@@ -7,17 +7,21 @@ import argparse
 import os
 from typing import Sequence
 
+from .access_control import validate_bind_access
 from .app import Response, handle_request
 
 
 class GatewayHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
-        self._send(handle_request("GET", self.path))
+        self._send(handle_request("GET", self.path, headers=self.headers))
 
     def do_POST(self) -> None:
         length = int(self.headers.get("Content-Length", "0"))
         body = self.rfile.read(length).decode("utf-8") if length else ""
-        self._send(handle_request("POST", self.path, body))
+        self._send(handle_request("POST", self.path, body, headers=self.headers))
+
+    def do_DELETE(self) -> None:
+        self._send(handle_request("DELETE", self.path, headers=self.headers))
 
     def log_message(self, format: str, *args: object) -> None:
         return
@@ -27,6 +31,8 @@ class GatewayHandler(BaseHTTPRequestHandler):
         self.send_response(response.status)
         self.send_header("Content-Type", response.content_type)
         self.send_header("Content-Length", str(len(encoded)))
+        for name, value in (response.headers or {}).items():
+            self.send_header(name, value)
         self.end_headers()
         self.wfile.write(encoded)
 
@@ -36,6 +42,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", default=8765, type=int)
     args = parser.parse_args(argv)
+    try:
+        validate_bind_access(args.host)
+    except ValueError as exc:
+        parser.error(str(exc))
     os.environ.setdefault(
         "AI_GATEWAY_INTERNAL_BASE_URL",
         f"http://127.0.0.1:{args.port}",

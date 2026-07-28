@@ -5,14 +5,21 @@ from __future__ import annotations
 from dataclasses import dataclass
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 from urllib.parse import parse_qs, unquote, urlsplit
 from uuid import uuid4
 
 from .audit_log import append_audit_event, list_audit_events
+from .access_control import access_control_enabled, is_authorized, is_host_authorized
 from .agent_orchestrator import run_agent_query
-from .host_assets import register_host_asset, resolve_host_asset
-from .host_context import get_host_context, normalize_host_session_id, update_host_context
+from .host_assets import register_host_asset, release_host_assets, resolve_host_asset
+from .host_context import (
+    get_host_context,
+    normalize_host_session_id,
+    peek_host_context,
+    release_host_context,
+    update_host_context,
+)
 from .knowledge_provider import query_knowledge as query_knowledge_provider
 from .model_client import chat_completion, load_model_config
 from .test_data_adapter import compare_test_runs, load_test_data_insights, load_test_run_summary
@@ -24,15 +31,52 @@ class Response:
     status: int
     body: str | bytes
     content_type: str = "application/json; charset=utf-8"
+    headers: Mapping[str, str] | None = None
 
 
-def handle_request(method: str, path: str, body: str = "") -> Response:
+def handle_request(
+    method: str,
+    path: str,
+    body: str = "",
+    headers: Mapping[str, str] | None = None,
+) -> Response:
     parsed_url = urlsplit(path)
     route_path = parsed_url.path
     host_session_id = None
     try:
         host_session_id = _query_value(parsed_url.query, "host_session_id")
-        response = _handle_request(method, route_path, body, host_session_id)
+        if route_path.startswith("/api/v1/") and not is_authorized(headers):
+            response = Response(
+                401,
+                json.dumps(
+                    {
+                        "request_id": _request_id(),
+                        "error": {
+                            "code": "unauthorized",
+                            "message": "A valid AI Gateway bearer token is required",
+                        },
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+                + "\n",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        elif (
+            (method, route_path)
+            in {
+                ("POST", "/api/v1/host/assets"),
+                ("DELETE", "/api/v1/host/session"),
+            }
+            and not is_host_authorized(headers)
+        ):
+            response = error_response(
+                "host_forbidden",
+                "A valid AI Gateway host token is required to register local files",
+                status=403,
+            )
+        else:
+            response = _handle_request(method, route_path, body, host_session_id)
     except json.JSONDecodeError as exc:
         response = error_response("invalid_json", f"Invalid JSON request body: {exc.msg}", status=400)
     except ValueError as exc:
@@ -80,6 +124,20 @@ def _handle_request(
             {
                 "request_id": _request_id(),
                 "result": register_host_asset(_read_json(body), host_session_id),
+            }
+        )
+    if method == "DELETE" and path == "/api/v1/host/session":
+        session_id = normalize_host_session_id(host_session_id)
+        released_assets = release_host_assets(session_id)
+        released_context = release_host_context(session_id)
+        return json_response(
+            {
+                "request_id": _request_id(),
+                "result": {
+                    "host_session_id": session_id,
+                    "released_context": released_context,
+                    "released_assets": released_assets,
+                },
             }
         )
     if method == "GET" and path == "/api/v1/audit/events":
@@ -170,7 +228,7 @@ def _append_request_audit(
         path=path,
         status=response.status,
         request_id=payload.get("request_id"),
-        context=get_host_context(host_session_id),
+        context=peek_host_context(host_session_id),
         error_code=(payload.get("error") or {}).get("code"),
     )
 
@@ -308,6 +366,10 @@ def _resolve_source(
     asset_id = str(payload.get(asset_field) or "").strip()
     if asset_id:
         return resolve_host_asset(asset_id, host_session_id), asset_id
+    if access_control_enabled() and payload.get(file_field):
+        raise ValueError(
+            f"{file_field} is disabled when Gateway access control is enabled; register a host asset"
+        )
     return str(payload.get(file_field) or ""), None
 
 
@@ -741,12 +803,19 @@ def _showcase_html() -> str:
       </div>
     </main>
     <aside>
-      <iframe class="copilot-frame" id="copilotFrame" title="Reusable Geely AI Copilot" src="/copilot-shell/?host_session_id=showcase-demo"></iframe>
+      <iframe class="copilot-frame" id="copilotFrame" title="Reusable Geely AI Copilot"></iframe>
     </aside>
   </div>
   <script>
     const copilotFrame = document.getElementById("copilotFrame");
     const hostSessionId = "showcase-demo";
+    function loadCopilot() {
+      const accessToken = new URLSearchParams(window.location.hash.slice(1)).get("access_token");
+      const shellUrl = new URL("/copilot-shell/", window.location.origin);
+      shellUrl.searchParams.set("host_session_id", hostSessionId);
+      if (accessToken) shellUrl.hash = `access_token=${encodeURIComponent(accessToken)}`;
+      if (copilotFrame.src !== shellUrl.href) copilotFrame.src = shellUrl.href;
+    }
     const context = {
       project_id: "GEELY_TEST",
       run_id: "RUN_CSV_001",
@@ -767,6 +836,8 @@ def _showcase_html() -> str:
     document.getElementById("sync").addEventListener("click", syncContext);
     document.getElementById("quickAnalyze").addEventListener("click", syncContext);
     copilotFrame.addEventListener("load", syncContext);
+    window.addEventListener("load", loadCopilot, { once: true });
+    window.addEventListener("hashchange", loadCopilot);
   </script>
 </body>
 </html>
@@ -777,17 +848,34 @@ def _openapi() -> dict[str, Any]:
     return {
         "openapi": "3.0.3",
         "info": {"title": "Geely AI Gateway MVP", "version": "0.1.0"},
+        "components": {
+            "securitySchemes": {
+                "bearerAuth": {"type": "http", "scheme": "bearer"},
+            }
+        },
+        "security": [{"bearerAuth": []}],
         "paths": {
-            "/health": {"get": {"summary": "Health check"}},
-            "/demo": {"get": {"summary": "Embeddable demo panel"}},
-            "/showcase": {"get": {"summary": "Host software showcase with Copilot side panel"}},
-            "/copilot": {"get": {"summary": "Embeddable Copilot side panel"}},
-            "/copilot-shell/": {"get": {"summary": "Embeddable frontend Copilot shell"}},
-            "/plugin-manifest.json": {"get": {"summary": "Host integration manifest"}},
+            "/health": {"get": {"summary": "Health check", "security": []}},
+            "/demo": {"get": {"summary": "Embeddable demo panel", "security": []}},
+            "/showcase": {"get": {"summary": "Host software showcase with Copilot side panel", "security": []}},
+            "/copilot": {"get": {"summary": "Embeddable Copilot side panel", "security": []}},
+            "/copilot-shell/": {"get": {"summary": "Embeddable frontend Copilot shell", "security": []}},
+            "/plugin-manifest.json": {"get": {"summary": "Host integration manifest", "security": []}},
             "/api/v1/tools": {"get": {"summary": "Return machine-readable AI tool contracts"}},
             "/api/v1/model/config": {"get": {"summary": "Return public model runtime config"}},
             "/api/v1/host/context": {"get": {"summary": "Return host software context"}, "post": {"summary": "Update host software context"}},
-            "/api/v1/host/assets": {"post": {"summary": "Register a host-local file and return a browser-safe asset ID"}},
+            "/api/v1/host/assets": {
+                "post": {
+                    "summary": "Register a host-local file and return a browser-safe asset ID",
+                    "x-required-token": "host",
+                }
+            },
+            "/api/v1/host/session": {
+                "delete": {
+                    "summary": "Release host context and local asset mappings",
+                    "x-required-token": "host",
+                }
+            },
             "/api/v1/audit/events": {"get": {"summary": "Return recent audit events"}},
             "/api/v1/analyze": {"post": {"summary": "Analyze test data with knowledge citations"}},
             "/api/v1/test-data/summary": {"post": {"summary": "Return a test run summary"}},
@@ -810,6 +898,7 @@ def _plugin_manifest() -> dict[str, Any]:
             "fallback_entry": "/copilot",
             "host_session_query_parameter": "host_session_id",
             "host_origin_query_parameter": "host_origin",
+            "access_token_fragment_parameter": "access_token",
             "post_message": {
                 "host_to_copilot": "geely-ai.host-context",
                 "copilot_to_host": "geely-ai.copilot-ready",
@@ -819,6 +908,11 @@ def _plugin_manifest() -> dict[str, Any]:
         },
         "api": {
             "base_path": "/api/v1",
+            "authentication": {
+                "type": "http-bearer",
+                "optional_env": "AI_GATEWAY_ACCESS_TOKEN",
+                "privileged_host_env": "AI_GATEWAY_HOST_TOKEN",
+            },
             "tools": "/api/v1/tools",
             "host_assets": "/api/v1/host/assets",
             "operations": [
@@ -827,6 +921,13 @@ def _plugin_manifest() -> dict[str, Any]:
                     "method": "POST",
                     "path": "/api/v1/agent/query",
                     "side_effect": "read_only",
+                    "requires_confirmation": False,
+                },
+                {
+                    "operation_id": "release_host_session",
+                    "method": "DELETE",
+                    "path": "/api/v1/host/session",
+                    "side_effect": "local_state",
                     "requires_confirmation": False,
                 },
                 *manifest_operations(),

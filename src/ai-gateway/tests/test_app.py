@@ -96,6 +96,39 @@ class AppTests(unittest.TestCase):
         self.assertIn("configured", payload["result"])
         self.assertNotIn("api_key", payload["result"])
 
+    def test_api_access_token_is_optional_and_protects_api_routes(self) -> None:
+        with patch.dict("os.environ", {"AI_GATEWAY_ACCESS_TOKEN": "host-secret"}):
+            missing = handle_request("GET", "/api/v1/tools")
+            wrong = handle_request(
+                "GET",
+                "/api/v1/tools",
+                headers={"Authorization": "Bearer wrong-secret"},
+            )
+            authorized = handle_request(
+                "GET",
+                "/api/v1/tools",
+                headers={"authorization": "Bearer host-secret"},
+            )
+            health = handle_request("GET", "/health")
+            shell = handle_request("GET", "/showcase")
+
+        self.assertEqual(missing.status, 401)
+        self.assertEqual(wrong.status, 401)
+        self.assertEqual(json.loads(missing.body)["error"]["code"], "unauthorized")
+        self.assertEqual(missing.headers, {"WWW-Authenticate": "Bearer"})
+        self.assertEqual(authorized.status, 200)
+        self.assertEqual(health.status, 200)
+        self.assertEqual(shell.status, 200)
+
+    def test_api_access_token_is_not_exposed_in_error_response_or_audit(self) -> None:
+        token = "never-return-this-token"
+        with patch.dict("os.environ", {"AI_GATEWAY_ACCESS_TOKEN": token}):
+            response = handle_request("GET", "/api/v1/model/config")
+
+        audit = handle_request("GET", "/api/v1/audit/events")
+        self.assertNotIn(token, response.body)
+        self.assertNotIn(token, audit.body)
+
     def test_copilot_page_is_available(self) -> None:
         response = handle_request("GET", "/copilot")
 
@@ -152,9 +185,13 @@ class AppTests(unittest.TestCase):
         self.assertEqual(response.content_type, "text/html; charset=utf-8")
         self.assertIn("Geely Test AI Workbench", response.body)
         self.assertIn("Reusable Geely AI Copilot", response.body)
-        self.assertIn('src="/copilot-shell/?host_session_id=showcase-demo"', response.body)
+        self.assertNotIn('src="/copilot-shell/', response.body)
+        self.assertIn("function loadCopilot()", response.body)
+        self.assertIn('window.addEventListener("hashchange", loadCopilot)', response.body)
         self.assertIn("geely-ai.host-context", response.body)
         self.assertIn('source_asset_id: "demo-current"', response.body)
+        self.assertIn('window.location.hash.slice(1)', response.body)
+        self.assertNotIn("AI_GATEWAY_ACCESS_TOKEN", response.body)
         self.assertNotIn("D:/geely-ai-platform", response.body)
 
     def test_host_context_roundtrip(self) -> None:
@@ -225,6 +262,130 @@ class AppTests(unittest.TestCase):
         self.assertEqual(analysis_payload["data"]["source"], {"type": "host_asset", "ref": "current-run"})
         self.assertNotIn(source_file, analysis.body)
 
+    def test_access_control_requires_registered_assets_instead_of_file_paths(self) -> None:
+        access_token = "copilot-secret"
+        host_token = "host-secret"
+        headers = {"Authorization": f"Bearer {access_token}"}
+        host_headers = {"Authorization": f"Bearer {host_token}"}
+        with patch.dict(
+            "os.environ",
+            {
+                "AI_GATEWAY_ACCESS_TOKEN": access_token,
+                "AI_GATEWAY_HOST_TOKEN": host_token,
+            },
+        ):
+            direct = handle_request(
+                "POST",
+                "/api/v1/analyze?host_session_id=secure-session",
+                json.dumps({"source_file": str(FIXTURES / "test-run-cases.csv")}),
+                headers=headers,
+            )
+            registered = handle_request(
+                "POST",
+                "/api/v1/host/assets?host_session_id=secure-session",
+                json.dumps(
+                    {
+                        "asset_id": "secure-run",
+                        "file_path": str(FIXTURES / "test-run-cases.csv"),
+                    }
+                ),
+                headers=host_headers,
+            )
+            analysis = handle_request(
+                "POST",
+                "/api/v1/analyze?host_session_id=secure-session",
+                json.dumps({"source_asset_id": "secure-run"}),
+                headers=headers,
+            )
+
+        self.assertEqual(direct.status, 400)
+        self.assertIn("register a host asset", direct.body)
+        self.assertEqual(registered.status, 200)
+        self.assertEqual(analysis.status, 200)
+
+    def test_copilot_token_cannot_register_local_file(self) -> None:
+        with patch.dict(
+            "os.environ",
+            {
+                "AI_GATEWAY_ACCESS_TOKEN": "copilot-secret",
+                "AI_GATEWAY_HOST_TOKEN": "host-secret",
+            },
+        ):
+            response = handle_request(
+                "POST",
+                "/api/v1/host/assets?host_session_id=secure-session",
+                json.dumps({"file_path": str(FIXTURES / "test-run-cases.csv")}),
+                headers={"Authorization": "Bearer copilot-secret"},
+            )
+
+        self.assertEqual(response.status, 403)
+        self.assertEqual(json.loads(response.body)["error"]["code"], "host_forbidden")
+
+    def test_host_can_release_one_session_without_affecting_another(self) -> None:
+        source_file = str(FIXTURES / "test-run-cases.csv")
+        for session in ("release-a", "release-b"):
+            handle_request(
+                "POST",
+                f"/api/v1/host/context?host_session_id={session}",
+                json.dumps({"project_id": session, "run_id": f"run-{session}"}),
+            )
+            handle_request(
+                "POST",
+                f"/api/v1/host/assets?host_session_id={session}",
+                json.dumps({"asset_id": "current", "file_path": source_file}),
+            )
+
+        released = handle_request(
+            "DELETE", "/api/v1/host/session?host_session_id=release-a"
+        )
+        old_asset = handle_request(
+            "POST",
+            "/api/v1/analyze?host_session_id=release-a",
+            json.dumps({"source_asset_id": "current"}),
+        )
+        other_asset = handle_request(
+            "POST",
+            "/api/v1/analyze?host_session_id=release-b",
+            json.dumps({"source_asset_id": "current"}),
+        )
+
+        payload = json.loads(released.body)["result"]
+        self.assertEqual(released.status, 200)
+        self.assertTrue(payload["released_context"])
+        self.assertEqual(payload["released_assets"], 1)
+        self.assertEqual(old_asset.status, 400)
+        self.assertEqual(other_asset.status, 200)
+
+    def test_host_session_and_asset_limits_are_enforced(self) -> None:
+        source_file = str(FIXTURES / "test-run-cases.csv")
+        with patch.dict(
+            "os.environ",
+            {
+                "AI_GATEWAY_MAX_HOST_SESSIONS": "1",
+                "AI_GATEWAY_MAX_ASSETS_PER_SESSION": "1",
+            },
+        ):
+            reset_host_context()
+            session_limit = handle_request(
+                "GET", "/api/v1/host/context?host_session_id=second"
+            )
+            first_asset = handle_request(
+                "POST",
+                "/api/v1/host/assets",
+                json.dumps({"asset_id": "first", "file_path": source_file}),
+            )
+            asset_limit = handle_request(
+                "POST",
+                "/api/v1/host/assets",
+                json.dumps({"asset_id": "second", "file_path": source_file}),
+            )
+
+        self.assertEqual(session_limit.status, 400)
+        self.assertIn("host session limit", session_limit.body)
+        self.assertEqual(first_asset.status, 200)
+        self.assertEqual(asset_limit.status, 400)
+        self.assertIn("host asset limit", asset_limit.body)
+
     def test_host_context_rejects_unknown_fields(self) -> None:
         response = handle_request(
             "POST",
@@ -273,12 +434,18 @@ class AppTests(unittest.TestCase):
         self.assertEqual(payload["webview"]["fallback_entry"], "/copilot")
         self.assertEqual(payload["webview"]["host_session_query_parameter"], "host_session_id")
         self.assertEqual(payload["webview"]["host_origin_query_parameter"], "host_origin")
+        self.assertEqual(payload["webview"]["access_token_fragment_parameter"], "access_token")
         self.assertEqual(
             payload["webview"]["post_message"]["host_to_copilot"],
             "geely-ai.host-context",
         )
         self.assertEqual(payload["api"]["tools"], "/api/v1/tools")
         self.assertEqual(payload["api"]["host_assets"], "/api/v1/host/assets")
+        self.assertEqual(payload["api"]["authentication"]["type"], "http-bearer")
+        self.assertEqual(
+            payload["api"]["authentication"]["privileged_host_env"],
+            "AI_GATEWAY_HOST_TOKEN",
+        )
         self.assertEqual(payload["api"]["operations"][0]["side_effect"], "read_only")
         operation_ids = {operation["operation_id"] for operation in payload["api"]["operations"]}
         self.assertIn("compare_test_runs", operation_ids)
@@ -288,6 +455,26 @@ class AppTests(unittest.TestCase):
         self.assertIn("update_host_context", operation_ids)
         self.assertIn("list_audit_events", operation_ids)
         self.assertIn("query_agent", operation_ids)
+        self.assertIn("release_host_session", operation_ids)
+
+    def test_openapi_describes_bearer_auth_and_public_pages(self) -> None:
+        payload = json.loads(handle_request("GET", "/openapi.json").body)
+
+        self.assertEqual(
+            payload["components"]["securitySchemes"]["bearerAuth"]["scheme"],
+            "bearer",
+        )
+        self.assertEqual(payload["security"], [{"bearerAuth": []}])
+        self.assertEqual(payload["paths"]["/health"]["get"]["security"], [])
+        self.assertEqual(payload["paths"]["/copilot-shell/"]["get"]["security"], [])
+        self.assertEqual(
+            payload["paths"]["/api/v1/host/assets"]["post"]["x-required-token"],
+            "host",
+        )
+        self.assertEqual(
+            payload["paths"]["/api/v1/host/session"]["delete"]["x-required-token"],
+            "host",
+        )
 
     def test_tools_endpoint_describes_agent_contracts(self) -> None:
         response = handle_request("GET", "/api/v1/tools")

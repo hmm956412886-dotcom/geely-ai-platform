@@ -48,6 +48,17 @@ python -m pip install -e .[agent]
 
 不安装该可选依赖或不配置模型时，`/api/v1/agent/query` 使用确定性只读工具选择器，Copilot 仍可离线演示。
 
+Gateway 默认只建议绑定 `127.0.0.1`。需要对局域网或其他宿主开放时设置：
+
+```powershell
+$env:AI_GATEWAY_ACCESS_TOKEN='高强度随机Token'
+$env:AI_GATEWAY_HOST_TOKEN='另一个高强度随机Token'
+```
+
+设置后全部 `/api/v1/*` 请求必须携带 Bearer Token。访问 Token 供 Copilot 使用；Host Token 只供可信桌面宿主注册本地文件，绝不放入 WebView URL。静态 Copilot、manifest、OpenAPI 和 `/health` 保持可加载。企业部署应在 HTTPS / OIDC 网关后运行，不把共享 Token 当成用户级 RBAC。
+
+Host 窗口或测试任务结束时调用 `DELETE /api/v1/host/session?host_session_id=...` 释放上下文和 asset 映射。默认上限为 256 个会话、每会话 32 个 asset，可通过配置模板中的环境变量调整。
+
 打开产品展示页：
 
 ```text

@@ -48,6 +48,8 @@ Write-Host "URL: http://$HostName`:$Port"
 Write-Host "Showcase: http://$HostName`:$Port/showcase"
 Write-Host "Copilot: http://$HostName`:$Port/copilot-shell/"
 Write-Host "Model configured: $([bool]($env:AI_MODEL_BASE_URL -and $env:AI_MODEL_API_KEY -and $env:AI_MODEL_NAME))"
+Write-Host "API access token configured: $([bool]$env:AI_GATEWAY_ACCESS_TOKEN)"
+Write-Host "Host token configured: $([bool]$env:AI_GATEWAY_HOST_TOKEN)"
 
 Push-Location $GatewayRoot
 try {
