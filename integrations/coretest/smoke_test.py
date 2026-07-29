@@ -33,7 +33,7 @@ def main() -> int:
             assert window.copilot.bridge.ready
             assert window.copilot.web.url().path() == "/copilot-shell/"
             page_text = str(text)
-            for label in ("CoreTest Copilot", "HK CoreTest", "添加文件", "生成测试"):
+            for label in ("CoreTest Copilot", "HK CoreTest", "添加参考文件", "生成测试"):
                 assert label in page_text, f"missing WebEngine content: {label}"
             base = window.copilot.bridge.base_url
             session = window.copilot.bridge.session_id

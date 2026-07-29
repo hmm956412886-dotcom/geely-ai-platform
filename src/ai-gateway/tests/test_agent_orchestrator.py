@@ -65,6 +65,21 @@ class AgentOrchestratorTest(unittest.TestCase):
 
     def test_deterministic_agent_forwards_gateway_access_token(self) -> None:
         session = "agent-auth"
+        handle_request(
+            "POST",
+            f"/api/v1/host/assets?host_session_id={session}",
+            json.dumps(
+                {
+                    "asset_id": "agent-auth-run",
+                    "file_path": str(FIXTURES / "test-run-cases.csv"),
+                }
+            ),
+        )
+        handle_request(
+            "POST",
+            f"/api/v1/host/context?host_session_id={session}",
+            json.dumps({"source_asset_id": "agent-auth-run"}),
+        )
         os.environ["AI_GATEWAY_ACCESS_TOKEN"] = "agent-secret"
         response = handle_request(
             "POST",

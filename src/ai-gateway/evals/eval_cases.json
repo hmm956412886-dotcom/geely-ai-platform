@@ -56,19 +56,20 @@
   {
     "name": "host_context_roundtrip",
     "method": "POST",
-    "path": "/api/v1/host/context",
+    "path": "/api/v1/host/context?host_session_id=eval-session",
     "body": {
-      "project_id": "GEELY_TEST",
+      "host_application": "HK CoreTest",
+      "project_id": "vehicle-eval",
       "run_id": "RUN_HOST_001",
       "source_asset_id": "eval-current",
       "target_asset_id": "eval-target",
-      "current_view": "test_result_detail",
+      "current_view": "测试结果 / 运行详情",
       "user_id": "tester"
     },
     "expect_status": 200,
     "expect": {
       "result.run_id": "RUN_HOST_001",
-      "result.current_view": "test_result_detail"
+      "result.current_view": "测试结果 / 运行详情"
     },
     "prefix": {
       "request_id": "req_"

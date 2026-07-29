@@ -28,6 +28,49 @@ class CopilotServiceTests(unittest.TestCase):
         self.assertEqual(payload["artifacts"], [])
         self.assertIn("config.json", completion.call_args.args[0][1]["content"])
 
+    @patch("ai_gateway.copilot_service.chat_completion", return_value="当前帧没有错误。")
+    def test_chat_includes_current_coretest_context_and_snapshot(self, completion) -> None:
+        session = "copilot-coretest-context"
+        handle_request(
+            "POST",
+            f"/api/v1/host/context?host_session_id={session}",
+            json.dumps(
+                {
+                    "host_application": "HK CoreTest",
+                    "project_id": "vehicle-a",
+                    "current_view": "TRACE / 实时CAN TRACE",
+                    "selection_kind": "trace",
+                    "selection_label": "0x123",
+                    "snapshot_revision": "9",
+                },
+                ensure_ascii=False,
+            ),
+        )
+        handle_request(
+            "POST",
+            f"/api/v1/host/snapshot?host_session_id={session}",
+            json.dumps(
+                {
+                    "kind": "trace",
+                    "revision": "9",
+                    "selection": {"frame_id": "0x123"},
+                    "data": {"total_frames": 20, "error_frames": 0},
+                }
+            ),
+        )
+
+        response = handle_request(
+            "POST",
+            f"/api/v1/copilot/query?host_session_id={session}",
+            json.dumps({"question": "当前帧有什么风险？"}, ensure_ascii=False),
+        )
+
+        prompt = "\n".join(message["content"] for message in completion.call_args.args[0])
+        self.assertEqual(response.status, 200)
+        self.assertIn("HK CoreTest", prompt)
+        self.assertIn("vehicle-a", prompt)
+        self.assertIn("0x123", prompt)
+
     @patch(
         "ai_gateway.copilot_service.chat_completion",
         return_value="```python\ndef test_value():\n    assert 1 == 1\n```",

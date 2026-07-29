@@ -32,12 +32,12 @@ ALLOWED_FIELDS = {
 }
 
 DEFAULT_CONTEXT = {
-    "host_application": "Demo Host",
-    "project_id": "GEELY_TEST",
-    "run_id": "RUN_CSV_001",
-    "source_asset_id": "demo-current",
-    "target_asset_id": "demo-target",
-    "current_view": "test_result_detail",
+    "host_application": None,
+    "project_id": None,
+    "run_id": None,
+    "source_asset_id": None,
+    "target_asset_id": None,
+    "current_view": None,
     "user_id": None,
     "selection_kind": None,
     "selection_label": None,

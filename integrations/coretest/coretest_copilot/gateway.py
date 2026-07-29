@@ -66,8 +66,13 @@ class GatewayBridge:
         self.start()
 
     def publish(self, context: dict[str, Any], snapshot: dict[str, Any]) -> None:
-        self.request("POST", "/api/v1/host/context", context)
-        self.request("POST", "/api/v1/host/snapshot", snapshot, privileged=True)
+        self.request(
+            "POST",
+            "/api/v1/host/snapshot",
+            snapshot,
+            privileged=True,
+            success=lambda _result: self.request("POST", "/api/v1/host/context", context),
+        )
 
     def release(self) -> None:
         if self.ready:

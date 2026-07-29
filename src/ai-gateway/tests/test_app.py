@@ -28,7 +28,7 @@ class AppTests(unittest.TestCase):
         self.assertEqual(response.status, 200)
         self.assertEqual(json.loads(response.body)["status"], "ok")
 
-    def test_test_data_summary_returns_demo_shape(self) -> None:
+    def test_test_data_summary_requires_real_source(self) -> None:
         response = handle_request(
             "POST",
             "/api/v1/test-data/summary",
@@ -36,10 +36,9 @@ class AppTests(unittest.TestCase):
         )
 
         payload = json.loads(response.body)
-        self.assertEqual(response.status, 200)
-        self.assertEqual(payload["result"]["run_id"], "RUN_X")
-        self.assertEqual(payload["result"]["passed_cases"], 8)
-        self.assertEqual(payload["result"]["metrics"]["pass_rate"], 0.8)
+        self.assertEqual(response.status, 400)
+        self.assertEqual(payload["error"]["code"], "bad_request")
+        self.assertIn("source_file or source_asset_id is required", payload["error"]["message"])
 
     def test_test_data_summary_reads_source_file(self) -> None:
         response = handle_request(
@@ -57,7 +56,12 @@ class AppTests(unittest.TestCase):
         response = handle_request(
             "POST",
             "/api/v1/analyze",
-            json.dumps({"question": "分析失败原因"}),
+            json.dumps(
+                {
+                    "question": "分析失败原因",
+                    "source_file": str(FIXTURES / "test-run-cases.json"),
+                }
+            ),
         )
 
         payload = json.loads(response.body)
@@ -82,7 +86,12 @@ class AppTests(unittest.TestCase):
         response = handle_request(
             "POST",
             "/api/v1/analyze",
-            json.dumps({"use_model": True}),
+            json.dumps(
+                {
+                    "source_file": str(FIXTURES / "test-run-cases.json"),
+                    "use_model": True,
+                }
+            ),
         )
 
         payload = json.loads(response.body)
@@ -219,6 +228,19 @@ class AppTests(unittest.TestCase):
         self.assertEqual(read.status, 200)
         self.assertEqual(update_payload["result"]["run_id"], "RUN_HOST_001")
         self.assertEqual(read_payload["result"]["source_file"], str(FIXTURES / "test-run-cases.csv"))
+
+    def test_new_host_session_has_no_demo_context(self) -> None:
+        response = handle_request(
+            "GET", "/api/v1/host/context?host_session_id=unconnected-copilot"
+        )
+
+        context = json.loads(response.body)["result"]
+        self.assertEqual(response.status, 200)
+        self.assertIsNone(context["host_application"])
+        self.assertIsNone(context["project_id"])
+        self.assertIsNone(context["current_view"])
+        self.assertNotIn("GEELY_TEST", response.body)
+        self.assertNotIn("test_result_detail", response.body)
 
     def test_host_snapshot_roundtrip_and_trace_analysis(self) -> None:
         session = "coretest-trace"
@@ -484,9 +506,15 @@ class AppTests(unittest.TestCase):
         self.assertIn("unsupported host context fields", payload["error"]["message"])
 
     def test_audit_events_record_successful_api_request(self) -> None:
+        session = "audit-coretest"
         handle_request(
             "POST",
-            "/api/v1/analyze",
+            f"/api/v1/host/context?host_session_id={session}",
+            json.dumps({"host_application": "HK CoreTest", "project_id": "vehicle-a"}),
+        )
+        handle_request(
+            "POST",
+            f"/api/v1/analyze?host_session_id={session}",
             json.dumps({"source_file": str(FIXTURES / "test-run-cases.csv")}),
         )
         response = handle_request("GET", "/api/v1/audit/events")
@@ -498,7 +526,7 @@ class AppTests(unittest.TestCase):
         self.assertEqual(event["path"], "/api/v1/analyze")
         self.assertEqual(event["status"], 200)
         self.assertTrue(event["request_id"].startswith("req_"))
-        self.assertEqual(event["project_id"], "GEELY_TEST")
+        self.assertEqual(event["project_id"], "vehicle-a")
 
     def test_audit_events_record_error_code(self) -> None:
         handle_request("POST", "/api/v1/analyze", "{bad")

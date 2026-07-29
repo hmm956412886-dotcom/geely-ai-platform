@@ -185,7 +185,11 @@ def _handle_request(
             return error_response("agent_unavailable", str(exc), status=502)
     if method == "POST" and path == "/api/v1/copilot/query":
         try:
-            result = run_copilot(_read_json(body))
+            result = run_copilot(
+                _read_json(body),
+                host_context=get_host_context(host_session_id),
+                host_snapshot=get_host_snapshot(host_session_id),
+            )
             return json_response({"request_id": _request_id(), **result})
         except RuntimeError as exc:
             return error_response("model_unavailable", str(exc), status=502)
@@ -299,37 +303,7 @@ def _test_data_summary(
         result = load_test_run_summary(source_file)
         _mask_asset_source(result, source_asset_id)
         return {"request_id": _request_id(), "result": result}
-
-    run_id = str(payload.get("run_id") or "RUN_DEMO_001")
-    source_ref = str(payload.get("source_ref") or "demo-fixture.json")
-    total_cases = int(payload.get("total_cases") or 120)
-    failed_cases = int(payload.get("failed_cases") or 12)
-    passed_cases = max(total_cases - failed_cases, 0)
-    pass_rate = round(passed_cases / total_cases, 4) if total_cases else 0
-    return {
-        "request_id": _request_id(),
-        "result": {
-            "run_id": run_id,
-            "source": {"type": "json", "ref": source_ref},
-            "project_id": payload.get("project_id", "GEELY_TEST"),
-            "status": "failed" if failed_cases else "passed",
-            "started_at": payload.get("started_at"),
-            "finished_at": payload.get("finished_at"),
-            "total_cases": total_cases,
-            "passed_cases": passed_cases,
-            "failed_cases": failed_cases,
-            "metrics": {"pass_rate": pass_rate},
-            "failures": [
-                {
-                    "case_id": "TC_001",
-                    "name": "动力响应测试",
-                    "reason": "扭矩误差超过阈值",
-                }
-            ]
-            if failed_cases
-            else [],
-        },
-    }
+    raise ValueError("source_file or source_asset_id is required")
 
 
 def _test_data_compare(

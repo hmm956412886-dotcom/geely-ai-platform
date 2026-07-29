@@ -45,18 +45,17 @@ const MarkdownText = makeMarkdownText();
 
 const emptyContext: HostContext = {
   host_session_id: hostSessionId,
-  project_id: "未连接",
-  run_id: "未选择",
-  current_view: "",
-  user_id: "",
+  project_id: null,
+  run_id: null,
+  current_view: null,
+  user_id: null,
 };
 
 const initialMessages: ChatMessage[] = [
   {
     id: crypto.randomUUID(),
     role: "assistant",
-    content:
-      "我是 CoreTest Copilot。你可以直接提问，或添加代码、配置、DBC、ASC 等文本文件，让我基于文件生成 pytest 测试代码。",
+    content: "你好，我是 CoreTest Copilot。",
   },
 ];
 
@@ -102,6 +101,16 @@ function formatCopilotResponse(payload: CopilotResponse): string {
   return `${payload.answer}${generated}\n\n\`request_id: ${payload.request_id}\``;
 }
 
+function currentDataLabel(context: HostContext): string {
+  const labels: Record<string, string> = {
+    trace: "Trace",
+    dbc: "DBC",
+    diagnostic: "诊断",
+    project: "项目",
+  };
+  return labels[context.selection_kind ?? ""] ?? "数据";
+}
+
 export default function App() {
   const [context, setContext] = useState<HostContext>(emptyContext);
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
@@ -110,6 +119,9 @@ export default function App() {
   const [attachments, setAttachments] = useState<CopilotAttachment[]>([]);
   const [artifacts, setArtifacts] = useState<CopilotArtifact[]>([]);
   const fileInput = useRef<HTMLInputElement>(null);
+  const hostConnected = Boolean(context.host_application);
+  const hasCurrentData = Boolean(context.selection_kind && context.snapshot_revision);
+  const dataLabel = currentDataLabel(context);
 
   const appendAssistant = useCallback((content: string) => {
     setMessages((current) => [...current, assistantMessage(content)]);
@@ -140,6 +152,13 @@ export default function App() {
   useEffect(() => {
     void refreshContext();
   }, [refreshContext]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      void gatewayClient.getHostContext().then(setContext).catch(() => undefined);
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     const receiveHostContext = (event: MessageEvent<HostContextMessage>) => {
@@ -226,13 +245,20 @@ export default function App() {
     URL.revokeObjectURL(url);
   }, []);
 
-  const suggestions = useMemo(
-    () => [
-      { title: "解释当前文件", message: "解释已添加文件的主要逻辑和风险。", isLoading: false },
-      { title: "生成测试", message: "基于已添加文件生成覆盖关键分支的 pytest 测试。", isLoading: false },
-    ],
-    [],
-  );
+  const suggestions = useMemo(() => {
+    if (attachments.length) {
+      return [
+        { title: "解释参考文件", message: "解释已添加参考文件的主要逻辑和风险。", isLoading: false },
+        { title: "生成测试", message: "基于已添加参考文件生成覆盖关键分支的 pytest 测试。", isLoading: false },
+      ];
+    }
+    if (hasCurrentData) {
+      return [
+        { title: `分析当前 ${dataLabel}`, message: `分析当前 ${dataLabel} 的异常和风险。`, isLoading: false },
+      ];
+    }
+    return [];
+  }, [attachments.length, dataLabel, hasCurrentData]);
 
   const runtime = useExternalStoreRuntime<ChatMessage>({
     messages,
@@ -255,7 +281,7 @@ export default function App() {
             </span>
             <div className="brand-copy">
               <h1>CoreTest Copilot</h1>
-              <p>{context.host_application || "AI Gateway"}</p>
+              <p>{context.host_application || "未连接 CoreTest"}</p>
             </div>
           </div>
           <Tooltip content="刷新宿主上下文" relationship="label">
@@ -270,18 +296,26 @@ export default function App() {
         </header>
 
         <section className="context-strip" aria-label="宿主上下文">
-          <div className="context-main">
-            <div>
-              <span className="context-label">项目</span>
-              <strong>{context.project_id}</strong>
+          {hostConnected ? (
+            <div className="context-main">
+              <div>
+                <span className="context-label">项目</span>
+                <strong>{context.project_id || "未打开项目"}</strong>
+              </div>
+              <div>
+                <span className="context-label">当前数据</span>
+                <strong>{context.selection_label || context.current_view || "未选择"}</strong>
+              </div>
             </div>
-            <div>
-              <span className="context-label">当前视图</span>
-              <strong>{context.selection_label || context.current_view || "未选择"}</strong>
-            </div>
-          </div>
-          <Badge appearance="tint" color="success" icon={<ShieldCheckmark20Regular />}>
-            只读
+          ) : (
+            <div className="context-empty">未连接 CoreTest</div>
+          )}
+          <Badge
+            appearance="tint"
+            color={hostConnected ? "success" : "informative"}
+            icon={hostConnected ? <ShieldCheckmark20Regular /> : undefined}
+          >
+            {hostConnected ? "只读" : "独立模式"}
           </Badge>
         </section>
 
@@ -289,10 +323,10 @@ export default function App() {
           <Button
             appearance="secondary"
             icon={<ChartMultiple20Regular />}
-            disabled={isRunning}
-            onClick={() => void analyze("分析当前测试失败原因，并给出下一步排查建议。")}
+            disabled={isRunning || !hasCurrentData}
+            onClick={() => void analyze(`分析当前 ${dataLabel} 的异常和风险，并给出下一步排查建议。`)}
           >
-            分析当前界面
+            分析当前 {dataLabel}
           </Button>
           <input
             ref={fileInput}
@@ -308,13 +342,13 @@ export default function App() {
             disabled={isRunning}
             onClick={() => fileInput.current?.click()}
           >
-            添加文件
+            添加参考文件
           </Button>
           <Button
             appearance="primary"
             icon={<Code20Regular />}
             disabled={isRunning || attachments.length === 0}
-            onClick={() => void askCopilot("基于已添加文件生成可运行的 pytest 测试代码。", "generate_test")}
+            onClick={() => void askCopilot("基于已添加参考文件生成可运行的 pytest 测试代码。", "generate_test")}
           >
             生成测试
           </Button>
@@ -366,7 +400,13 @@ export default function App() {
               strings={{
                 thread: { scrollToBottom: { tooltip: "滚动到底部" } },
                 composer: {
-                  input: { placeholder: attachments.length ? "询问已添加文件..." : "询问 CoreTest 或当前项目..." },
+                  input: {
+                    placeholder: attachments.length
+                      ? "询问参考文件..."
+                      : hostConnected
+                        ? "询问当前 CoreTest 数据..."
+                        : "输入问题...",
+                  },
                   send: { tooltip: "发送" },
                   cancel: { tooltip: "停止" },
                 },

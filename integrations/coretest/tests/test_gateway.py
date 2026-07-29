@@ -4,10 +4,26 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
 
-from coretest_copilot.gateway import _load_env_values
+from coretest_copilot.gateway import GatewayBridge, _load_env_values
 
 
 class GatewayConfigTests(unittest.TestCase):
+    def test_publish_updates_context_only_after_snapshot_succeeds(self) -> None:
+        bridge = GatewayBridge.__new__(GatewayBridge)
+        calls = []
+
+        def request(method, path, payload=None, *, privileged=False, success=None):
+            calls.append((method, path, payload, privileged))
+            if success:
+                success({"result": payload})
+
+        bridge.request = request
+        bridge.publish({"selection_kind": "dbc"}, {"kind": "dbc", "revision": "2"})
+
+        self.assertEqual([call[1] for call in calls], ["/api/v1/host/snapshot", "/api/v1/host/context"])
+        self.assertTrue(calls[0][3])
+        self.assertFalse(calls[1][3])
+
     def test_load_env_values_reads_only_assignments(self) -> None:
         with TemporaryDirectory() as directory:
             path = Path(directory) / ".env"

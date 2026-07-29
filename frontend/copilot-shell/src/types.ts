@@ -1,18 +1,18 @@
 export interface HostContext {
   host_session_id: string;
-  host_application?: string;
-  project_id: string;
-  run_id: string;
-  source_asset_id?: string;
-  target_asset_id?: string;
-  baseline_asset_id?: string;
-  source_file?: string;
-  target_file?: string;
-  current_view: string;
-  user_id: string;
-  selection_kind?: string;
-  selection_label?: string;
-  snapshot_revision?: string;
+  host_application?: string | null;
+  project_id: string | null;
+  run_id: string | null;
+  source_asset_id?: string | null;
+  target_asset_id?: string | null;
+  baseline_asset_id?: string | null;
+  source_file?: string | null;
+  target_file?: string | null;
+  current_view: string | null;
+  user_id: string | null;
+  selection_kind?: string | null;
+  selection_label?: string | null;
+  snapshot_revision?: string | null;
 }
 
 export interface HostContextMessage {
