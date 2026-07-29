@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import deque
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import ModuleType, SimpleNamespace
@@ -45,18 +46,21 @@ class GeneratedTestSaveTests(unittest.TestCase):
 
 
 class RuntimeBufferTests(unittest.TestCase):
-    def test_live_frames_keep_only_latest_ten_thousand(self) -> None:
+    def test_live_frame_deque_remains_bounded(self) -> None:
         copilot = CoreTestCopilot.__new__(CoreTestCopilot)
-        copilot.live_frames = []
+        copilot.live_frames = deque(maxlen=10_000)
 
         copilot._remember_live_frames(list(range(10_050)))
 
         self.assertEqual(len(copilot.live_frames), 10_000)
         self.assertEqual(copilot.live_frames[0], 50)
 
-    def test_diagnostic_logs_keep_only_latest_hundred(self) -> None:
+    def test_diagnostic_log_deque_remains_bounded(self) -> None:
         copilot = CoreTestCopilot.__new__(CoreTestCopilot)
-        copilot.diag_logs = [{"message": str(index)} for index in range(100)]
+        copilot.diag_logs = deque(
+            ({"message": str(index)} for index in range(100)),
+            maxlen=100,
+        )
 
         copilot._diag_info("latest")
 

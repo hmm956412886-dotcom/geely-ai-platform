@@ -26,10 +26,6 @@ from .gateway import GatewayBridge
 from .snapshots import dbc_snapshot, diagnostic_snapshot, pdx_snapshot, project_snapshot, trace_snapshot
 
 
-MAX_LIVE_FRAMES = 10_000
-MAX_DIAGNOSTIC_LOGS = 100
-
-
 class CoreTestCopilot:
     def __init__(self, window: Any) -> None:
         self.window = window
@@ -308,28 +304,23 @@ class CoreTestCopilot:
         self._publish(snapshot, selection_label=ecu or "诊断任务")
 
     def _diag_request(self, ecu: str, service: str, request: bytes, tx_id: int, rx_id: int) -> None:
-        self._remember_diag_log(
+        self.diag_logs.append(
             {"type": "request", "ecu": ecu, "service": service, "payload_hex": request.hex(" ").upper(), "tx_id": f"0x{tx_id:X}", "rx_id": f"0x{rx_id:X}"}
         )
         self.publish_diagnostic(self.diag_pdx, ecu or self.diag_ecu)
 
     def _diag_response(self, ecu: str, service: str, response: bytes, positive: bool, tx_id: int, rx_id: int) -> None:
         nrc = f"0x{response[2]:02X}" if not positive and len(response) > 2 else None
-        self._remember_diag_log(
+        self.diag_logs.append(
             {"type": "response", "ecu": ecu, "service": service, "payload_hex": response.hex(" ").upper(), "is_positive": positive, "nrc": nrc, "tx_id": f"0x{tx_id:X}", "rx_id": f"0x{rx_id:X}"}
         )
         self.publish_diagnostic(self.diag_pdx, ecu or self.diag_ecu)
 
     def _diag_info(self, message: str) -> None:
-        self._remember_diag_log({"type": "info", "message": str(message)[:1000]})
-
-    def _remember_diag_log(self, entry: dict[str, Any]) -> None:
-        self.diag_logs.append(entry)
-        del self.diag_logs[:-MAX_DIAGNOSTIC_LOGS]
+        self.diag_logs.append({"type": "info", "message": str(message)[:1000]})
 
     def _remember_live_frames(self, frames: list[Any]) -> None:
         self.live_frames.extend(frames)
-        del self.live_frames[:-MAX_LIVE_FRAMES]
 
     def _save_generated_file(self, download: Any) -> None:
         from app.service import project_runtime_service
