@@ -6,8 +6,9 @@ from dataclasses import dataclass
 import json
 import os
 from typing import Any, Callable
-from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
+from urllib.request import Request
+
+import httpx
 
 
 Transport = Callable[[Request, float], bytes]
@@ -79,7 +80,7 @@ def chat_completion(
         },
         method="POST",
     )
-    raw = (transport or _urlopen_transport)(request, config.timeout_seconds)
+    raw = (transport or _httpx_transport)(request, config.timeout_seconds)
     response = json.loads(raw.decode("utf-8"))
     if config.wire_api == "responses":
         return _responses_text(response)
@@ -140,12 +141,17 @@ def _responses_text(response: dict[str, Any]) -> str:
     raise ValueError("model api returned an unsupported response shape")
 
 
-def _urlopen_transport(request: Request, timeout: float) -> bytes:
+def _httpx_transport(request: Request, timeout: float) -> bytes:
     try:
-        with urlopen(request, timeout=timeout) as response:
-            return response.read()
-    except HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="replace")
-        raise ValueError(f"model api http error {exc.code}: {detail}") from exc
-    except URLError as exc:
-        raise ValueError(f"model api request failed: {exc.reason}") from exc
+        response = httpx.request(
+            request.get_method(),
+            request.full_url,
+            content=request.data,
+            headers=dict(request.header_items()),
+            timeout=timeout,
+        )
+    except httpx.RequestError as exc:
+        raise ValueError(f"model api request failed: {exc}") from exc
+    if response.is_error:
+        raise ValueError(f"model api http error {response.status_code}: {response.text}")
+    return response.content
