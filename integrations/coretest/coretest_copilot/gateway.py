@@ -156,7 +156,16 @@ class GatewayBridge:
     ) -> None:
         raw = bytes(reply.readAll())
         ok = reply.error() == QNetworkReply.NetworkError.NoError
+        error_message = reply.errorString()
         reply.deleteLater()
+        if not ok:
+            try:
+                payload = json.loads(raw.decode("utf-8"))
+                message = payload.get("error", {}).get("message")
+            except (AttributeError, UnicodeDecodeError, json.JSONDecodeError):
+                message = None
+            self._fail(str(message or error_message or "AI Gateway 请求失败"))
+            return
         if ok and success:
             try:
                 success(json.loads(raw.decode("utf-8")))

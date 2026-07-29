@@ -5,7 +5,8 @@ from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import patch
 
-from PySide6.QtCore import QUrl
+from PySide6.QtCore import QByteArray, QUrl
+from PySide6.QtNetwork import QNetworkReply
 
 from coretest_copilot.gateway import (
     GatewayBridge,
@@ -92,6 +93,22 @@ class GatewayConfigTests(unittest.TestCase):
             _server_arguments("http://127.0.0.1:8877"),
             ["--host", "127.0.0.1", "--port", "8877"],
         )
+
+    def test_gateway_error_response_is_reported_to_host(self) -> None:
+        bridge = GatewayBridge.__new__(GatewayBridge)
+        errors = []
+        bridge._error_callbacks = [errors.append]
+        reply = unittest.mock.Mock()
+        reply.readAll.return_value = QByteArray(
+            b'{"error":{"message":"snapshot exceeds size limit"}}'
+        )
+        reply.error.return_value = QNetworkReply.NetworkError.ConnectionRefusedError
+        reply.errorString.return_value = "connection refused"
+
+        bridge._finished(reply, None)
+
+        self.assertEqual(errors, ["snapshot exceeds size limit"])
+        reply.deleteLater.assert_called_once_with()
 
 
 if __name__ == "__main__":

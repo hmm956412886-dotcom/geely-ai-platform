@@ -65,7 +65,7 @@ def chat_completion(
         api_key=config.api_key,
         base_url=_openai_base_url(config.base_url or ""),
         timeout=config.timeout_seconds,
-        max_retries=2,
+        max_retries=0,
     )
     try:
         if config.wire_api == "responses":

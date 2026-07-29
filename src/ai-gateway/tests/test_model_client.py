@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 import json
 import unittest
+from unittest.mock import patch
 
 from ai_gateway.model_client import ModelConfig, chat_completion, load_model_config
 
@@ -64,6 +65,25 @@ class ModelClientTests(unittest.TestCase):
     def test_chat_completion_rejects_missing_config(self) -> None:
         with self.assertRaisesRegex(ValueError, "not configured"):
             chat_completion([], config=ModelConfig(None, None, None))
+
+    @patch("ai_gateway.model_client.OpenAI")
+    def test_chat_completion_does_not_retry_slow_generation(self, openai) -> None:
+        openai.return_value = FakeClient()
+        config = ModelConfig(
+            "https://api.example.com/v1",
+            "secret",
+            "demo-model",
+            timeout_seconds=45,
+        )
+
+        chat_completion([{"role": "user", "content": "生成测试"}], config=config)
+
+        openai.assert_called_once_with(
+            api_key="secret",
+            base_url="https://api.example.com/v1",
+            timeout=45,
+            max_retries=0,
+        )
 
     def test_responses_api_disables_storage_and_sets_reasoning(self) -> None:
         client = FakeClient()
