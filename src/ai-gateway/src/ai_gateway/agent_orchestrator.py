@@ -31,7 +31,11 @@ def run_agent_query(
 
     tools = _read_tools(base_url, host_session_id)
     config = load_model_config()
-    if config.is_configured and os.getenv("AI_AGENT_MODE", "semantic-kernel") != "deterministic":
+    if (
+        config.is_configured
+        and config.wire_api == "chat_completions"
+        and os.getenv("AI_AGENT_MODE", "semantic-kernel") != "deterministic"
+    ):
         try:
             return asyncio.run(
                 _run_semantic_kernel(question, context, tools, base_url, host_session_id, config)
