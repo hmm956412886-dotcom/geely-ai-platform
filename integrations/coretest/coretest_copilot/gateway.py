@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import sys
 from typing import Any, Callable
+from urllib.parse import urlsplit
 from uuid import uuid4
 
 from PySide6.QtCore import QByteArray, QProcess, QProcessEnvironment, QTimer, QUrl
@@ -23,16 +24,18 @@ class GatewayBridge:
         self._attempts = 0
         self._ready_callbacks: list[Callable[[], None]] = []
         self._error_callbacks: list[Callable[[str], None]] = []
+        self._access_token = os.getenv("AI_GATEWAY_ACCESS_TOKEN", "").strip()
+        self._host_token = os.getenv("AI_GATEWAY_HOST_TOKEN", "").strip()
         self._poll = QTimer(parent)
         self._poll.setInterval(350)
         self._poll.timeout.connect(self._check_health)
 
     @property
     def copilot_url(self) -> QUrl:
-        token = os.getenv("AI_GATEWAY_ACCESS_TOKEN", "").strip()
         url = f"{self.base_url}/copilot-shell/?host_session_id={self.session_id}"
-        if token:
-            url += f"#access_token={QUrl.toPercentEncoding(token).data().decode()}"
+        if self._access_token:
+            encoded = QUrl.toPercentEncoding(self._access_token).data().decode()
+            url += f"#access_token={encoded}"
         return QUrl(url)
 
     def on_ready(self, callback: Callable[[], None]) -> None:
@@ -44,19 +47,38 @@ class GatewayBridge:
     def start(self) -> None:
         if self.ready:
             return
+        gateway_executable = _gateway_executable()
         gateway_src = _gateway_src()
-        if gateway_src is None:
-            self._fail("未找到 AI Gateway。请设置 CORETEST_AI_PLATFORM_ROOT。")
+        if gateway_executable is None and gateway_src is None:
+            self._fail(
+                "未找到 AI Gateway。请安装 Sidecar，或设置 CORETEST_AI_GATEWAY_EXE / "
+                "CORETEST_AI_PLATFORM_ROOT。"
+            )
             return
         environment = QProcessEnvironment.systemEnvironment()
-        for name, value in _load_env_values(gateway_src.parents[2] / ".env").items():
+        env_path = (
+            gateway_executable.parent / ".env"
+            if gateway_executable is not None
+            else gateway_src.parents[2] / ".env"
+        )
+        for name, value in _load_env_values(env_path).items():
             if value and not environment.contains(name):
                 environment.insert(name, value)
-        current = environment.value("PYTHONPATH")
-        environment.insert("PYTHONPATH", f"{gateway_src}{os.pathsep}{current}" if current else str(gateway_src))
+        self._access_token = environment.value("AI_GATEWAY_ACCESS_TOKEN").strip()
+        self._host_token = environment.value("AI_GATEWAY_HOST_TOKEN").strip()
         environment.insert("PYTHONUNBUFFERED", "1")
         self.process.setProcessEnvironment(environment)
-        self.process.start(sys.executable, ["-m", "ai_gateway.server", "--port", "8765"])
+        server_args = _server_arguments(self.base_url)
+        if gateway_executable is not None:
+            self.process.start(str(gateway_executable), server_args)
+        else:
+            current = environment.value("PYTHONPATH")
+            environment.insert(
+                "PYTHONPATH",
+                f"{gateway_src}{os.pathsep}{current}" if current else str(gateway_src),
+            )
+            self.process.setProcessEnvironment(environment)
+            self.process.start(sys.executable, ["-m", "ai_gateway.server", *server_args])
         self._attempts = 0
         self._poll.start()
 
@@ -98,8 +120,7 @@ class GatewayBridge:
         separator = "&" if "?" in path else "?"
         request = QNetworkRequest(QUrl(f"{self.base_url}{path}{separator}host_session_id={self.session_id}"))
         request.setHeader(QNetworkRequest.KnownHeaders.ContentTypeHeader, "application/json")
-        token_name = "AI_GATEWAY_HOST_TOKEN" if privileged else "AI_GATEWAY_ACCESS_TOKEN"
-        token = os.getenv(token_name, "").strip()
+        token = self._host_token if privileged else self._access_token
         if token:
             request.setRawHeader(b"Authorization", f"Bearer {token}".encode())
         body = QByteArray(json.dumps(payload or {}, ensure_ascii=False).encode("utf-8"))
@@ -156,6 +177,30 @@ def _gateway_src() -> Path | None:
         if (source / "ai_gateway" / "server.py").is_file():
             return source
     return None
+
+
+def _gateway_executable() -> Path | None:
+    configured = os.getenv("CORETEST_AI_GATEWAY_EXE", "").strip()
+    candidates = [Path(configured)] if configured else []
+    app_dir = Path(sys.executable).resolve().parent
+    candidates.extend(
+        (
+            app_dir / "ai-gateway" / "geely-ai-gateway.exe",
+            app_dir / "geely-ai-gateway" / "geely-ai-gateway.exe",
+            app_dir / "geely-ai-gateway.exe",
+        )
+    )
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate.resolve()
+    return None
+
+
+def _server_arguments(base_url: str) -> list[str]:
+    parsed = urlsplit(base_url)
+    host = parsed.hostname or "127.0.0.1"
+    port = parsed.port or 8765
+    return ["--host", host, "--port", str(port)]
 
 
 def _load_env_values(path: Path) -> dict[str, str]:

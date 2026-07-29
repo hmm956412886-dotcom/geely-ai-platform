@@ -4,14 +4,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
+import os
 from pathlib import Path
+import sys
 from typing import Any, Mapping
 from urllib.parse import parse_qs, unquote, urlsplit
 from uuid import uuid4
 
 from .audit_log import append_audit_event, list_audit_events
 from .access_control import access_control_enabled, is_authorized, is_host_authorized
-from .agent_orchestrator import run_agent_query
 from .copilot_service import run_copilot
 from .host_assets import register_host_asset, release_host_assets, resolve_host_asset
 from .host_context import (
@@ -27,10 +28,8 @@ from .host_snapshot import (
     release_host_snapshot,
     update_host_snapshot,
 )
-from .knowledge_provider import query_knowledge as query_knowledge_provider
 from .model_client import chat_completion, load_model_config
 from .test_data_adapter import compare_test_runs, load_test_data_insights, load_test_run_summary
-from .tool_registry import list_tools, manifest_operations
 
 
 @dataclass(frozen=True)
@@ -98,22 +97,18 @@ def _handle_request(
 ) -> Response:
     if method == "GET" and path == "/health":
         return json_response({"status": "ok", "service": "geely-ai-gateway"})
-    if method == "GET" and path == "/demo":
-        return Response(200, _demo_html(), "text/html; charset=utf-8")
     if method == "GET" and path == "/showcase":
         return Response(200, _showcase_html(), "text/html; charset=utf-8")
     if method == "GET" and path == "/copilot":
-        return Response(200, _copilot_html(), "text/html; charset=utf-8")
+        return _copilot_shell_file("index.html")
     if method == "GET" and (path == "/copilot-shell" or path == "/copilot-shell/"):
         return _copilot_shell_file("index.html")
     if method == "GET" and path.startswith("/copilot-shell/"):
         return _copilot_shell_file(unquote(path.removeprefix("/copilot-shell/")))
     if method == "GET" and path == "/openapi.json":
-        return json_response(_openapi())
+        return json_response(_contract_json("ai-gateway.openapi.json"))
     if method == "GET" and path == "/plugin-manifest.json":
-        return json_response(_plugin_manifest())
-    if method == "GET" and path == "/api/v1/tools":
-        return json_response({"request_id": _request_id(), "result": {"tools": list_tools()}})
+        return json_response(_contract_json("host-plugin.manifest.json"))
     if method == "GET" and path == "/api/v1/model/config":
         return json_response({"request_id": _request_id(), "result": load_model_config().public_dict()})
     if method == "GET" and path == "/api/v1/host/context":
@@ -169,20 +164,6 @@ def _handle_request(
         return json_response(_test_data_compare(_read_json(body), host_session_id))
     if method == "POST" and path == "/api/v1/test-data/insights":
         return json_response(_test_data_insights(_read_json(body), host_session_id))
-    if method == "POST" and path == "/api/v1/knowledge/query":
-        return json_response(_knowledge_query(_read_json(body)))
-    if method == "POST" and path == "/api/v1/agent/query":
-        payload = _read_json(body)
-        try:
-            return json_response(
-                run_agent_query(
-                    str(payload.get("question") or ""),
-                    get_host_context(host_session_id),
-                    host_session_id=host_session_id,
-                )
-            )
-        except RuntimeError as exc:
-            return error_response("agent_unavailable", str(exc), status=502)
     if method == "POST" and path == "/api/v1/copilot/query":
         try:
             result = run_copilot(
@@ -236,7 +217,22 @@ def _copilot_shell_file(relative_path: str) -> Response:
     return Response(200, target.read_bytes(), content_type)
 
 
+def _contract_json(name: str) -> dict[str, Any]:
+    try:
+        value = json.loads((_repo_root() / "contracts" / name).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RuntimeError(f"Gateway contract is unavailable: {name}") from exc
+    if not isinstance(value, dict):
+        raise RuntimeError(f"Gateway contract is invalid: {name}")
+    return value
+
+
 def _repo_root() -> Path:
+    configured = os.getenv("AI_GATEWAY_ASSET_ROOT", "").strip()
+    if configured:
+        return Path(configured).resolve()
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+        return Path(sys._MEIPASS)
     current = Path(__file__).resolve()
     for parent in current.parents:
         if (parent / "frontend" / "copilot-shell").exists():
@@ -263,7 +259,7 @@ def _content_type(suffix: str) -> str:
 def _append_request_audit(
     method: str, path: str, response: Response, host_session_id: str | None = None
 ) -> None:
-    if not path.startswith("/api/v1/") or path in {"/api/v1/audit/events", "/api/v1/tools"}:
+    if not path.startswith("/api/v1/") or path == "/api/v1/audit/events":
         return
     assert isinstance(response.body, str)
     payload = json.loads(response.body)
@@ -332,11 +328,6 @@ def _test_data_insights(
     return {"request_id": _request_id(), "result": result}
 
 
-def _knowledge_query(payload: dict[str, Any]) -> dict[str, Any]:
-    query = str(payload.get("query") or "动力系统测试规范")
-    return {"request_id": _request_id(), **query_knowledge_provider(query)}
-
-
 def _analyze(payload: dict[str, Any], host_session_id: str | None = None) -> dict[str, Any]:
     question = str(payload.get("question") or "分析本次测试失败原因")
     summary_payload = payload.get("test_data", {})
@@ -347,26 +338,20 @@ def _analyze(payload: dict[str, Any], host_session_id: str | None = None) -> dic
             if payload.get(key)
         }
     summary = _test_data_summary(summary_payload, host_session_id)
-    knowledge = _knowledge_query({"query": payload.get("knowledge_query", question)})
     result = summary["result"]
     answer = _fallback_analysis_answer(result)
     model_warning = None
     if payload.get("use_model"):
         try:
-            answer = chat_completion(_analysis_messages(question, result, knowledge["citations"]))
+            answer = chat_completion(_analysis_messages(question, result))
         except ValueError as exc:
             model_warning = str(exc)
     return {
         "request_id": _request_id(),
         "answer": answer,
         "data": result,
-        "citations": knowledge["citations"],
+        "citations": [],
         "warnings": [model_warning] if model_warning else [],
-        "next_actions": [
-            "用客户真实导出文件替换当前 fixture",
-            "接入真实 lark-cli 检索结果",
-            "把该接口嵌入客户软件 WebView 或插件按钮",
-        ],
         "question": question,
     }
 
@@ -404,7 +389,6 @@ def _fallback_analysis_answer(result: dict[str, Any]) -> str:
 def _analysis_messages(
     question: str,
     result: dict[str, Any],
-    citations: list[dict[str, Any]],
 ) -> list[dict[str, str]]:
     return [
         {
@@ -414,7 +398,7 @@ def _analysis_messages(
         {
             "role": "user",
             "content": json.dumps(
-                {"question": question, "test_data": result, "citations": citations},
+                {"question": question, "test_data": result},
                 ensure_ascii=False,
             ),
         },
@@ -423,282 +407,6 @@ def _analysis_messages(
 
 def _request_id() -> str:
     return f"req_{uuid4().hex}"
-
-
-def _demo_html() -> str:
-    return """<!doctype html>
-<html lang="zh-CN">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Geely AI Gateway MVP</title>
-  <style>
-    body { font-family: "Segoe UI", Arial, sans-serif; margin: 0; color: #1f2937; background: #f6f7f9; }
-    main { max-width: 980px; margin: 0 auto; padding: 28px; }
-    h1 { font-size: 28px; margin: 0 0 8px; }
-    .layout { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 20px; }
-    section { background: white; border: 1px solid #d8dee8; border-radius: 8px; padding: 16px; }
-    textarea { width: 100%; min-height: 120px; resize: vertical; box-sizing: border-box; }
-    button { height: 36px; padding: 0 14px; margin-top: 10px; cursor: pointer; }
-    pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #101827; color: #e5edf7; padding: 12px; border-radius: 6px; min-height: 260px; }
-    @media (max-width: 760px) { .layout { grid-template-columns: 1fr; } }
-  </style>
-</head>
-<body>
-  <main>
-    <h1>Geely AI Gateway MVP</h1>
-    <p>外置 AI Runtime 演示页，可嵌入客户软件 WebView。当前返回演示数据，接口形态保持稳定。</p>
-    <div class="layout">
-      <section>
-        <label for="question">分析问题</label>
-        <textarea id="question">分析本次动力系统测试失败原因，并结合飞书规范给出建议。</textarea>
-        <button id="run">运行分析</button>
-      </section>
-      <section>
-        <strong>结果</strong>
-        <pre id="result">等待请求...</pre>
-      </section>
-    </div>
-  </main>
-  <script>
-    document.getElementById("run").addEventListener("click", async () => {
-      const result = document.getElementById("result");
-      result.textContent = "请求中...";
-      const response = await fetch("/api/v1/analyze", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: document.getElementById("question").value })
-      });
-      result.textContent = JSON.stringify(await response.json(), null, 2);
-    });
-  </script>
-</body>
-</html>
-"""
-
-
-def _copilot_html() -> str:
-    return """<!doctype html>
-<html lang="zh-CN">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Geely AI Copilot</title>
-  <style>
-    * { box-sizing: border-box; }
-    :root { color-scheme: light; --line: #d1d1d1; --soft-line: #e8e8e8; --text: #1f1f1f; --muted: #616161; --panel: #ffffff; --page: #f5f5f5; --accent: #2563eb; --accent-soft: #eef4ff; }
-    body { margin: 0; font-family: "Segoe UI", Arial, sans-serif; color: var(--text); background: var(--page); }
-    main { width: min(100vw, 440px); height: 100vh; margin-left: auto; background: var(--panel); border-left: 1px solid var(--line); display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; }
-    header { min-height: 56px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 14px; border-bottom: 1px solid var(--line); background: #fbfbfb; }
-    .brand { display: flex; align-items: center; min-width: 0; gap: 10px; }
-    .mark { width: 28px; height: 28px; border-radius: 6px; display: grid; place-items: center; color: #fff; background: linear-gradient(135deg, #2563eb, #0f766e); font-weight: 800; }
-    h1 { margin: 0; font-size: 16px; font-weight: 650; letter-spacing: 0; }
-    .sub { margin-top: 2px; color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .iconbtn { width: 32px; height: 32px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: #424242; cursor: pointer; font-size: 18px; line-height: 1; }
-    .iconbtn:hover { background: #f0f0f0; }
-    .context { padding: 10px 14px; border-bottom: 1px solid var(--soft-line); background: #ffffff; }
-    .chips { display: flex; gap: 6px; flex-wrap: wrap; }
-    .chip { max-width: 100%; border: 1px solid #d6e3ff; background: var(--accent-soft); color: #174ea6; border-radius: 999px; padding: 4px 8px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    details { margin-top: 8px; }
-    summary { cursor: pointer; color: var(--muted); font-size: 12px; }
-    label { display: block; margin: 8px 0 4px; font-size: 12px; color: var(--muted); }
-    input, textarea { width: 100%; border: 1px solid #c8c8c8; border-radius: 6px; padding: 7px 8px; font: inherit; color: var(--text); background: #fff; }
-    input { height: 32px; }
-    textarea { min-height: 70px; resize: vertical; }
-    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-    .messages { min-height: 0; overflow: auto; padding: 14px; background: #fafafa; }
-    .msg { display: grid; gap: 6px; margin-bottom: 14px; }
-    .msg .name { color: var(--muted); font-size: 12px; }
-    .bubble { border: 1px solid var(--soft-line); border-radius: 8px; padding: 10px 11px; background: #fff; font-size: 13px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
-    .msg.user .bubble { background: var(--accent-soft); border-color: #cfe0ff; }
-    .facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 8px; }
-    .fact { border: 1px solid var(--soft-line); border-radius: 6px; padding: 7px; background: #fff; }
-    .fact strong { display: block; font-size: 16px; }
-    .fact span { color: var(--muted); font-size: 11px; }
-    .composer { border-top: 1px solid var(--line); background: #ffffff; padding: 12px 14px 14px; }
-    .suggestions { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 8px; }
-    button { min-height: 34px; border: 1px solid #c8c8c8; border-radius: 6px; background: #ffffff; color: #242424; cursor: pointer; font-weight: 600; }
-    button.primary { border-color: var(--accent); background: var(--accent); color: #ffffff; }
-    button.pill { flex: 0 0 auto; padding: 0 10px; font-size: 12px; font-weight: 600; }
-    .sendrow { display: grid; grid-template-columns: minmax(0, 1fr) 70px; gap: 8px; align-items: end; }
-    .status { color: var(--muted); font-size: 12px; margin-top: 7px; min-height: 16px; }
-    pre { margin: 8px 0 0; padding: 8px; max-height: 160px; overflow: auto; border-radius: 6px; background: #f5f5f5; font-size: 11px; white-space: pre-wrap; overflow-wrap: anywhere; }
-    @media (max-width: 520px) { main { width: 100vw; border-left: 0; } .facts { grid-template-columns: 1fr; } .grid { grid-template-columns: 1fr; } }
-  </style>
-</head>
-<body>
-  <main>
-    <header>
-      <div class="brand">
-        <div class="mark">AI</div>
-        <div>
-          <h1>Geely AI Copilot</h1>
-          <div class="sub" id="summary">当前测试上下文 · 只读分析</div>
-        </div>
-      </div>
-      <button class="iconbtn" title="刷新上下文" id="reload">↻</button>
-    </header>
-    <section class="context">
-      <div class="chips">
-        <span class="chip" id="projectChip">GEELY_TEST</span>
-        <span class="chip" id="runChip">RUN_CSV_001</span>
-        <span class="chip">只读</span>
-      </div>
-      <details>
-        <summary>上下文</summary>
-        <div class="grid">
-          <div><label for="project">项目</label><input id="project" value="GEELY_TEST" /></div>
-          <div><label for="run">Run</label><input id="run" value="RUN_CSV_001" /></div>
-        </div>
-        <label for="source">当前测试文件</label>
-        <input id="source" value="D:\\geely-ai-platform\\src\\ai-gateway\\tests\\fixtures\\test-run-cases.csv" />
-        <label for="target">对比测试文件</label>
-        <input id="target" value="D:\\geely-ai-platform\\src\\ai-gateway\\tests\\fixtures\\test-run-cases-target.csv" />
-      </details>
-    </section>
-    <section class="messages" id="messages">
-      <div class="msg assistant">
-        <div class="name">Copilot</div>
-        <div class="bubble">我已连接当前测试上下文，可以分析失败原因、对比两次测试结果，并返回 request_id 方便追踪。</div>
-      </div>
-    </section>
-    <section class="composer">
-      <div class="suggestions">
-        <button class="pill" id="analyze">分析当前测试</button>
-        <button class="pill" id="insights">数据洞察</button>
-        <button class="pill" id="compare">对比两次结果</button>
-        <button class="pill" id="knowledge">查询规范依据</button>
-      </div>
-      <div class="sendrow">
-        <textarea id="question">分析当前测试失败原因，并给出下一步排查建议。</textarea>
-        <button class="primary" id="send">发送</button>
-      </div>
-      <div id="status" class="status">已加载</div>
-    </section>
-  </main>
-  <script>
-    const messages = document.getElementById("messages");
-    const status = document.getElementById("status");
-    const summary = document.getElementById("summary");
-    const projectChip = document.getElementById("projectChip");
-    const runChip = document.getElementById("runChip");
-    const project = document.getElementById("project");
-    const run = document.getElementById("run");
-    const source = document.getElementById("source");
-    const target = document.getElementById("target");
-    const question = document.getElementById("question");
-
-    async function loadContext() {
-      const response = await fetch("/api/v1/host/context");
-      const payload = await response.json();
-      if (!response.ok) return;
-      const context = payload.result || {};
-      project.value = context.project_id || project.value;
-      run.value = context.run_id || run.value;
-      source.value = context.source_file || source.value;
-      target.value = context.target_file || context.baseline_file || target.value;
-      projectChip.textContent = project.value;
-      runChip.textContent = run.value;
-      summary.textContent = `${run.value} · ${context.current_view || "test_result_detail"} · 只读分析`;
-      status.textContent = "已加载宿主上下文";
-    }
-
-    function addMessage(role, text, extra) {
-      const item = document.createElement("div");
-      item.className = `msg ${role}`;
-      item.innerHTML = `<div class="name">${role === "user" ? "你" : "Copilot"}</div><div class="bubble"></div>`;
-      item.querySelector(".bubble").textContent = text;
-      if (extra) item.querySelector(".bubble").appendChild(extra);
-      messages.appendChild(item);
-      messages.scrollTop = messages.scrollHeight;
-    }
-
-    function facts(data) {
-      const wrap = document.createElement("div");
-      wrap.className = "facts";
-      const passRate = data.metrics && typeof data.metrics.pass_rate === "number" ? `${(data.metrics.pass_rate * 100).toFixed(2)}%` : "-";
-      [
-        ["总用例", data.total_cases],
-        ["失败", data.failed_cases],
-        ["通过率", passRate]
-      ].forEach(([label, value]) => {
-        const fact = document.createElement("div");
-        fact.className = "fact";
-        fact.innerHTML = `<strong>${value}</strong><span>${label}</span>`;
-        wrap.appendChild(fact);
-      });
-      return wrap;
-    }
-
-    async function postJson(path, body) {
-      status.textContent = "请求中...";
-      const response = await fetch(path, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body)
-      });
-      const payload = await response.json();
-      status.textContent = response.ok ? "完成" : "请求失败";
-      return payload;
-    }
-
-    async function analyze() {
-      addMessage("user", question.value);
-      const payload = await postJson("/api/v1/analyze", { source_file: source.value, question: question.value });
-      if (payload.error) {
-        addMessage("assistant", `${payload.error.message}\\n\\nrequest_id: ${payload.request_id}`);
-        return;
-      }
-      const extra = payload.data ? facts(payload.data) : null;
-      addMessage("assistant", `${payload.answer}\\n\\nrequest_id: ${payload.request_id}`, extra);
-    }
-
-    async function compareRuns() {
-      addMessage("user", "对比当前测试与基线测试。");
-      const payload = await postJson("/api/v1/test-data/compare", { baseline_file: source.value, target_file: target.value });
-      if (payload.error) {
-        addMessage("assistant", `${payload.error.message}\\n\\nrequest_id: ${payload.request_id}`);
-        return;
-      }
-      addMessage("assistant", `${payload.result.summary}\\n\\nrequest_id: ${payload.request_id}`);
-    }
-
-    async function loadInsights() {
-      addMessage("user", "生成当前测试数据洞察。");
-      const payload = await postJson("/api/v1/test-data/insights", { source_file: source.value });
-      if (payload.error) {
-        addMessage("assistant", `${payload.error.message}\\n\\nrequest_id: ${payload.request_id}`);
-        return;
-      }
-      const result = payload.result;
-      const topReason = result.failure_reasons[0] ? `${result.failure_reasons[0].reason} (${result.failure_reasons[0].count})` : "无失败原因";
-      addMessage(
-        "assistant",
-        `分析引擎：${result.engine}\\n状态分布：${result.status_counts.map(item => `${item.status} ${item.count}`).join("，")}\\nTop 失败原因：${topReason}\\n\\nrequest_id: ${payload.request_id}`
-      );
-    }
-
-    async function queryKnowledge() {
-      addMessage("user", "查询本次问题相关规范依据。");
-      const payload = await postJson("/api/v1/knowledge/query", { query: question.value });
-      if (payload.error) {
-        addMessage("assistant", `${payload.error.message}\\n\\nrequest_id: ${payload.request_id}`);
-        return;
-      }
-      addMessage("assistant", `${payload.answer}\\n引用：${payload.citations[0].title}\\nrequest_id: ${payload.request_id}`);
-    }
-
-    document.getElementById("reload").addEventListener("click", loadContext);
-    document.getElementById("send").addEventListener("click", analyze);
-    document.getElementById("analyze").addEventListener("click", analyze);
-    document.getElementById("insights").addEventListener("click", loadInsights);
-    document.getElementById("compare").addEventListener("click", compareRuns);
-    document.getElementById("knowledge").addEventListener("click", queryKnowledge);
-    loadContext();
-  </script>
-</body>
-</html>
-"""
 
 
 def _showcase_html() -> str:
@@ -856,123 +564,3 @@ def _showcase_html() -> str:
 </body>
 </html>
 """
-
-
-def _openapi() -> dict[str, Any]:
-    return {
-        "openapi": "3.0.3",
-        "info": {"title": "Geely AI Gateway MVP", "version": "0.1.0"},
-        "components": {
-            "securitySchemes": {
-                "bearerAuth": {"type": "http", "scheme": "bearer"},
-            }
-        },
-        "security": [{"bearerAuth": []}],
-        "paths": {
-            "/health": {"get": {"summary": "Health check", "security": []}},
-            "/demo": {"get": {"summary": "Embeddable demo panel", "security": []}},
-            "/showcase": {"get": {"summary": "Host software showcase with Copilot side panel", "security": []}},
-            "/copilot": {"get": {"summary": "Embeddable Copilot side panel", "security": []}},
-            "/copilot-shell/": {"get": {"summary": "Embeddable frontend Copilot shell", "security": []}},
-            "/plugin-manifest.json": {"get": {"summary": "Host integration manifest", "security": []}},
-            "/api/v1/tools": {"get": {"summary": "Return machine-readable AI tool contracts"}},
-            "/api/v1/model/config": {"get": {"summary": "Return public model runtime config"}},
-            "/api/v1/host/context": {"get": {"summary": "Return host software context"}, "post": {"summary": "Update host software context"}},
-            "/api/v1/host/assets": {
-                "post": {
-                    "summary": "Register a host-local file and return a browser-safe asset ID",
-                    "x-required-token": "host",
-                }
-            },
-            "/api/v1/host/snapshot": {
-                "get": {"summary": "Return the current bounded host snapshot"},
-                "post": {
-                    "summary": "Publish a bounded snapshot from a trusted desktop host",
-                    "x-required-token": "host",
-                },
-            },
-            "/api/v1/host/snapshot/analyze": {
-                "post": {"summary": "Analyze the current host snapshot without side effects"}
-            },
-            "/api/v1/copilot/query": {
-                "post": {"summary": "Chat or generate pytest code from bounded text attachments"}
-            },
-            "/api/v1/host/session": {
-                "delete": {
-                    "summary": "Release host context, snapshot, and local asset mappings",
-                    "x-required-token": "host",
-                }
-            },
-            "/api/v1/audit/events": {"get": {"summary": "Return recent audit events"}},
-            "/api/v1/analyze": {"post": {"summary": "Analyze test data with knowledge citations"}},
-            "/api/v1/test-data/summary": {"post": {"summary": "Return a test run summary"}},
-            "/api/v1/test-data/compare": {"post": {"summary": "Compare two test run files"}},
-            "/api/v1/test-data/insights": {"post": {"summary": "Return deterministic test data insights"}},
-            "/api/v1/knowledge/query": {"post": {"summary": "Query knowledge provider"}},
-            "/api/v1/agent/query": {"post": {"summary": "Select and execute a read-only Gateway tool"}},
-        },
-    }
-
-
-def _plugin_manifest() -> dict[str, Any]:
-    return {
-        "id": "geely-ai-gateway",
-        "version": "0.1.0",
-        "display_name": "Geely AI Assistant",
-        "integration_modes": ["webview", "http-api", "cli-launch"],
-        "webview": {
-            "entry": "/copilot-shell/",
-            "fallback_entry": "/copilot",
-            "host_session_query_parameter": "host_session_id",
-            "host_origin_query_parameter": "host_origin",
-            "access_token_fragment_parameter": "access_token",
-            "post_message": {
-                "host_to_copilot": "geely-ai.host-context",
-                "copilot_to_host": "geely-ai.copilot-ready",
-            },
-            "preferred_width": 460,
-            "preferred_height": 720,
-        },
-        "api": {
-            "base_path": "/api/v1",
-            "authentication": {
-                "type": "http-bearer",
-                "optional_env": "AI_GATEWAY_ACCESS_TOKEN",
-                "privileged_host_env": "AI_GATEWAY_HOST_TOKEN",
-            },
-            "tools": "/api/v1/tools",
-            "host_assets": "/api/v1/host/assets",
-            "host_snapshot": "/api/v1/host/snapshot",
-            "operations": [
-                {
-                    "operation_id": "query_agent",
-                    "method": "POST",
-                    "path": "/api/v1/agent/query",
-                    "side_effect": "read_only",
-                    "requires_confirmation": False,
-                },
-                {
-                    "operation_id": "query_copilot",
-                    "method": "POST",
-                    "path": "/api/v1/copilot/query",
-                    "side_effect": "read_only",
-                    "requires_confirmation": False,
-                },
-                {
-                    "operation_id": "release_host_session",
-                    "method": "DELETE",
-                    "path": "/api/v1/host/session",
-                    "side_effect": "local_state",
-                    "requires_confirmation": False,
-                },
-                {
-                    "operation_id": "publish_host_snapshot",
-                    "method": "POST",
-                    "path": "/api/v1/host/snapshot",
-                    "side_effect": "local_state",
-                    "requires_confirmation": False,
-                },
-                *manifest_operations(),
-            ],
-        },
-    }

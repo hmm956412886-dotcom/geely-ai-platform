@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 import os
 import re
+import sys
 from threading import Lock
 from typing import Any
 from uuid import uuid4
@@ -64,7 +65,7 @@ def resolve_host_asset(asset_id: str, host_session_id: str | None = None) -> str
         fixture_name = (
             "test-run-cases.csv" if asset_id == "demo-current" else "test-run-cases-target.csv"
         )
-        return str(Path(__file__).resolve().parents[2] / "tests" / "fixtures" / fixture_name)
+        return str(_asset_root() / "tests" / "fixtures" / fixture_name)
     with _lock:
         path = _assets.get(session_id, {}).get(asset_id)
     if path is None:
@@ -91,3 +92,12 @@ def _positive_env(name: str, default: int) -> int:
     if value < 1:
         raise ValueError(f"{name} must be a positive integer")
     return value
+
+
+def _asset_root() -> Path:
+    configured = os.getenv("AI_GATEWAY_ASSET_ROOT", "").strip()
+    if configured:
+        return Path(configured).resolve()
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+        return Path(sys._MEIPASS)
+    return Path(__file__).resolve().parents[2]

@@ -33,7 +33,7 @@ class PythonHostSdkTests(unittest.TestCase):
                 "run_id": "R",
                 "host_application": "Demo Host",
                 "source_asset_id": "current-run",
-                "current_view": "test_result_detail",
+                "current_view": "",
             },
         )
 

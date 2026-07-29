@@ -52,7 +52,7 @@ class AppTests(unittest.TestCase):
         self.assertEqual(payload["result"]["run_id"], "RUN_CSV_001")
         self.assertEqual(payload["result"]["failed_cases"], 1)
 
-    def test_analyze_combines_data_and_citation(self) -> None:
+    def test_analyze_combines_deterministic_data(self) -> None:
         response = handle_request(
             "POST",
             "/api/v1/analyze",
@@ -67,7 +67,7 @@ class AppTests(unittest.TestCase):
         payload = json.loads(response.body)
         self.assertEqual(response.status, 200)
         self.assertIn("answer", payload)
-        self.assertEqual(payload["citations"][0]["provider"], "feishu-cli")
+        self.assertEqual(payload["citations"], [])
         self.assertEqual(payload["data"]["source"]["type"], "json")
 
     def test_analyze_reads_source_file(self) -> None:
@@ -109,15 +109,15 @@ class AppTests(unittest.TestCase):
 
     def test_api_access_token_is_optional_and_protects_api_routes(self) -> None:
         with patch.dict("os.environ", {"AI_GATEWAY_ACCESS_TOKEN": "host-secret"}):
-            missing = handle_request("GET", "/api/v1/tools")
+            missing = handle_request("GET", "/api/v1/model/config")
             wrong = handle_request(
                 "GET",
-                "/api/v1/tools",
+                "/api/v1/model/config",
                 headers={"Authorization": "Bearer wrong-secret"},
             )
             authorized = handle_request(
                 "GET",
-                "/api/v1/tools",
+                "/api/v1/model/config",
                 headers={"authorization": "Bearer host-secret"},
             )
             health = handle_request("GET", "/health")
@@ -145,10 +145,9 @@ class AppTests(unittest.TestCase):
 
         self.assertEqual(response.status, 200)
         self.assertEqual(response.content_type, "text/html; charset=utf-8")
-        self.assertIn("Geely AI Copilot", response.body)
-        self.assertIn("/api/v1/analyze", response.body)
-        self.assertIn("/api/v1/test-data/compare", response.body)
-        self.assertIn("/api/v1/host/context", response.body)
+        self.assertIn("Geely AI Copilot Shell", response.body)
+        self.assertNotIn("GEELY_TEST", response.body)
+        self.assertNotIn("D:\\geely-ai-platform", response.body)
 
     def test_copilot_shell_assets_are_available(self) -> None:
         with TemporaryDirectory() as temporary_directory:
@@ -161,7 +160,7 @@ class AppTests(unittest.TestCase):
                 '<link href="/copilot-shell/assets/index-test.css" rel="stylesheet">',
                 encoding="utf-8",
             )
-            (assets / "index-test.js").write_text("/api/v1/agent/query", encoding="utf-8")
+            (assets / "index-test.js").write_text("/api/v1/copilot/query", encoding="utf-8")
             (assets / "index-test.css").write_text("body {}", encoding="utf-8")
             (assets / "font-test.woff2").write_bytes(b"font")
 
@@ -180,7 +179,7 @@ class AppTests(unittest.TestCase):
                 styles = handle_request("GET", style_path.group(1))
                 self.assertEqual(script.status, 200)
                 self.assertEqual(script.content_type, "application/javascript; charset=utf-8")
-                self.assertIn("/api/v1/agent/query", script.body)
+                self.assertIn("/api/v1/copilot/query", script.body)
                 self.assertEqual(styles.status, 200)
                 self.assertEqual(styles.content_type, "text/css; charset=utf-8")
 
@@ -552,7 +551,6 @@ class AppTests(unittest.TestCase):
             payload["webview"]["post_message"]["host_to_copilot"],
             "geely-ai.host-context",
         )
-        self.assertEqual(payload["api"]["tools"], "/api/v1/tools")
         self.assertEqual(payload["api"]["host_assets"], "/api/v1/host/assets")
         self.assertEqual(payload["api"]["host_snapshot"], "/api/v1/host/snapshot")
         self.assertEqual(payload["api"]["authentication"]["type"], "http-bearer")
@@ -560,15 +558,11 @@ class AppTests(unittest.TestCase):
             payload["api"]["authentication"]["privileged_host_env"],
             "AI_GATEWAY_HOST_TOKEN",
         )
-        self.assertEqual(payload["api"]["operations"][0]["side_effect"], "read_only")
         operation_ids = {operation["operation_id"] for operation in payload["api"]["operations"]}
         self.assertIn("compare_test_runs", operation_ids)
         self.assertIn("analyze_test_data_insights", operation_ids)
-        self.assertIn("get_model_config", operation_ids)
         self.assertIn("get_host_context", operation_ids)
         self.assertIn("update_host_context", operation_ids)
-        self.assertIn("list_audit_events", operation_ids)
-        self.assertIn("query_agent", operation_ids)
         self.assertIn("query_copilot", operation_ids)
         self.assertIn("release_host_session", operation_ids)
         self.assertIn("analyze_host_snapshot", operation_ids)
@@ -581,7 +575,7 @@ class AppTests(unittest.TestCase):
             payload["components"]["securitySchemes"]["bearerAuth"]["scheme"],
             "bearer",
         )
-        self.assertEqual(payload["security"], [{"bearerAuth": []}])
+        self.assertEqual(payload["security"], [{"bearerAuth": []}, {}])
         self.assertEqual(payload["paths"]["/health"]["get"]["security"], [])
         self.assertEqual(payload["paths"]["/copilot-shell/"]["get"]["security"], [])
         self.assertEqual(
@@ -597,47 +591,33 @@ class AppTests(unittest.TestCase):
             "host",
         )
         self.assertIn("/api/v1/copilot/query", payload["paths"])
-
-    def test_tools_endpoint_describes_agent_contracts(self) -> None:
-        response = handle_request("GET", "/api/v1/tools")
-
-        payload = json.loads(response.body)
-        tools = payload["result"]["tools"]
-        by_name = {tool["name"]: tool for tool in tools}
-        self.assertEqual(response.status, 200)
-        self.assertIn("analyze_test_run", by_name)
-        self.assertIn("compare_test_runs", by_name)
-        self.assertIn("analyze_test_data_insights", by_name)
-        self.assertIn("analyze_host_snapshot", by_name)
-        self.assertIn("get_host_snapshot", by_name)
-        self.assertIn("input_schema", by_name["analyze_test_run"])
-        self.assertIn("output_schema", by_name["analyze_test_run"])
-        self.assertIn(
-            "source_asset_id", by_name["analyze_test_run"]["input_schema"]["properties"]
+        copilot = payload["paths"]["/api/v1/copilot/query"]["post"]
+        self.assertEqual(
+            copilot["requestBody"]["content"]["application/json"]["schema"]["$ref"],
+            "#/components/schemas/CopilotQueryRequest",
         )
-        self.assertEqual(by_name["update_host_context"]["risk_level"], "medium")
-        self.assertEqual(by_name["list_audit_events"]["audit_level"], "debug")
-        self.assertFalse(by_name["compare_test_runs"]["requires_confirmation"])
+        self.assertEqual(
+            payload["components"]["schemas"]["CopilotQueryRequest"]["properties"]
+            ["attachments"]["maxItems"],
+            5,
+        )
+        self.assertEqual(
+            payload["paths"]["/api/v1/host/snapshot"]["post"]["security"],
+            [{"hostBearerAuth": []}],
+        )
 
-    def test_static_manifest_and_tool_registry_match_runtime_contracts(self) -> None:
+    def test_static_contracts_are_served_at_runtime(self) -> None:
         repo_root = Path(__file__).resolve().parents[3]
         runtime_manifest = json.loads(handle_request("GET", "/plugin-manifest.json").body)
         static_manifest = json.loads(
             (repo_root / "contracts" / "host-plugin.manifest.json").read_text(encoding="utf-8")
         )
-        runtime_tools = json.loads(handle_request("GET", "/api/v1/tools").body)["result"]
-        static_tools = json.loads(
-            (repo_root / "contracts" / "tool-registry.json").read_text(encoding="utf-8")
+        runtime_openapi = json.loads(handle_request("GET", "/openapi.json").body)
+        static_openapi = json.loads(
+            (repo_root / "contracts" / "ai-gateway.openapi.json").read_text(encoding="utf-8")
         )
-
-        static_operations = static_manifest["api"].pop("operations")
-        runtime_operations = runtime_manifest["api"].pop("operations")
         self.assertEqual(static_manifest, runtime_manifest)
-        self.assertEqual(
-            {item["operation_id"]: item for item in static_operations},
-            {item["operation_id"]: item for item in runtime_operations},
-        )
-        self.assertEqual(static_tools["tools"], runtime_tools["tools"])
+        self.assertEqual(static_openapi, runtime_openapi)
 
     def test_test_data_insights_reads_source_file(self) -> None:
         response = handle_request(

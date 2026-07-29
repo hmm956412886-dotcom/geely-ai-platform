@@ -32,12 +32,6 @@ Assert-Ok (-not ($model.result.PSObject.Properties.Name -contains "api_key")) "m
 $manifest = Invoke-GatewayJson -Path "/plugin-manifest.json"
 Assert-Ok ($manifest.webview.entry -eq "/copilot-shell/") "/plugin-manifest.json"
 
-$tools = Invoke-GatewayJson -Path "/api/v1/tools"
-$toolNames = @($tools.result.tools | ForEach-Object { $_.name })
-Assert-Ok ($toolNames -contains "analyze_test_run") "tool analyze_test_run"
-Assert-Ok ($toolNames -contains "analyze_test_data_insights") "tool analyze_test_data_insights"
-Assert-Ok ($toolNames -contains "compare_test_runs") "tool compare_test_runs"
-
 $showcase = Invoke-WebRequest -Method Get -UseBasicParsing -Uri ($BaseUrl + "/showcase")
 Assert-Ok ($showcase.StatusCode -eq 200) "/showcase"
 

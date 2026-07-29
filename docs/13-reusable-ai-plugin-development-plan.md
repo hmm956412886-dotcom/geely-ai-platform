@@ -10,7 +10,7 @@ CoreTest / 其他宿主
   -> 右侧 Copilot WebView
   -> Host Connector（当前项目、页面、选择和结构化快照）
   -> 本地 AI Gateway Sidecar（稳定 REST API）
-  -> 确定性分析工具 + 文件问答/测试代码生成 + 企业知识查询 + 可配置模型
+  -> 确定性分析工具 + 文件问答/测试代码生成 + 可配置模型
 ```
 
 用户应能在 CoreTest 中打开右侧 Copilot，选择 Trace、DBC 帧或诊断 ECU 后直接提问。
@@ -28,7 +28,7 @@ Copilot 必须知道用户当前正在看什么，先用确定性代码计算事
 - Trace、DBC、诊断日志的只读结构化分析。
 - 最多添加 5 个文本文件，支持普通问答和基于附件生成 pytest。
 - 生成代码在对话中完整预览，可复制，可由用户明确保存到 `generated_tests`。
-- 飞书知识查询和 OpenAI-compatible 模型按客户环境配置。
+- OpenAI-compatible 模型按客户环境配置。
 - 所有回答带 `request_id`，知识结论带来源引用。
 - Gateway、WebView 和 Host Connector 均不得把客户绝对路径或密钥展示给浏览器。
 
@@ -39,7 +39,7 @@ Copilot 必须知道用户当前正在看什么，先用确定性代码计算事
 - 自动执行生成代码，或让模型直接编辑任意项目文件。
 - 把百万条原始帧或完整 PDX 直接发送给模型。
 - 在没有真实实现和样例时补写 PDX/ODX 解析器。
-- 引入多 Agent、工作流引擎、向量数据库、动态 UI 或第二套聊天框架。
+- 引入 Agent 框架、多 Agent、工作流引擎、向量数据库、动态 UI 或第二套聊天框架。
 
 ## 3. 已确认的客户软件事实
 
@@ -64,16 +64,13 @@ PDX 后续用于解释 Trace 和诊断结果，不输出 `TestRunSummary`。
 | --- | --- | --- |
 | CoreTest 面板 | `QDockWidget + QWebEngineView` | Qt 原生停靠体验，复用 Web 前端 |
 | Host Connector | Python + Qt Signal + 标准库 HTTP | 与 CoreTest 同语言，最小改造 |
-| Copilot UI | React + assistant-ui + Fluent UI | 复用成熟对话、Markdown 和 Microsoft 风格组件 |
+| Copilot UI | React + assistant-ui + Fluent UI | 复用成熟对话、原生附件、Markdown 和 Microsoft 风格组件 |
 | 集成协议 | AI Gateway REST/OpenAPI | 与宿主语言、UI 和模型框架解耦 |
 | 分析 | CoreTest 已解析对象 + Gateway 确定性统计 | 避免 LLM 算数和重复解析 |
-| Agent 编排 | 可选 Semantic Kernel | 当前仅单 Agent 只读工具调用 |
-| 知识 | 飞书 CLI Provider | 已能查询真实文档并返回引用 |
-| 模型 | OpenAI-compatible API | 由客户选择部署和密钥 |
+| 模型 | 官方 `openai-python` + OpenAI-compatible API | 由客户选择部署和密钥，覆盖 Responses / Chat Completions |
 | 打包 | CoreTest PyInstaller + Gateway 独立 Sidecar | AI 故障不影响硬件通信主进程 |
 
-不采用 AnythingLLM 作为核心运行时。它可以将来作为独立知识库管理服务，但不能提供 CoreTest
-当前选择同步、Qt 生命周期、汽车数据结构化分析或硬件只读安全边界。
+不采用 AnythingLLM、Open WebUI、LibreChat 作为核心运行时：它们是完整聊天/知识产品，会额外引入用户、存储、权限和部署面。Cline、Continue、OpenHands 是具文件写入和命令执行能力的开发代理，不符合 CoreTest 的只读安全边界。CopilotKit 需要其专用 Runtime；当前以 assistant-ui 的可替换 Runtime 满足嵌入需求。
 
 ## 5. 数据契约
 
@@ -123,7 +120,6 @@ Host Snapshot 保存有上限的结构化事实，不保存原始大文件：
 - Trace 当前视图能输出确定性摘要；快捷按钮和自然语言均可分析。
 - DBC 当前节点/帧能输出字段和信号语义；不重新解析 DBC。
 - 诊断日志能统计正负响应和 NRC；不触发诊断操作。
-- Agent 只调用 `get_host_snapshot`、现有测试文件工具和知识查询等只读工具。
 - 未配置模型时仍返回可用的确定性中文分析。
 
 ### P0-C2：文件到测试代码闭环
@@ -139,15 +135,15 @@ Host Snapshot 保存有上限的结构化事实，不保存原始大文件：
 - Gateway 单测、eval、Host SDK 测试、前端 typecheck/build 全部通过。
 - CoreTest Connector 单测不依赖硬件。
 - 实际启动 CoreTest，截图验证 Dock 非空、无重叠、可调整宽度。
-- PyInstaller 构建验证 Qt WebEngine 依赖和 Sidecar 资源路径。
+- PyInstaller 构建验证 Qt WebEngine、Gateway Sidecar、前端静态资源和 REST 契约资源路径。
 - 启动、健康检查、退出和端口冲突均有可重复验证。
-- 客户机器只需配置模型/飞书/Token，不修改业务代码。
+- 客户机器只需配置模型/Token，不修改业务代码。
 
 ### P1：有真实输入后开发
 
 - 取得未脱敏 PDX 服务或验证成熟 ODX 库后，增加 PDX 只读查询工具。
 - 提供质量规则和阈值后，增加规则判定。
-- 飞书 CLI 的规模或延迟不达标后，再引入索引式 RAG。
+- 取得真实知识库权限、检索质量和数据规模后，选择成熟知识产品或索引式 RAG。
 - 提供 OIDC/OAuth2 参数后，接企业身份平台。
 - 明确跨进程恢复要求后，再持久化会话。
 

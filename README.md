@@ -12,7 +12,7 @@
 - 当前项目、页面、DBC 节点/帧、Trace 帧和诊断 ECU 自动同步到独立宿主会话。
 - Trace、DBC、诊断日志和项目文件的确定性只读分析。
 - AI Gateway Sidecar 生命周期、分级 Bearer Token、OpenAPI、Plugin Manifest 和审计 `request_id`。
-- 可选 Semantic Kernel 单 Agent 只读工具编排和飞书 CLI 知识查询。
+- 官方 `openai-python` 通过 OpenAI-compatible Responses 或 Chat Completions API 调用客户模型。
 
 不会自动执行生成代码，不修改客户业务源码、测试配置或数据库，也不发送 CAN、启动回放、执行 UDS 或刷写 ECU。
 
@@ -47,6 +47,12 @@ http://127.0.0.1:8765/copilot-shell/
 http://127.0.0.1:8765/showcase
 http://127.0.0.1:8765/plugin-manifest.json
 http://127.0.0.1:8765/openapi.json
+```
+
+生成包含 CoreTest、Qt WebEngine 和独立 AI Gateway Sidecar 的交付 ZIP：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build-coretest-delivery.ps1
 ```
 
 ## 验证

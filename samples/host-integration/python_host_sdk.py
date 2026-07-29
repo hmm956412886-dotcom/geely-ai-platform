@@ -20,7 +20,7 @@ class HostContext:
     target_asset_id: str | None = None
     source_file: str | None = None
     target_file: str | None = None
-    current_view: str = "test_result_detail"
+    current_view: str = ""
     user_id: str | None = None
     selection_kind: str | None = None
     selection_label: str | None = None
@@ -64,9 +64,6 @@ class GeelyAIGatewayClient:
 
     def plugin_manifest(self) -> dict[str, Any]:
         return self._request("GET", "/plugin-manifest.json")
-
-    def tools(self) -> dict[str, Any]:
-        return self._request("GET", "/api/v1/tools")
 
     def get_host_context(self) -> dict[str, Any]:
         return self._request("GET", self._session_path("/api/v1/host/context"))
@@ -145,16 +142,6 @@ class GeelyAIGatewayClient:
             "POST",
             self._session_path("/api/v1/test-data/compare"),
             payload,
-        )
-
-    def query_knowledge(self, *, query: str) -> dict[str, Any]:
-        return self._request(
-            "POST", self._session_path("/api/v1/knowledge/query"), {"query": query}
-        )
-
-    def query_agent(self, *, question: str) -> dict[str, Any]:
-        return self._request(
-            "POST", self._session_path("/api/v1/agent/query"), {"question": question}
         )
 
     def query_copilot(

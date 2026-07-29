@@ -16,7 +16,7 @@
 在真实 HK CoreTest 中交付可运行的右侧 AI Copilot：对话、文件读取和测试代码生成
 ```
 
-方向：保留 assistant-ui + Fluent UI、Gateway REST API、真实飞书查询、Semantic Kernel 只读编排和分级 Bearer 鉴权。当前优先完成 CoreTest Qt Dock、文件附件问答、基于文件生成 pytest，以及 Trace/DBC/诊断日志真实分析。PDX、RAG、质量规则和企业 SSO 仍等待真实输入。
+方向：保留 assistant-ui + Fluent UI、Gateway REST API、官方 OpenAI SDK 和分级 Bearer 鉴权。当前优先完成 CoreTest Qt Dock、文件附件问答、基于文件生成 pytest，以及 Trace/DBC/诊断日志真实分析。PDX、飞书知识、RAG、质量规则和企业 SSO 均等待真实输入。
 
 ## 1. 先想清楚再写代码
 
@@ -55,7 +55,6 @@ P0 只做：
 - `/api/v1/test-data/insights` 返回确定性数据洞察。
 - Host SDK 样例可模拟宿主软件接入。
 - 客户部署脚本可启动和检查服务。
-- 飞书知识库后续通过 CLI 查询。
 - 测试数据通过文件 Adapter 或 fixture 进入。
 
 暂不做：
@@ -70,9 +69,9 @@ P0 只做：
 
 - Copilot 前端：使用 assistant-ui External Store Runtime；CopilotKit 因强制 Runtime / 许可耦合不采用。
 - Agent 前端协议：AG-UI 放到后续阶段，不在 P0 强上。
-- 后端编排：当前只用 Semantic Kernel 接 Tool Registry；Microsoft Agent Framework 留到出现多 Agent / 工作流需求后再评估。
+- 后端模型：使用官方 `openai-python` 调用 OpenAI-compatible API；单一受控 Copilot 不引入 Agent 框架。出现真实多 Agent / 工作流需求后再评估 Microsoft Agent Framework。
 - 数据分析：DuckDB / Polars / Pandas 藏在 Adapter 后。
-- RAG：飞书 CLI 跑通后再评估 LlamaIndex / Haystack / LanceDB / Qdrant。
+- 知识/RAG：取得真实知识库权限、数据量和检索验收标准后再评估现成产品或服务。
 
 ## 6. 验证
 
@@ -82,12 +81,6 @@ P0 只做：
 
 ```powershell
 cd D:\geely-ai-platform\src\ai-gateway
-$env:PYTHONPATH='src'
-python -m unittest discover -s tests -p "test_*.py"
-```
-
-```powershell
-cd D:\geely-ai-platform\workers\feishu-sync
 $env:PYTHONPATH='src'
 python -m unittest discover -s tests -p "test_*.py"
 ```

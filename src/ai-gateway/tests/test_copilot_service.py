@@ -96,6 +96,24 @@ class CopilotServiceTests(unittest.TestCase):
         self.assertNotIn("```", payload["artifacts"][0]["content"])
         compile(payload["artifacts"][0]["content"], payload["artifacts"][0]["name"], "exec")
 
+    @patch("ai_gateway.copilot_service.chat_completion", return_value="def test_value():\n    assert True")
+    def test_generate_test_sanitizes_artifact_filename(self, _completion) -> None:
+        response = handle_request(
+            "POST",
+            "/api/v1/copilot/query",
+            json.dumps(
+                {
+                    "question": "generate tests",
+                    "task": "generate_test",
+                    "attachments": [{"name": "test-run cases.txt", "content": "unsupported"}],
+                }
+            ),
+        )
+
+        self.assertEqual(
+            json.loads(response.body)["artifacts"][0]["name"], "test_test_run_cases.py"
+        )
+
     def test_generate_test_requires_supported_bounded_text_attachment(self) -> None:
         missing = handle_request(
             "POST",

@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AssistantRuntimeProvider,
+  SimpleTextAttachmentAdapter,
   useExternalStoreRuntime,
   type AppendMessage,
+  type CompleteAttachment,
   type ThreadMessageLike,
 } from "@assistant-ui/react";
 import { makeMarkdownText, Thread } from "@assistant-ui/react-ui";
@@ -15,18 +17,16 @@ import {
   webLightTheme,
 } from "@fluentui/react-components";
 import {
+  ArrowDownload20Regular,
   ArrowSync20Regular,
   ChartMultiple20Regular,
-  ArrowDownload20Regular,
-  Attach20Regular,
   Code20Regular,
-  Delete16Regular,
   ShieldCheckmark20Regular,
   Sparkle20Filled,
 } from "@fluentui/react-icons";
 import { GatewayRequestError, gatewayClient, hostSessionId } from "./gatewayClient";
 import type {
-  AgentResponse,
+  AnalysisResponse,
   CopilotArtifact,
   CopilotAttachment,
   CopilotResponse,
@@ -38,10 +38,15 @@ interface ChatMessage {
   id: string;
   role: "assistant" | "user";
   content: string;
+  attachments?: readonly CompleteAttachment[];
 }
 
 const parentOrigin = resolveParentOrigin();
 const MarkdownText = makeMarkdownText();
+const attachmentAccept = [
+  ".py", ".json", ".yaml", ".yml", ".xml", ".txt", ".dbc", ".md",
+  ".toml", ".ini", ".cfg", ".csv", ".log", ".asc",
+].join(",");
 
 const emptyContext: HostContext = {
   host_session_id: hostSessionId,
@@ -63,8 +68,11 @@ function assistantMessage(content: string): ChatMessage {
   return { id: crypto.randomUUID(), role: "assistant", content };
 }
 
-function userMessage(content: string): ChatMessage {
-  return { id: crypto.randomUUID(), role: "user", content };
+function userMessage(
+  content: string,
+  attachments?: readonly CompleteAttachment[],
+): ChatMessage {
+  return { id: crypto.randomUUID(), role: "user", content, attachments };
 }
 
 function convertMessage(message: ChatMessage): ThreadMessageLike {
@@ -72,6 +80,7 @@ function convertMessage(message: ChatMessage): ThreadMessageLike {
     id: message.id,
     role: message.role,
     content: message.content,
+    attachments: message.attachments,
     status:
       message.role === "assistant" ? { type: "complete", reason: "stop" } : undefined,
   };
@@ -85,7 +94,21 @@ function messageText(message: AppendMessage): string {
     .trim();
 }
 
-function formatAgentResponse(payload: AgentResponse): string {
+async function messageAttachments(message: AppendMessage): Promise<CopilotAttachment[]> {
+  const items = message.attachments ?? [];
+  return Promise.all(
+    items.map(async (attachment) => {
+      if (!attachment.file) throw new Error(`无法读取附件 ${attachment.name}`);
+      return {
+        name: attachment.name,
+        content: await attachment.file.text(),
+        size: attachment.file.size,
+      };
+    }),
+  );
+}
+
+function formatResponse(payload: AnalysisResponse): string {
   const citation = payload.citations[0];
   const source = citation
     ? `\n\n**参考**：[${citation.title}](${citation.source_url}) · ${citation.provider}`
@@ -116,12 +139,17 @@ export default function App() {
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [isRunning, setIsRunning] = useState(false);
   const [contextLoading, setContextLoading] = useState(true);
-  const [attachments, setAttachments] = useState<CopilotAttachment[]>([]);
   const [artifacts, setArtifacts] = useState<CopilotArtifact[]>([]);
-  const fileInput = useRef<HTMLInputElement>(null);
+  const [composerAttachmentCount, setComposerAttachmentCount] = useState(0);
   const hostConnected = Boolean(context.host_application);
   const hasCurrentData = Boolean(context.selection_kind && context.snapshot_revision);
   const dataLabel = currentDataLabel(context);
+
+  const attachmentAdapter = useMemo(() => {
+    const adapter = new SimpleTextAttachmentAdapter();
+    adapter.accept = attachmentAccept;
+    return adapter;
+  }, []);
 
   const appendAssistant = useCallback((content: string) => {
     setMessages((current) => [...current, assistantMessage(content)]);
@@ -181,9 +209,9 @@ export default function App() {
   }, [reportError]);
 
   const run = useCallback(
-    async (label: string, action: () => Promise<string>) => {
+    async (message: ChatMessage, action: () => Promise<string>) => {
       if (isRunning) return;
-      setMessages((current) => [...current, userMessage(label)]);
+      setMessages((current) => [...current, message]);
       setIsRunning(true);
       try {
         appendAssistant(await action());
@@ -198,43 +226,75 @@ export default function App() {
 
   const analyze = useCallback(
     (question: string) =>
-      run(question, async () => formatAgentResponse(await gatewayClient.queryAgent(question))),
+      run(
+        userMessage(question),
+        async () => formatResponse(await gatewayClient.analyzeSnapshot(question)),
+      ),
     [run],
   );
 
   const askCopilot = useCallback(
-    (question: string, task: "chat" | "generate_test" = "chat") =>
-      run(question, async () => {
+    (
+      question: string,
+      attachments: CopilotAttachment[],
+      task: "chat" | "generate_test",
+      displayAttachments?: readonly CompleteAttachment[],
+    ) =>
+      run(userMessage(question, displayAttachments), async () => {
         const payload = await gatewayClient.queryCopilot(question, attachments, task);
         if (payload.artifacts.length) setArtifacts(payload.artifacts);
         return formatCopilotResponse(payload);
       }),
-    [attachments, run],
+    [run],
   );
 
-  const addFiles = useCallback(
-    async (files: FileList | null) => {
-      if (!files) return;
-      try {
-        const next = [...attachments];
-        for (const file of Array.from(files)) {
-          if (file.size > 256 * 1024) throw new Error(`${file.name} 超过 256 KiB`);
-          const content = await file.text();
-          const item = { name: file.name, content, size: file.size };
-          const index = next.findIndex((current) => current.name === file.name);
-          if (index >= 0) next[index] = item;
-          else next.push(item);
-        }
-        if (next.length > 5) throw new Error("最多添加 5 个文件");
-        setAttachments(next);
-      } catch (error) {
-        reportError(error);
-      } finally {
-        if (fileInput.current) fileInput.current.value = "";
-      }
+  const suggestions = useMemo(() => {
+    if (composerAttachmentCount) {
+      return [
+        { prompt: "解释已添加文件的主要逻辑和风险。" },
+        { prompt: "基于已添加文件生成覆盖关键分支的 pytest 测试。" },
+      ];
+    }
+    if (hasCurrentData) {
+      return [{ prompt: `分析当前 ${dataLabel} 的异常和风险。` }];
+    }
+    return [];
+  }, [composerAttachmentCount, dataLabel, hasCurrentData]);
+
+  const runtime = useExternalStoreRuntime<ChatMessage>({
+    messages,
+    isRunning,
+    convertMessage,
+    adapters: { attachments: attachmentAdapter },
+    onNew: async (message) => {
+      const question = messageText(message);
+      if (!question) return;
+      const task = message.runConfig?.custom?.task === "generate_test" ? "generate_test" : "chat";
+      await askCopilot(
+        question,
+        await messageAttachments(message),
+        task,
+        message.attachments,
+      );
     },
-    [attachments, reportError],
-  );
+    suggestions,
+  });
+
+  useEffect(() => {
+    const updateCount = () => {
+      setComposerAttachmentCount(runtime.thread.composer.getState().attachments.length);
+    };
+    updateCount();
+    return runtime.thread.composer.subscribe(updateCount);
+  }, [runtime]);
+
+  const generateTests = useCallback(() => {
+    const composer = runtime.thread.composer;
+    if (!composer.getState().attachments.length) return;
+    composer.setText("基于已添加文件生成可运行的 pytest 测试代码。");
+    composer.setRunConfig({ custom: { task: "generate_test" } });
+    composer.send();
+  }, [runtime]);
 
   const downloadArtifact = useCallback((artifact: CopilotArtifact) => {
     const url = URL.createObjectURL(new Blob([artifact.content], { type: "text/x-python" }));
@@ -244,32 +304,6 @@ export default function App() {
     link.click();
     URL.revokeObjectURL(url);
   }, []);
-
-  const suggestions = useMemo(() => {
-    if (attachments.length) {
-      return [
-        { title: "解释参考文件", message: "解释已添加参考文件的主要逻辑和风险。", isLoading: false },
-        { title: "生成测试", message: "基于已添加参考文件生成覆盖关键分支的 pytest 测试。", isLoading: false },
-      ];
-    }
-    if (hasCurrentData) {
-      return [
-        { title: `分析当前 ${dataLabel}`, message: `分析当前 ${dataLabel} 的异常和风险。`, isLoading: false },
-      ];
-    }
-    return [];
-  }, [attachments.length, dataLabel, hasCurrentData]);
-
-  const runtime = useExternalStoreRuntime<ChatMessage>({
-    messages,
-    isRunning,
-    convertMessage,
-    onNew: async (message) => {
-      const question = messageText(message);
-      if (question) await askCopilot(question);
-    },
-    suggestions: suggestions.map((suggestion) => ({ prompt: suggestion.message })),
-  });
 
   return (
     <FluentProvider theme={webLightTheme} className="app-provider">
@@ -319,7 +353,7 @@ export default function App() {
           </Badge>
         </section>
 
-        <div className="quick-actions" aria-label="快捷分析">
+        <div className="quick-actions" aria-label="快捷操作">
           <Button
             appearance="secondary"
             icon={<ChartMultiple20Regular />}
@@ -328,60 +362,25 @@ export default function App() {
           >
             分析当前 {dataLabel}
           </Button>
-          <input
-            ref={fileInput}
-            className="file-input"
-            type="file"
-            multiple
-            accept=".py,.json,.yaml,.yml,.xml,.txt,.dbc,.md,.toml,.ini,.cfg,.csv,.log,.asc"
-            onChange={(event) => void addFiles(event.target.files)}
-          />
-          <Button
-            appearance="secondary"
-            icon={<Attach20Regular />}
-            disabled={isRunning}
-            onClick={() => fileInput.current?.click()}
-          >
-            添加参考文件
-          </Button>
           <Button
             appearance="primary"
             icon={<Code20Regular />}
-            disabled={isRunning || attachments.length === 0}
-            onClick={() => void askCopilot("基于已添加参考文件生成可运行的 pytest 测试代码。", "generate_test")}
+            disabled={isRunning || composerAttachmentCount === 0}
+            onClick={generateTests}
           >
             生成测试
           </Button>
+          {artifacts.map((artifact) => (
+            <Button
+              key={artifact.name}
+              appearance="subtle"
+              icon={<ArrowDownload20Regular />}
+              onClick={() => downloadArtifact(artifact)}
+            >
+              保存 {artifact.name}
+            </Button>
+          ))}
         </div>
-
-        {(attachments.length > 0 || artifacts.length > 0) && (
-          <section className="work-files" aria-label="工作文件">
-            {attachments.map((attachment) => (
-              <div className="file-pill" key={attachment.name}>
-                <span title={attachment.name}>{attachment.name}</span>
-                <Button
-                  appearance="subtle"
-                  size="small"
-                  icon={<Delete16Regular />}
-                  aria-label={`移除 ${attachment.name}`}
-                  onClick={() =>
-                    setAttachments((current) => current.filter((item) => item.name !== attachment.name))
-                  }
-                />
-              </div>
-            ))}
-            {artifacts.map((artifact) => (
-              <Button
-                key={artifact.name}
-                appearance="subtle"
-                icon={<ArrowDownload20Regular />}
-                onClick={() => downloadArtifact(artifact)}
-              >
-                保存 {artifact.name}
-              </Button>
-            ))}
-          </section>
-        )}
 
         <section className="chat-region" aria-label="Copilot 对话">
           <AssistantRuntimeProvider runtime={runtime}>
@@ -396,17 +395,16 @@ export default function App() {
                 allowFeedbackNegative: false,
                 components: { Text: MarkdownText },
               }}
-              composer={{ allowAttachments: false }}
+              composer={{ allowAttachments: true }}
               strings={{
                 thread: { scrollToBottom: { tooltip: "滚动到底部" } },
                 composer: {
                   input: {
-                    placeholder: attachments.length
-                      ? "询问参考文件..."
-                      : hostConnected
-                        ? "询问当前 CoreTest 数据..."
-                        : "输入问题...",
+                    placeholder: hostConnected
+                      ? "询问当前 CoreTest 数据或添加参考文件..."
+                      : "输入问题或添加参考文件...",
                   },
+                  addAttachment: { tooltip: "添加参考文件" },
                   send: { tooltip: "发送" },
                   cancel: { tooltip: "停止" },
                 },

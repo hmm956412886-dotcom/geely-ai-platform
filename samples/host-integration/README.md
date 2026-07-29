@@ -75,7 +75,6 @@ compare = client.compare(baseline_asset_id=source_asset_id, target_asset_id=targ
 1. `GET /health` 检查 AI Gateway 是否可用。
 2. `POST /api/v1/host/assets` 把本地文件注册为浏览器安全的 `asset_id`。
 3. `POST /api/v1/host/context?host_session_id=...` 写入当前项目、Run、资产和用户。
-4. `GET /api/v1/tools` 读取 Agent / SK 可调用的工具契约。
 5. `POST /api/v1/analyze` 分析当前测试文件。
 6. `POST /api/v1/test-data/insights` 生成状态分布和 Top 失败原因。
 7. `POST /api/v1/test-data/compare` 对比两次测试结果。

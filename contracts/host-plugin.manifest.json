@@ -2,11 +2,7 @@
   "id": "geely-ai-gateway",
   "version": "0.1.0",
   "display_name": "Geely AI Assistant",
-  "integration_modes": [
-    "webview",
-    "http-api",
-    "cli-launch"
-  ],
+  "integration_modes": ["webview", "http-api", "cli-launch"],
   "webview": {
     "entry": "/copilot-shell/",
     "fallback_entry": "/copilot",
@@ -27,115 +23,21 @@
       "optional_env": "AI_GATEWAY_ACCESS_TOKEN",
       "privileged_host_env": "AI_GATEWAY_HOST_TOKEN"
     },
-    "tools": "/api/v1/tools",
     "host_assets": "/api/v1/host/assets",
     "host_snapshot": "/api/v1/host/snapshot",
     "operations": [
-      {
-        "operation_id": "query_agent",
-        "method": "POST",
-        "path": "/api/v1/agent/query",
-        "side_effect": "read_only",
-        "requires_confirmation": false
-      },
-      {
-        "operation_id": "query_copilot",
-        "method": "POST",
-        "path": "/api/v1/copilot/query",
-        "side_effect": "read_only",
-        "requires_confirmation": false
-      },
-      {
-        "operation_id": "analyze_host_snapshot",
-        "method": "POST",
-        "path": "/api/v1/host/snapshot/analyze",
-        "side_effect": "read_only",
-        "requires_confirmation": false
-      },
-      {
-        "operation_id": "get_host_snapshot",
-        "method": "GET",
-        "path": "/api/v1/host/snapshot",
-        "side_effect": "read_only",
-        "requires_confirmation": false
-      },
-      {
-        "operation_id": "publish_host_snapshot",
-        "method": "POST",
-        "path": "/api/v1/host/snapshot",
-        "side_effect": "local_state",
-        "requires_confirmation": false
-      },
-      {
-        "operation_id": "release_host_session",
-        "method": "DELETE",
-        "path": "/api/v1/host/session",
-        "side_effect": "local_state",
-        "requires_confirmation": false
-      },
-      {
-        "operation_id": "analyze_test_run",
-        "method": "POST",
-        "path": "/api/v1/analyze",
-        "side_effect": "read_only",
-        "requires_confirmation": false
-      },
-      {
-        "operation_id": "summarize_test_data",
-        "method": "POST",
-        "path": "/api/v1/test-data/summary",
-        "side_effect": "read_only",
-        "requires_confirmation": false
-      },
-      {
-        "operation_id": "compare_test_runs",
-        "method": "POST",
-        "path": "/api/v1/test-data/compare",
-        "side_effect": "read_only",
-        "requires_confirmation": false
-      },
-      {
-        "operation_id": "analyze_test_data_insights",
-        "method": "POST",
-        "path": "/api/v1/test-data/insights",
-        "side_effect": "read_only",
-        "requires_confirmation": false
-      },
-      {
-        "operation_id": "query_knowledge",
-        "method": "POST",
-        "path": "/api/v1/knowledge/query",
-        "side_effect": "read_only",
-        "requires_confirmation": false
-      },
-      {
-        "operation_id": "get_model_config",
-        "method": "GET",
-        "path": "/api/v1/model/config",
-        "side_effect": "read_only",
-        "requires_confirmation": false
-      },
-      {
-        "operation_id": "get_host_context",
-        "method": "GET",
-        "path": "/api/v1/host/context",
-        "side_effect": "read_only",
-        "requires_confirmation": false
-      },
-      {
-        "operation_id": "update_host_context",
-        "method": "POST",
-        "path": "/api/v1/host/context",
-        "side_effect": "local_state",
-        "requires_confirmation": false
-      },
-      {
-        "operation_id": "list_audit_events",
-        "method": "GET",
-        "path": "/api/v1/audit/events",
-        "side_effect": "read_only",
-        "requires_confirmation": false
-      }
+      {"operation_id": "query_copilot", "method": "POST", "path": "/api/v1/copilot/query", "side_effect": "read_only", "requires_confirmation": false},
+      {"operation_id": "get_host_context", "method": "GET", "path": "/api/v1/host/context", "side_effect": "read_only", "requires_confirmation": false},
+      {"operation_id": "update_host_context", "method": "POST", "path": "/api/v1/host/context", "side_effect": "local_state", "requires_confirmation": false},
+      {"operation_id": "register_host_asset", "method": "POST", "path": "/api/v1/host/assets", "side_effect": "local_state", "requires_confirmation": false},
+      {"operation_id": "get_host_snapshot", "method": "GET", "path": "/api/v1/host/snapshot", "side_effect": "read_only", "requires_confirmation": false},
+      {"operation_id": "publish_host_snapshot", "method": "POST", "path": "/api/v1/host/snapshot", "side_effect": "local_state", "requires_confirmation": false},
+      {"operation_id": "analyze_host_snapshot", "method": "POST", "path": "/api/v1/host/snapshot/analyze", "side_effect": "read_only", "requires_confirmation": false},
+      {"operation_id": "release_host_session", "method": "DELETE", "path": "/api/v1/host/session", "side_effect": "local_state", "requires_confirmation": false},
+      {"operation_id": "analyze_test_run", "method": "POST", "path": "/api/v1/analyze", "side_effect": "read_only", "requires_confirmation": false},
+      {"operation_id": "summarize_test_data", "method": "POST", "path": "/api/v1/test-data/summary", "side_effect": "read_only", "requires_confirmation": false},
+      {"operation_id": "compare_test_runs", "method": "POST", "path": "/api/v1/test-data/compare", "side_effect": "read_only", "requires_confirmation": false},
+      {"operation_id": "analyze_test_data_insights", "method": "POST", "path": "/api/v1/test-data/insights", "side_effect": "read_only", "requires_confirmation": false}
     ]
   }
 }

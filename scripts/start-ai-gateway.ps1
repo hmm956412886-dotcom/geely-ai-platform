@@ -8,7 +8,6 @@ param(
 $ErrorActionPreference = "Stop"
 $RepoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 $GatewayRoot = Join-Path $RepoRoot "src\ai-gateway"
-$FeishuWorkerSource = Join-Path $RepoRoot "workers\feishu-sync\src"
 
 function Import-EnvFile {
     param([string]$Path)
@@ -34,14 +33,14 @@ function Import-EnvFile {
 
 Import-EnvFile -Path $EnvFile
 
-if ($env:AI_GATEWAY_HOST) {
+if (-not $PSBoundParameters.ContainsKey("HostName") -and $env:AI_GATEWAY_HOST) {
     $HostName = $env:AI_GATEWAY_HOST
 }
-if ($env:AI_GATEWAY_PORT) {
+if (-not $PSBoundParameters.ContainsKey("Port") -and $env:AI_GATEWAY_PORT) {
     $Port = [int]$env:AI_GATEWAY_PORT
 }
 
-$env:PYTHONPATH = "src;$FeishuWorkerSource"
+$env:PYTHONPATH = "src"
 
 Write-Host "Starting Geely AI Gateway..."
 Write-Host "URL: http://$HostName`:$Port"

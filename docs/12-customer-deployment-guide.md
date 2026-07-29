@@ -7,7 +7,7 @@
 ```text
 AI Gateway
 Copilot WebView URL
-OpenAPI / Plugin Manifest / Tool Registry
+OpenAPI / Plugin Manifest
 Host Connector 样例
 运行配置模板
 启动和检查脚本
@@ -48,22 +48,6 @@ AI_MODEL_REASONING_EFFORT=
 - `AI_GATEWAY_ACCESS_TOKEN` 交给 Copilot WebView，只能调用普通 API；`AI_GATEWAY_HOST_TOKEN` 只保留在可信桌面宿主/Sidecar，用于注册服务器本地文件，不能进入 WebView URL。
 - 默认最多保留 256 个 Host Session、每个 Session 32 个 asset；可通过 `AI_GATEWAY_MAX_HOST_SESSIONS` 和 `AI_GATEWAY_MAX_ASSETS_PER_SESSION` 调整。宿主关闭窗口或任务时必须调用 `DELETE /api/v1/host/session`。
 - 启用 Token 后不要从 WebView 传本地绝对路径；桌面宿主先调用 `/api/v1/host/assets` 注册文件，再把 `asset_id` 交给 Copilot。
-
-启用真实飞书知识查询：
-
-```powershell
-pnpm add -g @larksuite/cli@1.0.77
-lark-cli.exe auth status --json --verify
-```
-
-确认用户身份可用后，在 `.env` 中配置：
-
-```text
-AI_KNOWLEDGE_PROVIDER=feishu-cli
-LARK_CLI_COMMAND=lark-cli.exe
-```
-
-Gateway 会通过当前飞书用户身份执行 `drive +search`，再用 `docs +fetch` 读取最相关文档片段。未配置时继续使用离线演示知识，不影响测试数据分析。
 
 ## 3. 启动 AI Gateway
 
@@ -121,9 +105,6 @@ PASS /health
 PASS /api/v1/model/config
 PASS model config hides api_key
 PASS /plugin-manifest.json
-PASS tool analyze_test_run
-PASS tool analyze_test_data_insights
-PASS tool compare_test_runs
 PASS /showcase
 PASS Copilot shell URL
 PASS Copilot shell JavaScript entry
@@ -147,7 +128,6 @@ POST /api/v1/copilot/query?host_session_id=<宿主会话ID>
 POST /api/v1/analyze?host_session_id=<宿主会话ID>
 POST /api/v1/test-data/insights
 POST /api/v1/test-data/compare
-POST /api/v1/knowledge/query
 ```
 
 CoreTest 的完整 Qt 集成见 `integrations/coretest`；通用 Python REST 客户端见 `samples/host-integration`。

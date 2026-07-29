@@ -6,17 +6,17 @@
 - 优先复用 CoreTest 服务、Python/Qt 标准能力和已固定的开源依赖。
 - 不为单个实现增加接口、工厂、框架或未来配置。
 - Gateway REST API 是宿主集成协议；宿主不能依赖 Gateway 内部 Python 模块。
-- 所有汽车数据工具默认只读，写操作和设备控制不进入 Tool Registry。生成代码只能由用户明确保存到当前项目的 `generated_tests`，且不得自动执行。
+- 所有汽车数据工具默认只读。生成代码只能由用户明确保存到当前项目的 `generated_tests`，且不得自动执行。
 - 客户源码、PDX、DBC、BLF、日志、数据库和密钥不得提交到本仓库。
 
 ## 目录职责
 
 ```text
 frontend/copilot-shell/     可嵌入 Copilot UI
-src/ai-gateway/             REST Gateway、分析、知识和 Agent 编排
+src/ai-gateway/             REST Gateway、模型调用和确定性分析
 integrations/coretest/      CoreTest Qt Host Connector 和安装集成
 samples/host-integration/   与具体宿主无关的 REST SDK 样例
-contracts/                  OpenAPI、Manifest 和 Tool Registry
+contracts/                  OpenAPI 和 Host Manifest
 scripts/                    启动和部署检查
 ```
 
@@ -35,7 +35,7 @@ scripts/                    启动和部署检查
 - 成功和失败均返回 `request_id`。
 - 会话数据按 `host_session_id` 隔离并有数量/大小上限。
 - 浏览器只持有 Access Token；本地文件注册和 Host Snapshot 写入使用 Host Token。
-- OpenAPI、Plugin Manifest、Tool Registry 与实现同步测试。
+- OpenAPI 和 Plugin Manifest 是 Gateway 的唯一公开契约，并由运行时直接提供。
 
 ## 验证命令
 

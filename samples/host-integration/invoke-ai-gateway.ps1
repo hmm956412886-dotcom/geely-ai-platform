@@ -69,7 +69,6 @@ Write-Host "`nUpdating host context..."
 Invoke-GatewayJson -Method "POST" -Path ("/api/v1/host/context" + $SessionQuery) -Body $context | ConvertTo-Json -Depth 20
 
 Write-Host "`nReading tool registry..."
-Invoke-GatewayJson -Method "GET" -Path "/api/v1/tools" | ConvertTo-Json -Depth 20
 
 Write-Host "`nRunning current test analysis..."
 Invoke-GatewayJson `

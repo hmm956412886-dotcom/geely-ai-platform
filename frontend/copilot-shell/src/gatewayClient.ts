@@ -1,5 +1,5 @@
 import type {
-  AgentResponse,
+  AnalysisResponse,
   CopilotAttachment,
   CopilotResponse,
   CompareResponse,
@@ -64,8 +64,8 @@ export const gatewayClient = {
     return payload.result;
   },
 
-  queryAgent(question: string): Promise<AgentResponse> {
-    return postJson<AgentResponse>(sessionPath("/api/v1/agent/query"), { question });
+  analyzeSnapshot(question: string): Promise<AnalysisResponse> {
+    return postJson<AnalysisResponse>(sessionPath("/api/v1/host/snapshot/analyze"), { question });
   },
 
   queryCopilot(
