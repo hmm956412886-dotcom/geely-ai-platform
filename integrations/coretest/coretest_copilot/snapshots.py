@@ -137,6 +137,37 @@ def diagnostic_snapshot(
     }
 
 
+def pdx_snapshot(path: Path, revision: str) -> dict[str, Any]:
+    database = _load_pdx_file(path)
+    ecus = []
+    for ecu in list(database.ecus)[:20]:
+        services = [str(service.short_name) for service in list(ecu.services)]
+        ecus.append(
+            {
+                "name": str(ecu.short_name),
+                "variant_type": str(ecu.variant_type),
+                "description": str(ecu.description or "")[:1000],
+                "can_request_id": _hex_call(ecu.get_can_receive_id),
+                "can_response_id": _hex_call(ecu.get_can_send_id),
+                "service_count": len(services),
+                "services": services[:50],
+            }
+        )
+    layers = [str(layer.short_name) for layer in list(database.diag_layers)]
+    return {
+        "kind": "pdx",
+        "revision": revision,
+        "selection": {"pdx_name": path.name},
+        "data": {
+            "filename": path.name,
+            "ecu_count": len(database.ecus),
+            "diagnostic_layer_count": len(layers),
+            "diagnostic_layers": layers[:50],
+            "ecus": ecus,
+        },
+    }
+
+
 def _frame(frame: Any) -> dict[str, Any]:
     return {
         "frame_id": _frame_id(frame),
@@ -146,6 +177,20 @@ def _frame(frame: Any) -> dict[str, Any]:
         "payload_hex": bytes(getattr(frame, "payload", b"") or b"").hex(" ").upper(),
         "timestamp": getattr(frame, "timestamp", None),
     }
+
+
+def _hex_call(call: Any) -> str | None:
+    try:
+        value = call()
+    except (AttributeError, KeyError, TypeError, ValueError):
+        return None
+    return f"0x{value:X}" if isinstance(value, int) else None
+
+
+def _load_pdx_file(path: Path) -> Any:
+    import odxtools
+
+    return odxtools.load_pdx_file(str(path))
 
 
 def _frame_id(frame: Any) -> str:

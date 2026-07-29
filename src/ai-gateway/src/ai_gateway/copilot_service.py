@@ -13,6 +13,8 @@ from .model_client import chat_completion
 MAX_ATTACHMENTS = 5
 MAX_FILE_BYTES = 256 * 1024
 MAX_TOTAL_BYTES = 512 * 1024
+MAX_HISTORY_MESSAGES = 20
+MAX_HISTORY_BYTES = 64 * 1024
 SUPPORTED_SUFFIXES = {
     ".py", ".json", ".yaml", ".yml", ".xml", ".txt", ".dbc", ".md",
     ".toml", ".ini", ".cfg", ".csv", ".log", ".asc",
@@ -25,7 +27,7 @@ def run_copilot(
     host_context: dict[str, Any] | None = None,
     host_snapshot: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    unknown = set(payload) - {"question", "task", "attachments"}
+    unknown = set(payload) - {"question", "task", "attachments", "history"}
     if unknown:
         raise ValueError(f"unsupported copilot fields: {', '.join(sorted(unknown))}")
     question = str(payload.get("question") or "").strip()
@@ -37,12 +39,13 @@ def run_copilot(
     if task not in {"chat", "generate_test"}:
         raise ValueError("task must be chat or generate_test")
     attachments = _attachments(payload.get("attachments"))
+    history = _history(payload.get("history"))
     if task == "generate_test" and not attachments:
         raise ValueError("at least one attachment is required to generate test code")
 
     try:
         content = chat_completion(
-            _messages(question, task, attachments, host_context, host_snapshot)
+            _messages(question, task, attachments, history, host_context, host_snapshot)
         )
     except ValueError as exc:
         raise RuntimeError(str(exc)) from exc
@@ -87,10 +90,34 @@ def _attachments(value: Any) -> list[dict[str, str]]:
     return result
 
 
+def _history(value: Any) -> list[dict[str, str]]:
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise ValueError("history must be an array")
+    if len(value) > MAX_HISTORY_MESSAGES:
+        raise ValueError(f"history must contain at most {MAX_HISTORY_MESSAGES} messages")
+    result = []
+    total = 0
+    for item in value:
+        if not isinstance(item, dict) or set(item) != {"role", "content"}:
+            raise ValueError("each history message must contain only role and content")
+        role = item["role"]
+        content = item["content"]
+        if role not in {"user", "assistant"} or not isinstance(content, str) or not content.strip():
+            raise ValueError("history messages require a user or assistant role and text content")
+        total += len(content.encode("utf-8"))
+        if total > MAX_HISTORY_BYTES:
+            raise ValueError("history exceeds the 64 KiB total limit")
+        result.append({"role": role, "content": content})
+    return result
+
+
 def _messages(
     question: str,
     task: str,
     attachments: list[dict[str, str]],
+    history: list[dict[str, str]],
     host_context: dict[str, Any] | None = None,
     host_snapshot: dict[str, Any] | None = None,
 ) -> list[dict[str, str]]:
@@ -118,7 +145,11 @@ def _messages(
         if value
     ]
     user = question if not references else f"{question}\n\n" + "\n\n".join(references)
-    return [{"role": "system", "content": system}, {"role": "user", "content": user}]
+    return [
+        {"role": "system", "content": system},
+        *history,
+        {"role": "user", "content": user},
+    ]
 
 
 def _host_reference(

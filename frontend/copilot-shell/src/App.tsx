@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AssistantRuntimeProvider,
   SimpleTextAttachmentAdapter,
@@ -9,7 +9,6 @@ import {
 } from "@assistant-ui/react";
 import { makeMarkdownText, Thread } from "@assistant-ui/react-ui";
 import {
-  Badge,
   Button,
   FluentProvider,
   Spinner,
@@ -17,18 +16,19 @@ import {
   webLightTheme,
 } from "@fluentui/react-components";
 import {
+  Add20Regular,
   ArrowDownload20Regular,
   ArrowSync20Regular,
-  ChartMultiple20Regular,
   Code20Regular,
-  ShieldCheckmark20Regular,
-  Sparkle20Filled,
+  ChevronRight16Regular,
+  DocumentData20Regular,
 } from "@fluentui/react-icons";
 import { GatewayRequestError, gatewayClient, hostSessionId } from "./gatewayClient";
 import type {
   AnalysisResponse,
   CopilotArtifact,
   CopilotAttachment,
+  CopilotHistoryMessage,
   CopilotResponse,
   HostContext,
   HostContextMessage,
@@ -55,14 +55,6 @@ const emptyContext: HostContext = {
   current_view: null,
   user_id: null,
 };
-
-const initialMessages: ChatMessage[] = [
-  {
-    id: crypto.randomUUID(),
-    role: "assistant",
-    content: "你好，我是 CoreTest Copilot。",
-  },
-];
 
 function assistantMessage(content: string): ChatMessage {
   return { id: crypto.randomUUID(), role: "assistant", content };
@@ -108,39 +100,45 @@ async function messageAttachments(message: AppendMessage): Promise<CopilotAttach
   );
 }
 
+function conversationHistory(messages: ChatMessage[]): CopilotHistoryMessage[] {
+  return messages.slice(-20).map(({ role, content }) => ({ role, content }));
+}
+
 function formatResponse(payload: AnalysisResponse): string {
   const citation = payload.citations[0];
   const source = citation
     ? `\n\n**参考**：[${citation.title}](${citation.source_url}) · ${citation.provider}`
     : "";
   const warning = payload.warnings.length ? `\n\n> ${payload.warnings.join("；")}` : "";
-  return `${payload.answer}${source}${warning}\n\n\`request_id: ${payload.request_id}\``;
+  return `${payload.answer}${source}${warning}`;
 }
 
 function formatCopilotResponse(payload: CopilotResponse): string {
   const generated = payload.artifacts
     .map((artifact) => `\n\n### ${artifact.name}\n\n\`\`\`${artifact.language}\n${artifact.content}\`\`\``)
     .join("");
-  return `${payload.answer}${generated}\n\n\`request_id: ${payload.request_id}\``;
+  return `${payload.answer}${generated}`;
 }
 
 function currentDataLabel(context: HostContext): string {
   const labels: Record<string, string> = {
     trace: "Trace",
     dbc: "DBC",
-    diagnostic: "诊断",
-    project: "项目",
+    diagnostic: "诊断数据",
+    project: "当前工程",
+    pdx: "PDX",
   };
-  return labels[context.selection_kind ?? ""] ?? "数据";
+  return labels[context.selection_kind ?? ""] ?? "当前内容";
 }
 
 export default function App() {
   const [context, setContext] = useState<HostContext>(emptyContext);
-  const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isRunning, setIsRunning] = useState(false);
   const [contextLoading, setContextLoading] = useState(true);
   const [artifacts, setArtifacts] = useState<CopilotArtifact[]>([]);
   const [composerAttachmentCount, setComposerAttachmentCount] = useState(0);
+  const previousProject = useRef<string | null>(null);
   const hostConnected = Boolean(context.host_application);
   const hasCurrentData = Boolean(context.selection_kind && context.snapshot_revision);
   const dataLabel = currentDataLabel(context);
@@ -187,6 +185,16 @@ export default function App() {
     }, 1000);
     return () => window.clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    const project = context.project_id;
+    if (!project) return;
+    if (previousProject.current && previousProject.current !== project) {
+      setMessages([]);
+      setArtifacts([]);
+    }
+    previousProject.current = project;
+  }, [context.project_id]);
 
   useEffect(() => {
     const receiveHostContext = (event: MessageEvent<HostContextMessage>) => {
@@ -237,11 +245,12 @@ export default function App() {
     (
       question: string,
       attachments: CopilotAttachment[],
+      history: CopilotHistoryMessage[],
       task: "chat" | "generate_test",
       displayAttachments?: readonly CompleteAttachment[],
     ) =>
       run(userMessage(question, displayAttachments), async () => {
-        const payload = await gatewayClient.queryCopilot(question, attachments, task);
+        const payload = await gatewayClient.queryCopilot(question, attachments, history, task);
         if (payload.artifacts.length) setArtifacts(payload.artifacts);
         return formatCopilotResponse(payload);
       }),
@@ -251,12 +260,11 @@ export default function App() {
   const suggestions = useMemo(() => {
     if (composerAttachmentCount) {
       return [
-        { prompt: "解释已添加文件的主要逻辑和风险。" },
-        { prompt: "基于已添加文件生成覆盖关键分支的 pytest 测试。" },
+        { prompt: "分析已添加文件的主要逻辑和风险。" },
       ];
     }
     if (hasCurrentData) {
-      return [{ prompt: `分析当前 ${dataLabel} 的异常和风险。` }];
+      return [{ prompt: `分析当前 ${dataLabel}，指出关键信息、异常和下一步建议。` }];
     }
     return [];
   }, [composerAttachmentCount, dataLabel, hasCurrentData]);
@@ -273,6 +281,7 @@ export default function App() {
       await askCopilot(
         question,
         await messageAttachments(message),
+        conversationHistory(messages),
         task,
         message.attachments,
       );
@@ -296,6 +305,13 @@ export default function App() {
     composer.send();
   }, [runtime]);
 
+  const startNewConversation = useCallback(async () => {
+    const composer = runtime.thread.composer;
+    await composer.reset();
+    setMessages([]);
+    setArtifacts([]);
+  }, [runtime]);
+
   const downloadArtifact = useCallback((artifact: CopilotArtifact) => {
     const url = URL.createObjectURL(new Blob([artifact.content], { type: "text/x-python" }));
     const link = document.createElement("a");
@@ -305,87 +321,72 @@ export default function App() {
     URL.revokeObjectURL(url);
   }, []);
 
+  const contextLabel = context.selection_label || context.current_view || "等待选择";
+
   return (
     <FluentProvider theme={webLightTheme} className="app-provider">
       <main className="copilot-shell">
         <header className="shell-header">
-          <div className="brand-block">
-            <span className="brand-mark" aria-hidden="true">
-              <Sparkle20Filled />
-            </span>
-            <div className="brand-copy">
-              <h1>CoreTest Copilot</h1>
-              <p>{context.host_application || "未连接 CoreTest"}</p>
-            </div>
+          <div className="title-block">
+            <h1>Copilot</h1>
+            <p>{context.project_id || (hostConnected ? "未打开工程" : "未连接 CoreTest")}</p>
           </div>
-          <Tooltip content="刷新宿主上下文" relationship="label">
-            <Button
-              appearance="subtle"
-              icon={contextLoading ? <Spinner size="tiny" /> : <ArrowSync20Regular />}
-              aria-label="刷新宿主上下文"
-              onClick={() => void refreshContext()}
-              disabled={contextLoading}
-            />
-          </Tooltip>
+          <div className="header-actions">
+            <Tooltip content="刷新上下文" relationship="label">
+              <Button
+                appearance="subtle"
+                icon={contextLoading ? <Spinner size="tiny" /> : <ArrowSync20Regular />}
+                aria-label="刷新上下文"
+                onClick={() => void refreshContext()}
+                disabled={contextLoading}
+              />
+            </Tooltip>
+            <Tooltip content="新建对话" relationship="label">
+              <Button
+                appearance="subtle"
+                icon={<Add20Regular />}
+                aria-label="新建对话"
+                onClick={() => void startNewConversation()}
+                disabled={isRunning}
+              />
+            </Tooltip>
+          </div>
         </header>
 
-        <section className="context-strip" aria-label="宿主上下文">
-          {hostConnected ? (
-            <div className="context-main">
-              <div>
-                <span className="context-label">项目</span>
-                <strong>{context.project_id || "未打开项目"}</strong>
-              </div>
-              <div>
-                <span className="context-label">当前数据</span>
-                <strong>{context.selection_label || context.current_view || "未选择"}</strong>
-              </div>
-            </div>
-          ) : (
-            <div className="context-empty">未连接 CoreTest</div>
-          )}
-          <Badge
-            appearance="tint"
-            color={hostConnected ? "success" : "informative"}
-            icon={hostConnected ? <ShieldCheckmark20Regular /> : undefined}
-          >
-            {hostConnected ? "只读" : "独立模式"}
-          </Badge>
-        </section>
+        <button
+          type="button"
+          className="context-bar"
+          onClick={() => hasCurrentData && void analyze(`概括当前 ${dataLabel} 的关键信息。`)}
+          disabled={!hasCurrentData || isRunning}
+          title={contextLabel}
+        >
+          <DocumentData20Regular aria-hidden="true" />
+          <span>{contextLabel}</span>
+          {hasCurrentData && <ChevronRight16Regular aria-hidden="true" />}
+        </button>
 
-        <div className="quick-actions" aria-label="快捷操作">
-          <Button
-            appearance="secondary"
-            icon={<ChartMultiple20Regular />}
-            disabled={isRunning || !hasCurrentData}
-            onClick={() => void analyze(`分析当前 ${dataLabel} 的异常和风险，并给出下一步排查建议。`)}
-          >
-            分析当前 {dataLabel}
-          </Button>
-          <Button
-            appearance="primary"
-            icon={<Code20Regular />}
-            disabled={isRunning || composerAttachmentCount === 0}
-            onClick={generateTests}
-          >
-            生成测试
-          </Button>
-          {artifacts.map((artifact) => (
+        {composerAttachmentCount > 0 && (
+          <div className="attachment-actions">
+            <span>已添加 {composerAttachmentCount} 个文件</span>
             <Button
-              key={artifact.name}
               appearance="subtle"
-              icon={<ArrowDownload20Regular />}
-              onClick={() => downloadArtifact(artifact)}
+              icon={<Code20Regular />}
+              onClick={generateTests}
+              disabled={isRunning}
             >
-              保存 {artifact.name}
+              生成 pytest
             </Button>
-          ))}
-        </div>
+          </div>
+        )}
 
         <section className="chat-region" aria-label="Copilot 对话">
           <AssistantRuntimeProvider runtime={runtime}>
             <Thread
-              welcome={{ message: null }}
+              welcome={{
+                message: hostConnected ? "需要分析什么？" : "连接 CoreTest 后开始",
+                suggestions,
+              }}
+              assistantAvatar={{ fallback: "AI" }}
               userMessage={{ allowEdit: false }}
               assistantMessage={{
                 allowReload: false,
@@ -401,18 +402,34 @@ export default function App() {
                 composer: {
                   input: {
                     placeholder: hostConnected
-                      ? "询问当前 CoreTest 数据或添加参考文件..."
-                      : "输入问题或添加参考文件...",
+                      ? "询问当前内容或添加文件..."
+                      : "输入问题或添加文件...",
                   },
                   addAttachment: { tooltip: "添加参考文件" },
                   send: { tooltip: "发送" },
                   cancel: { tooltip: "停止" },
+                  removeAttachment: { tooltip: "移除附件" },
                 },
                 assistantMessage: { copy: { tooltip: "复制" } },
               }}
             />
           </AssistantRuntimeProvider>
         </section>
+
+        {artifacts.length > 0 && (
+          <div className="artifact-actions" aria-label="生成结果">
+            {artifacts.map((artifact) => (
+              <Button
+                key={artifact.name}
+                appearance="secondary"
+                icon={<ArrowDownload20Regular />}
+                onClick={() => downloadArtifact(artifact)}
+              >
+                保存 {artifact.name}
+              </Button>
+            ))}
+          </div>
+        )}
       </main>
     </FluentProvider>
   );

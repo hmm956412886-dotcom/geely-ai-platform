@@ -42,7 +42,7 @@
           "target_asset_id": {"type": "string", "nullable": true},
           "current_view": {"type": "string", "nullable": true},
           "user_id": {"type": "string", "nullable": true},
-          "selection_kind": {"type": "string", "nullable": true, "enum": ["project", "trace", "dbc", "diagnostic", null]},
+          "selection_kind": {"type": "string", "nullable": true, "enum": ["project", "trace", "dbc", "diagnostic", "pdx", null]},
           "selection_label": {"type": "string", "nullable": true},
           "snapshot_revision": {"type": "string", "nullable": true}
         }
@@ -58,7 +58,7 @@
           "target_asset_id": {"type": "string", "nullable": true},
           "current_view": {"type": "string", "nullable": true},
           "user_id": {"type": "string", "nullable": true},
-          "selection_kind": {"type": "string", "nullable": true, "enum": ["project", "trace", "dbc", "diagnostic", null]},
+          "selection_kind": {"type": "string", "nullable": true, "enum": ["project", "trace", "dbc", "diagnostic", "pdx", null]},
           "selection_label": {"type": "string", "nullable": true},
           "snapshot_revision": {"type": "string", "nullable": true}
         }
@@ -68,7 +68,7 @@
         "required": ["kind", "revision", "data"],
         "additionalProperties": false,
         "properties": {
-          "kind": {"type": "string", "enum": ["project", "trace", "dbc", "diagnostic"]},
+          "kind": {"type": "string", "enum": ["project", "trace", "dbc", "diagnostic", "pdx"]},
           "revision": {"type": "string", "maxLength": 80},
           "captured_at": {"type": "string", "nullable": true},
           "selection": {"type": "object", "additionalProperties": true},
@@ -100,6 +100,20 @@
         "properties": {
           "question": {"type": "string", "minLength": 1, "maxLength": 4000},
           "task": {"type": "string", "enum": ["chat", "generate_test"], "default": "chat"},
+          "history": {
+            "type": "array",
+            "maxItems": 20,
+            "description": "Conversation messages preceding the current question; maximum combined content size is 64 KiB",
+            "items": {
+              "type": "object",
+              "required": ["role", "content"],
+              "additionalProperties": false,
+              "properties": {
+                "role": {"type": "string", "enum": ["user", "assistant"]},
+                "content": {"type": "string", "minLength": 1}
+              }
+            }
+          },
           "attachments": {"type": "array", "maxItems": 5, "items": {"$ref": "#/components/schemas/CopilotAttachment"}, "description": "Maximum combined encoded content size is 512 KiB"}
         }
       },

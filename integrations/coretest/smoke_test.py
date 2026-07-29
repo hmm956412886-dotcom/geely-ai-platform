@@ -25,6 +25,7 @@ def main() -> int:
     app = QApplication(sys.argv)
     window = MainWindow()
     window.resize(1280, 800)
+    window.show()
     failures: list[str] = []
 
     def verify_dom(text: object) -> None:
@@ -32,8 +33,23 @@ def main() -> int:
             assert window.copilot.dock.objectName() == "coretest-copilot-dock"
             assert window.copilot.bridge.ready
             assert window.copilot.web.url().path() == "/copilot-shell/"
+            assert window.copilot.open_action.isChecked()
+            window.copilot.close_button.click()
+            QApplication.processEvents()
+            assert not window.copilot.dock.isVisible()
+            window.copilot.open_action.trigger()
+            QApplication.processEvents()
+            assert window.copilot.dock.isVisible()
+            window.copilot.collapse_button.click()
+            QApplication.processEvents()
+            assert window.copilot._collapsed
+            assert window.copilot.dock.maximumWidth() == 48
+            window.copilot.collapse_button.click()
+            QApplication.processEvents()
+            assert not window.copilot._collapsed
+            assert window.copilot.dock.minimumWidth() == 360
             page_text = str(text)
-            for label in ("CoreTest Copilot", "HK CoreTest", "添加参考文件", "生成测试"):
+            for label in ("Copilot", "需要分析什么？"):
                 assert label in page_text, f"missing WebEngine content: {label}"
             base = window.copilot.bridge.base_url
             session = window.copilot.bridge.session_id

@@ -294,6 +294,39 @@ class AppTests(unittest.TestCase):
         self.assertEqual(oversized.status, 400)
         self.assertIn("size limit", oversized.body)
 
+    def test_pdx_snapshot_returns_deterministic_analysis(self) -> None:
+        session = "coretest-pdx"
+        published = handle_request(
+            "POST",
+            f"/api/v1/host/snapshot?host_session_id={session}",
+            json.dumps(
+                {
+                    "kind": "pdx",
+                    "revision": "8",
+                    "selection": {"pdx_name": "somersault.pdx"},
+                    "data": {
+                        "ecu_count": 2,
+                        "diagnostic_layer_count": 4,
+                        "ecus": [
+                            {"name": "somersault_lazy", "service_count": 6},
+                            {"name": "somersault_assiduous", "service_count": 6},
+                        ],
+                    },
+                }
+            ),
+        )
+        analysis = handle_request(
+            "POST",
+            f"/api/v1/host/snapshot/analyze?host_session_id={session}",
+            json.dumps({"question": "Analyze this PDX"}),
+        )
+
+        self.assertEqual(published.status, 200)
+        self.assertEqual(analysis.status, 200)
+        answer = json.loads(analysis.body)["answer"]
+        self.assertIn("somersault.pdx", answer)
+        self.assertIn("somersault_lazy", answer)
+
     def test_copilot_token_cannot_publish_host_snapshot(self) -> None:
         with patch.dict(
             "os.environ",

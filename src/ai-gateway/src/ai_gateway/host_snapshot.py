@@ -11,7 +11,7 @@ from .host_context import get_host_context, normalize_host_session_id
 
 
 DEFAULT_MAX_SNAPSHOT_BYTES = 1024 * 1024
-ALLOWED_KINDS = {"project", "trace", "dbc", "diagnostic"}
+ALLOWED_KINDS = {"project", "trace", "dbc", "diagnostic", "pdx"}
 ALLOWED_FIELDS = {"kind", "revision", "captured_at", "selection", "data"}
 
 _snapshots: dict[str, dict[str, Any]] = {}
@@ -85,6 +85,7 @@ def analyze_host_snapshot(
         "dbc": _dbc_answer,
         "diagnostic": _diagnostic_answer,
         "project": _project_answer,
+        "pdx": _pdx_answer,
     }[kind](data, snapshot["selection"])
     return {
         "answer": answer,
@@ -153,6 +154,22 @@ def _project_answer(data: dict[str, Any], selection: dict[str, Any]) -> str:
             categories[category] = categories.get(category, 0) + 1
     counts = "、".join(f"{name} {count} 个" for name, count in sorted(categories.items()))
     return f"当前项目包含 {len(files)} 个受支持文件（{counts or '暂无文件'}），可选择 DBC、Trace 或诊断页面继续分析。"
+
+
+def _pdx_answer(data: dict[str, Any], selection: dict[str, Any]) -> str:
+    name = str(selection.get("pdx_name") or data.get("filename") or "当前 PDX")
+    if error := data.get("parse_error"):
+        return f"{name} 已被选中，但解析失败：{error}"
+    ecus = data.get("ecus") if isinstance(data.get("ecus"), list) else []
+    ecu_names = "、".join(
+        str(ecu.get("name")) for ecu in ecus[:10] if isinstance(ecu, dict) and ecu.get("name")
+    )
+    services = sum(_integer(ecu.get("service_count")) for ecu in ecus if isinstance(ecu, dict))
+    return (
+        f"{name} 已完成解析，包含 {_integer(data.get('ecu_count'))} 个 ECU 变体、"
+        f"{_integer(data.get('diagnostic_layer_count'))} 个诊断层和 {services} 个 ECU 服务。"
+        f"ECU：{ecu_names or '未识别'}。可继续询问具体服务、CAN 地址和测试关注点。"
+    )
 
 
 def _format_counts(value: Any, label_key: str) -> str:

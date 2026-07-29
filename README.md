@@ -10,6 +10,8 @@
 - 普通模型问答；添加代码、配置、DBC、ASC 等文本文件后可基于内容提问。
 - 基于附件生成完整 pytest 测试模块，在对话中预览、复制并明确保存到当前项目 `generated_tests`。
 - 当前项目、页面、DBC 节点/帧、Trace 帧和诊断 ECU 自动同步到独立宿主会话。
+- 在工程树选中 PDX 后，使用开源 `odxtools` 解析 ECU、诊断层、服务和 CAN 通信参数并直接分析。
+- 支持有真实历史的多轮对话和与当前工程关联的新建对话。
 - Trace、DBC、诊断日志和项目文件的确定性只读分析。
 - AI Gateway Sidecar 生命周期、分级 Bearer Token、OpenAPI、Plugin Manifest 和审计 `request_id`。
 - 官方 `openai-python` 通过 OpenAI-compatible Responses 或 Chat Completions API 调用客户模型。

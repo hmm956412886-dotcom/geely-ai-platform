@@ -46,6 +46,11 @@ export interface CopilotAttachment {
   size: number;
 }
 
+export interface CopilotHistoryMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
 export interface CopilotArtifact {
   name: string;
   language: string;

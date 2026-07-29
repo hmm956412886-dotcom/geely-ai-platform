@@ -1,6 +1,7 @@
 import type {
   AnalysisResponse,
   CopilotAttachment,
+  CopilotHistoryMessage,
   CopilotResponse,
   CompareResponse,
   GatewayErrorBody,
@@ -71,11 +72,13 @@ export const gatewayClient = {
   queryCopilot(
     question: string,
     attachments: CopilotAttachment[],
+    history: CopilotHistoryMessage[],
     task: "chat" | "generate_test" = "chat",
   ): Promise<CopilotResponse> {
     return postJson<CopilotResponse>(sessionPath("/api/v1/copilot/query"), {
       question,
       task,
+      history,
       attachments: attachments.map(({ name, content }) => ({ name, content })),
     });
   },

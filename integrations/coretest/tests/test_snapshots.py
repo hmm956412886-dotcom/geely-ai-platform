@@ -1,9 +1,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 import unittest
 
-from coretest_copilot.snapshots import diagnostic_snapshot, project_snapshot, trace_snapshot
+from coretest_copilot.snapshots import (
+    diagnostic_snapshot,
+    pdx_snapshot,
+    project_snapshot,
+    trace_snapshot,
+)
 
 
 @dataclass
@@ -45,6 +53,31 @@ class SnapshotTests(unittest.TestCase):
         )
         self.assertEqual(payload["data"]["negative_response_count"], 1)
         self.assertEqual(payload["data"]["nrc_counts"][0]["nrc"], "0x22")
+
+    @patch("coretest_copilot.snapshots._load_pdx_file")
+    def test_pdx_uses_odxtools_and_exposes_bounded_diagnostic_summary(self, load_pdx) -> None:
+        ecu = SimpleNamespace(
+            short_name="vehicle_ecu",
+            variant_type="ECU-VARIANT",
+            description="Vehicle control unit",
+            services=[SimpleNamespace(short_name=f"service_{index}") for index in range(80)],
+            get_can_receive_id=lambda: 0x700,
+            get_can_send_id=lambda: 0x708,
+        )
+        load_pdx.return_value = SimpleNamespace(
+            ecus=[ecu],
+            diag_layers=[ecu, SimpleNamespace(short_name="protocol")],
+        )
+
+        payload = pdx_snapshot(Path("vehicle.pdx"), "4")
+
+        load_pdx.assert_called_once_with(Path("vehicle.pdx"))
+        self.assertEqual(payload["kind"], "pdx")
+        self.assertEqual(payload["selection"]["pdx_name"], "vehicle.pdx")
+        self.assertEqual(payload["data"]["ecu_count"], 1)
+        self.assertEqual(payload["data"]["ecus"][0]["can_request_id"], "0x700")
+        self.assertEqual(payload["data"]["ecus"][0]["service_count"], 80)
+        self.assertEqual(len(payload["data"]["ecus"][0]["services"]), 50)
 
 
 if __name__ == "__main__":
