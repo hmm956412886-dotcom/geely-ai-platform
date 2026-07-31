@@ -6,6 +6,7 @@ from dataclasses import dataclass
 import json
 import os
 from pathlib import Path
+import re
 import sys
 from typing import Any, Mapping
 from urllib.parse import parse_qs, unquote, urlsplit
@@ -129,6 +130,45 @@ def _handle_request(
                 },
             }
         )
+    if method == "POST" and path == "/api/v1/agent/permissions":
+        payload = _read_json(body)
+        _require_fields(payload, {"conversation_id"})
+        try:
+            permissions = get_opencode_runtime().pending_permissions(
+                _agent_session_key(payload, host_session_id)
+            )
+            return json_response(
+                {"request_id": _request_id(), "result": {"permissions": permissions}}
+            )
+        except RuntimeError as exc:
+            return error_response("agent_unavailable", str(exc), status=502)
+    if method == "POST" and path == "/api/v1/agent/permissions/reply":
+        payload = _read_json(body)
+        _require_fields(payload, {"conversation_id", "request_id", "reply"})
+        request_id = str(payload["request_id"])
+        if re.fullmatch(r"[A-Za-z0-9_-]{1,100}", request_id) is None:
+            raise ValueError("request_id must be a short identifier")
+        try:
+            get_opencode_runtime().reply_permission(
+                _agent_session_key(payload, host_session_id),
+                request_id,
+                str(payload["reply"]),
+            )
+            return json_response({"request_id": _request_id(), "result": {"replied": True}})
+        except RuntimeError as exc:
+            return error_response("agent_unavailable", str(exc), status=502)
+    if method == "POST" and path == "/api/v1/agent/abort":
+        payload = _read_json(body)
+        _require_fields(payload, {"conversation_id"})
+        try:
+            aborted = get_opencode_runtime().abort(
+                _agent_session_key(payload, host_session_id)
+            )
+            return json_response(
+                {"request_id": _request_id(), "result": {"aborted": aborted}}
+            )
+        except RuntimeError as exc:
+            return error_response("agent_unavailable", str(exc), status=502)
     if method == "GET" and path == "/api/v1/host/context":
         return json_response(
             {"request_id": _request_id(), "result": get_host_context(host_session_id)}
@@ -449,6 +489,22 @@ def _workspace_copilot(
             new_session=new_session,
         ),
     )
+
+
+def _agent_session_key(
+    payload: dict[str, Any], host_session_id: str | None
+) -> str:
+    conversation_id = payload.get("conversation_id")
+    if not isinstance(conversation_id, str) or re.fullmatch(
+        r"[A-Za-z0-9_-]{1,100}", conversation_id
+    ) is None:
+        raise ValueError("conversation_id must be a short identifier")
+    return f"{normalize_host_session_id(host_session_id)}:{conversation_id}"
+
+
+def _require_fields(payload: dict[str, Any], fields: set[str]) -> None:
+    if set(payload) != fields:
+        raise ValueError(f"request fields must be: {', '.join(sorted(fields))}")
 
 
 def _request_id() -> str:

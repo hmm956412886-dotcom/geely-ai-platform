@@ -138,6 +138,24 @@
           "citations": {"type": "array", "items": {"type": "object"}},
           "warnings": {"type": "array", "items": {"type": "string"}}
         }
+      },
+      "AgentConversationRequest": {
+        "type": "object",
+        "required": ["conversation_id"],
+        "additionalProperties": false,
+        "properties": {
+          "conversation_id": {"type": "string", "minLength": 1, "maxLength": 100, "pattern": "^[A-Za-z0-9_-]+$"}
+        }
+      },
+      "AgentPermissionReply": {
+        "type": "object",
+        "required": ["conversation_id", "request_id", "reply"],
+        "additionalProperties": false,
+        "properties": {
+          "conversation_id": {"type": "string", "minLength": 1, "maxLength": 100, "pattern": "^[A-Za-z0-9_-]+$"},
+          "request_id": {"type": "string", "minLength": 1, "maxLength": 100, "pattern": "^[A-Za-z0-9_-]+$"},
+          "reply": {"type": "string", "enum": ["once", "reject"]}
+        }
       }
     },
     "responses": {
@@ -155,6 +173,9 @@
     "/plugin-manifest.json": {"get": {"summary": "Host integration manifest", "security": [], "responses": {"200": {"description": "Plugin manifest"}}}},
     "/api/v1/model/config": {"get": {"summary": "Return public model runtime config", "responses": {"200": {"description": "Model config without API key"}}}},
     "/api/v1/agent/status": {"get": {"summary": "Return browser-safe workspace and OpenCode Runtime status", "parameters": [{"$ref": "#/components/parameters/HostSessionId"}], "responses": {"200": {"description": "Runtime status without paths, passwords, or API keys"}}}},
+    "/api/v1/agent/permissions": {"post": {"summary": "Return pending OpenCode permissions for one conversation", "parameters": [{"$ref": "#/components/parameters/HostSessionId"}], "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AgentConversationRequest"}}}}, "responses": {"200": {"description": "Browser-safe pending permission requests"}, "400": {"$ref": "#/components/responses/BadRequest"}}}},
+    "/api/v1/agent/permissions/reply": {"post": {"summary": "Allow one OpenCode tool call or reject it", "parameters": [{"$ref": "#/components/parameters/HostSessionId"}], "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AgentPermissionReply"}}}}, "responses": {"200": {"description": "Permission reply accepted"}, "400": {"$ref": "#/components/responses/BadRequest"}}}},
+    "/api/v1/agent/abort": {"post": {"summary": "Abort the active OpenCode turn for one conversation", "parameters": [{"$ref": "#/components/parameters/HostSessionId"}], "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AgentConversationRequest"}}}}, "responses": {"200": {"description": "Abort request accepted"}, "400": {"$ref": "#/components/responses/BadRequest"}}}},
     "/api/v1/host/context": {
       "parameters": [{"$ref": "#/components/parameters/HostSessionId"}],
       "get": {"summary": "Return host context", "responses": {"200": {"description": "Current context"}}},

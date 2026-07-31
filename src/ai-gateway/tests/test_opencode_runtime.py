@@ -162,6 +162,8 @@ class OpenCodeRuntimeTests(unittest.TestCase):
             self.assertNotIn("apiKey", provider["provider"]["coretest"]["options"])
             self.assertEqual(provider["model"], "coretest/demo-model")
             self.assertEqual(provider["permission"]["edit"], "ask")
+            self.assertEqual(provider["permission"]["apply_patch"], "deny")
+            self.assertEqual(provider["permission"]["write"], "deny")
             self.assertEqual(provider["permission"]["external_directory"], "deny")
             self.assertTrue(status["running"])
             self.assertNotIn(str(Path(directory).resolve()), json.dumps(status))
@@ -230,6 +232,15 @@ class OpenCodeRuntimeTests(unittest.TestCase):
                 return FakeResponse(
                     b'{"parts":[{"type":"text","text":"workspace answer"}]}'
                 )
+            if "/permission?directory=" in request.full_url:
+                return FakeResponse(
+                    b'[{"id":"per-1","sessionID":"session-1",'
+                    b'"permission":"bash","patterns":["python -m pytest"]}]'
+                )
+            if "/permission/per-1/reply?directory=" in request.full_url:
+                return FakeResponse(b"true")
+            if "/session/session-1/abort?directory=" in request.full_url:
+                return FakeResponse(b"true")
             if request.get_method() == "DELETE":
                 return FakeResponse(b"true")
             raise AssertionError(request.full_url)
@@ -261,6 +272,18 @@ class OpenCodeRuntimeTests(unittest.TestCase):
                 "workspace answer",
             )
             self.assertEqual(
+                runtime.pending_permissions("host-a"),
+                [
+                    {
+                        "id": "per-1",
+                        "permission": "bash",
+                        "resources": ["python -m pytest"],
+                    }
+                ],
+            )
+            runtime.reply_permission("host-a", "per-1", "once")
+            self.assertTrue(runtime.abort("host-a"))
+            self.assertEqual(
                 runtime.prompt(
                     "host-a",
                     "fresh",
@@ -278,6 +301,15 @@ class OpenCodeRuntimeTests(unittest.TestCase):
             if request.get_method() == "POST" and request.full_url.endswith("/session")
         ]
         self.assertEqual(len(session_creates), 2)
+        session_body = json.loads(session_creates[0].data.decode("utf-8"))
+        permissions = {
+            item["permission"]: item["action"]
+            for item in session_body["permission"]
+        }
+        self.assertEqual(permissions["read"], "allow")
+        self.assertEqual(permissions["edit"], "ask")
+        self.assertEqual(permissions["bash"], "ask")
+        self.assertEqual(permissions["external_directory"], "deny")
         prompts = [
             request
             for request in requests
@@ -287,9 +319,10 @@ class OpenCodeRuntimeTests(unittest.TestCase):
         prompt_body = json.loads(prompts[0].data.decode("utf-8"))
         self.assertEqual(prompt_body["system"], "read only")
         self.assertEqual(prompt_body["parts"], [{"type": "text", "text": "inspect the project"}])
-        self.assertFalse(prompt_body["tools"]["bash"])
-        self.assertFalse(prompt_body["tools"]["edit"])
+        self.assertNotIn("bash", prompt_body["tools"])
+        self.assertNotIn("edit", prompt_body["tools"])
         self.assertFalse(prompt_body["tools"]["apply_patch"])
+        self.assertFalse(prompt_body["tools"]["write"])
         self.assertTrue(prompt_body["tools"]["read"])
 
 

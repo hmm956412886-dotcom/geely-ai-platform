@@ -8,6 +8,7 @@ from hashlib import sha256
 import json
 import os
 from pathlib import Path
+import re
 import secrets
 import shutil
 import subprocess
@@ -87,6 +88,7 @@ class OpenCodeRuntime:
         self._error: str | None = None
         self._auth_configured = False
         self._sessions: dict[str, str] = {}
+        self._rejected_sessions: set[str] = set()
         self._session_lock = Lock()
 
     def start(self, workspace_root: str | Path) -> dict[str, Any]:
@@ -184,7 +186,9 @@ class OpenCodeRuntime:
         self._process = None
         self._workspace = None
         self._auth_configured = False
-        self._sessions.clear()
+        with self._session_lock:
+            self._sessions.clear()
+            self._rejected_sessions.clear()
         if process is not None and process.poll() is None:
             process.terminate()
             try:
@@ -208,29 +212,34 @@ class OpenCodeRuntime:
         if new_session:
             self.release_session(host_session_id)
         with self._session_lock:
+            self._rejected_sessions.discard(host_session_id)
             session_id = self._sessions.get(host_session_id)
             created = session_id is None
             if session_id is None:
                 session = self._request_json(
                     "POST",
                     "/session",
-                    {"title": f"CoreTest {host_session_id}"},
+                    {
+                        "title": f"CoreTest {host_session_id}",
+                        "permission": _session_permissions(),
+                    },
                 )
                 session_id = str(session.get("id") or "")
                 if not session_id:
                     raise RuntimeError("OpenCode did not create a session")
                 self._sessions[host_session_id] = session_id
 
-            prompt = question
-            if created and history:
-                prompt = (
-                    "--- PREVIOUS CONVERSATION ---\n"
-                    + "\n".join(
-                        f"{item['role'].upper()}: {item['content']}" for item in history
-                    )
-                    + "\n--- END PREVIOUS CONVERSATION ---\n\n"
-                    + question
+        prompt = question
+        if created and history:
+            prompt = (
+                "--- PREVIOUS CONVERSATION ---\n"
+                + "\n".join(
+                    f"{item['role'].upper()}: {item['content']}" for item in history
                 )
+                + "\n--- END PREVIOUS CONVERSATION ---\n\n"
+                + question
+            )
+        try:
             result = self._request_json(
                 "POST",
                 f"/session/{quote(session_id, safe='')}/message",
@@ -242,8 +251,6 @@ class OpenCodeRuntime:
                         "glob": True,
                         "grep": True,
                         "lsp": True,
-                        "bash": False,
-                        "edit": False,
                         "apply_patch": False,
                         "write": False,
                         "webfetch": False,
@@ -251,8 +258,12 @@ class OpenCodeRuntime:
                         "task": False,
                     },
                 },
-                timeout=self.model_config.timeout_seconds + 30,
+                timeout=max(self.model_config.timeout_seconds + 30, 600),
             )
+        except RuntimeError:
+            if self._take_rejection(host_session_id):
+                return "已拒绝本次操作，OpenCode 未执行该工具。"
+            raise
         text_parts = [
             str(part.get("text") or "").strip()
             for part in result.get("parts", [])
@@ -262,12 +273,99 @@ class OpenCodeRuntime:
             and str(part.get("text") or "").strip()
         ]
         if not text_parts:
+            if self._take_rejection(host_session_id):
+                return "已拒绝本次操作，OpenCode 未执行该工具。"
             raise RuntimeError("OpenCode returned an empty response")
+        with self._session_lock:
+            self._rejected_sessions.discard(host_session_id)
         return "\n\n".join(text_parts)
+
+    def pending_permissions(self, host_session_id: str) -> list[dict[str, Any]]:
+        session_id = self._session_id(host_session_id)
+        if session_id is None:
+            return []
+        directory = quote(str(self._workspace or ""), safe="")
+        result = self._request_value("GET", f"/permission?directory={directory}")
+        if not isinstance(result, list):
+            raise RuntimeError("OpenCode returned invalid permission data")
+        return [
+            self._public_permission(item)
+            for item in result
+            if isinstance(item, dict) and item.get("sessionID") == session_id
+        ]
+
+    def reply_permission(
+        self, host_session_id: str, request_id: str, reply: str
+    ) -> None:
+        if reply not in {"once", "reject"}:
+            raise ValueError("permission reply must be once or reject")
+        pending = {
+            item["id"] for item in self.pending_permissions(host_session_id)
+        }
+        if request_id not in pending:
+            raise ValueError("permission request is not pending for this conversation")
+        if reply == "reject":
+            with self._session_lock:
+                self._rejected_sessions.add(host_session_id)
+        self._request_value(
+            "POST",
+            f"/permission/{quote(request_id, safe='')}/reply?directory={quote(str(self._workspace or ''), safe='')}",
+            {"reply": reply},
+        )
+
+    def abort(self, host_session_id: str) -> bool:
+        session_id = self._session_id(host_session_id)
+        if session_id is None:
+            return False
+        self._request_value(
+            "POST",
+            f"/session/{quote(session_id, safe='')}/abort?directory={quote(str(self._workspace or ''), safe='')}",
+            {},
+        )
+        return True
+
+    def _session_id(self, host_session_id: str) -> str | None:
+        with self._session_lock:
+            return self._sessions.get(host_session_id)
+
+    def _take_rejection(self, host_session_id: str) -> bool:
+        with self._session_lock:
+            rejected = host_session_id in self._rejected_sessions
+            self._rejected_sessions.discard(host_session_id)
+            return rejected
+
+    def _public_permission(self, item: dict[str, Any]) -> dict[str, Any]:
+        resources = item.get("patterns") or item.get("resources") or []
+        if not isinstance(resources, list):
+            resources = []
+        return {
+            "id": str(item.get("id") or ""),
+            "permission": str(item.get("permission") or item.get("action") or "tool"),
+            "resources": [
+                self._public_resource(str(resource))
+                for resource in resources[:10]
+                if str(resource).strip()
+            ],
+        }
+
+    def _public_resource(self, value: str) -> str:
+        resource = value.strip()[:500]
+        if self._workspace is not None:
+            workspace = str(self._workspace)
+            position = resource.lower().find(workspace.lower())
+            if position >= 0:
+                resource = resource[:position] + "." + resource[position + len(workspace):]
+            if resource.startswith("."):
+                relative = resource[1:].lstrip("/\\")
+                return relative or "."
+        if Path(resource).is_absolute() or re.search(r"[A-Za-z]:[\\/]", resource):
+            return "[工作区外路径已隐藏]"
+        return resource
 
     def release_session(self, host_session_id: str) -> None:
         with self._session_lock:
             session_id = self._sessions.pop(host_session_id, None)
+            self._rejected_sessions.discard(host_session_id)
         if session_id is None or not self.running:
             return
         try:
@@ -317,6 +415,19 @@ class OpenCodeRuntime:
         *,
         timeout: float | None = None,
     ) -> dict[str, Any]:
+        result = self._request_value(method, path, payload, timeout=timeout)
+        if not isinstance(result, dict):
+            raise RuntimeError("OpenCode returned an invalid response")
+        return result
+
+    def _request_value(
+        self,
+        method: str,
+        path: str,
+        payload: dict[str, Any] | None = None,
+        *,
+        timeout: float | None = None,
+    ) -> Any:
         request = Request(
             f"{self.config.base_url}{path}",
             data=(
@@ -338,14 +449,11 @@ class OpenCodeRuntime:
         except OSError as exc:
             raise RuntimeError(f"OpenCode request failed: {method} {path}") from exc
         if not raw:
-            return {}
+            return None
         try:
-            result = json.loads(raw.decode("utf-8"))
+            return json.loads(raw.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
             raise RuntimeError("OpenCode returned an invalid response") from exc
-        if not isinstance(result, dict):
-            raise RuntimeError("OpenCode returned an invalid response")
-        return result
 
     def _authorization_headers(self) -> dict[str, str]:
         credentials = b64encode(f"opencode:{self._password}".encode()).decode()
@@ -439,6 +547,8 @@ def _opencode_provider_config(model: ModelConfig) -> dict[str, Any]:
             "glob": "allow",
             "grep": "allow",
             "edit": "ask",
+            "write": "deny",
+            "apply_patch": "deny",
             "bash": "ask",
             "webfetch": "ask",
             "websearch": "ask",
@@ -466,6 +576,18 @@ def _opencode_provider_config(model: ModelConfig) -> dict[str, Any]:
         }
     )
     return config
+
+
+def _session_permissions() -> list[dict[str, str]]:
+    return [
+        {"permission": name, "pattern": "*", "action": "allow"}
+        for name in ("read", "glob", "grep", "list", "lsp")
+    ] + [
+        {"permission": name, "pattern": "*", "action": "ask"}
+        for name in ("edit", "bash")
+    ] + [
+        {"permission": "external_directory", "pattern": "*", "action": "deny"}
+    ]
 
 
 def _openai_base_url(base_url: str) -> str:

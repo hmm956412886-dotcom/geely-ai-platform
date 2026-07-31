@@ -33,6 +33,7 @@ import {
 } from "@fluentui/react-icons";
 import { GatewayRequestError, gatewayClient, hostSessionId } from "./gatewayClient";
 import type {
+  AgentPermission,
   CopilotArtifact,
   CopilotAttachment,
   CopilotHistoryMessage,
@@ -219,6 +220,8 @@ export default function App() {
   const [composerAttachmentCount, setComposerAttachmentCount] = useState(0);
   const [diagnostic, setDiagnostic] = useState<RequestDiagnostic | null>(null);
   const [saveNotice, setSaveNotice] = useState<string | null>(null);
+  const [permission, setPermission] = useState<AgentPermission | null>(null);
+  const [permissionReplying, setPermissionReplying] = useState(false);
   const activeConversationIdRef = useRef(activeConversationId);
   const abortControllerRef = useRef<AbortController | null>(null);
   const currentProjectKey = projectKey(context);
@@ -307,6 +310,27 @@ export default function App() {
     }, 1000);
     return () => window.clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    if (!isRunning) {
+      setPermission(null);
+      return;
+    }
+    let active = true;
+    const poll = () => {
+      void gatewayClient.pendingPermissions(activeConversationIdRef.current)
+        .then((permissions) => {
+          if (active) setPermission(permissions[0] ?? null);
+        })
+        .catch(() => undefined);
+    };
+    poll();
+    const timer = window.setInterval(poll, 500);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [isRunning]);
 
   useEffect(() => {
     const receiveHostContext = (event: MessageEvent<HostContextMessage>) => {
@@ -427,6 +451,7 @@ export default function App() {
     },
     onCancel: async () => {
       abortControllerRef.current?.abort();
+      await gatewayClient.abortConversation(activeConversationIdRef.current).catch(() => undefined);
     },
     suggestions,
   });
@@ -464,6 +489,23 @@ export default function App() {
       );
     }
   }, [askCopilot, hasSelectedFile, messages, runtime]);
+
+  const replyPermission = useCallback(async (reply: "once" | "reject") => {
+    if (!permission || permissionReplying) return;
+    setPermissionReplying(true);
+    try {
+      await gatewayClient.replyPermission(
+        activeConversationIdRef.current,
+        permission.id,
+        reply,
+      );
+      setPermission(null);
+    } catch (error) {
+      reportError(error);
+    } finally {
+      setPermissionReplying(false);
+    }
+  }, [permission, permissionReplying, reportError]);
 
   const startNewConversation = useCallback(async () => {
     if (isRunning) return;
@@ -529,7 +571,7 @@ export default function App() {
             <h1>CoreTest Copilot</h1>
             <p>{projectLabel}</p>
             <div className="header-status" aria-label="Copilot 状态">
-              <span><ShieldLock20Regular aria-hidden="true" />只读</span>
+              <span><ShieldLock20Regular aria-hidden="true" />操作需审批</span>
               <span className={hostConnected ? "is-connected" : "is-disconnected"}>
                 {connectionLabel}
               </span>
@@ -726,6 +768,39 @@ export default function App() {
           </AssistantRuntimeProvider>
         </section>
 
+        {permission && (
+          <section className="permission-panel" role="alert" aria-label="智能体操作审批">
+            <div className="permission-heading">
+              <ShieldLock20Regular aria-hidden="true" />
+              <div>
+                <strong>{permissionLabel(permission.permission)}</strong>
+                <span>OpenCode 请求执行以下操作</span>
+              </div>
+            </div>
+            {permission.resources.length > 0 && (
+              <div className="permission-resources">
+                {permission.resources.map((resource) => <code key={resource}>{resource}</code>)}
+              </div>
+            )}
+            <div className="permission-actions">
+              <Button
+                appearance="secondary"
+                onClick={() => void replyPermission("reject")}
+                disabled={permissionReplying}
+              >
+                拒绝
+              </Button>
+              <Button
+                appearance="primary"
+                onClick={() => void replyPermission("once")}
+                disabled={permissionReplying}
+              >
+                允许一次
+              </Button>
+            </div>
+          </section>
+        )}
+
         {(diagnostic || saveNotice) && (
           <div className="status-strip" role="status">
             {saveNotice && (
@@ -784,6 +859,16 @@ export default function App() {
       </main>
     </FluentProvider>
   );
+}
+
+function permissionLabel(permission: string): string {
+  const labels: Record<string, string> = {
+    bash: "运行命令",
+    edit: "修改工作区文件",
+    write: "写入工作区文件",
+    apply_patch: "应用代码修改",
+  };
+  return labels[permission] ?? "执行工具操作";
 }
 
 function resolveParentOrigin(): string {

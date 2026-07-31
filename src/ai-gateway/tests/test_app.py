@@ -568,6 +568,49 @@ class AppTests(unittest.TestCase):
         self.assertEqual(history, [])
         self.assertTrue(new_session)
 
+    def test_copilot_permission_and_abort_routes_are_conversation_scoped(self) -> None:
+        runtime = _FakeOpenCodeRuntime()
+        runtime.permissions = [
+            {
+                "id": "per-1",
+                "permission": "bash",
+                "resources": ["python -m pytest"],
+            }
+        ]
+        with patch("ai_gateway.app.get_opencode_runtime", return_value=runtime):
+            pending = handle_request(
+                "POST",
+                "/api/v1/agent/permissions?host_session_id=agent-chat",
+                json.dumps({"conversation_id": "conversation-1"}),
+            )
+            replied = handle_request(
+                "POST",
+                "/api/v1/agent/permissions/reply?host_session_id=agent-chat",
+                json.dumps(
+                    {
+                        "conversation_id": "conversation-1",
+                        "request_id": "per-1",
+                        "reply": "once",
+                    }
+                ),
+            )
+            aborted = handle_request(
+                "POST",
+                "/api/v1/agent/abort?host_session_id=agent-chat",
+                json.dumps({"conversation_id": "conversation-1"}),
+            )
+
+        self.assertEqual(
+            json.loads(pending.body)["result"]["permissions"], runtime.permissions
+        )
+        self.assertEqual(
+            runtime.permission_replies,
+            [("agent-chat:conversation-1", "per-1", "once")],
+        )
+        self.assertEqual(runtime.aborted_sessions, ["agent-chat:conversation-1"])
+        self.assertTrue(json.loads(replied.body)["result"]["replied"])
+        self.assertTrue(json.loads(aborted.body)["result"]["aborted"])
+
     def test_host_can_release_one_session_without_affecting_another(self) -> None:
         source_file = str(FIXTURES / "test-run-cases.csv")
         for session in ("release-a", "release-b"):
@@ -738,6 +781,9 @@ class AppTests(unittest.TestCase):
             "host",
         )
         self.assertIn("/api/v1/copilot/query", payload["paths"])
+        self.assertIn("/api/v1/agent/permissions", payload["paths"])
+        self.assertIn("/api/v1/agent/permissions/reply", payload["paths"])
+        self.assertIn("/api/v1/agent/abort", payload["paths"])
         copilot = payload["paths"]["/api/v1/copilot/query"]["post"]
         self.assertEqual(
             copilot["requestBody"]["content"]["application/json"]["schema"]["$ref"],
@@ -846,6 +892,9 @@ class _FakeOpenCodeRuntime:
         self.prompts = []
         self.released_sessions = []
         self.released_session_groups = []
+        self.permissions = []
+        self.permission_replies = []
+        self.aborted_sessions = []
 
     def start(self, workspace):
         self.started_with = workspace
@@ -877,6 +926,16 @@ class _FakeOpenCodeRuntime:
 
     def release_sessions(self, host_session_id):
         self.released_session_groups.append(host_session_id)
+
+    def pending_permissions(self, host_session_id):
+        return self.permissions
+
+    def reply_permission(self, host_session_id, request_id, reply):
+        self.permission_replies.append((host_session_id, request_id, reply))
+
+    def abort(self, host_session_id):
+        self.aborted_sessions.append(host_session_id)
+        return True
 
 
 if __name__ == "__main__":

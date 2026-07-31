@@ -1,4 +1,5 @@
 import type {
+  AgentPermission,
   CopilotAttachment,
   CopilotHistoryMessage,
   CopilotResponse,
@@ -83,6 +84,32 @@ export const gatewayClient = {
       history,
       attachments: attachments.map(({ name, content }) => ({ name, content })),
     }, signal);
+  },
+
+  async pendingPermissions(conversationId: string): Promise<AgentPermission[]> {
+    const payload = await postJson<{ result: { permissions: AgentPermission[] } }>(
+      sessionPath("/api/v1/agent/permissions"),
+      { conversation_id: conversationId },
+    );
+    return payload.result.permissions;
+  },
+
+  replyPermission(
+    conversationId: string,
+    requestId: string,
+    reply: "once" | "reject",
+  ): Promise<unknown> {
+    return postJson(sessionPath("/api/v1/agent/permissions/reply"), {
+      conversation_id: conversationId,
+      request_id: requestId,
+      reply,
+    });
+  },
+
+  abortConversation(conversationId: string): Promise<unknown> {
+    return postJson(sessionPath("/api/v1/agent/abort"), {
+      conversation_id: conversationId,
+    });
   },
 
   insights(context: HostContext): Promise<InsightsResponse> {

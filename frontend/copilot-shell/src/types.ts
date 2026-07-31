@@ -62,6 +62,12 @@ export interface CopilotResponse extends AnalysisResponse {
   artifacts: CopilotArtifact[];
 }
 
+export interface AgentPermission {
+  id: string;
+  permission: string;
+  resources: string[];
+}
+
 export interface InsightsResponse {
   request_id: string;
   result: {
