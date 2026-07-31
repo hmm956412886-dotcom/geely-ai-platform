@@ -316,6 +316,78 @@ textarea {
   min-height: 0;
 }
 
+.activity-panel {
+  max-height: 154px;
+  padding: 8px 12px;
+  overflow: auto;
+  border-top: 1px solid #ededed;
+  background: #f7f9fb;
+}
+
+.activity-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #424242;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.activity-title > svg {
+  width: 16px;
+  height: 16px;
+}
+
+.activity-title span {
+  color: #707070;
+}
+
+.activity-list {
+  margin-top: 5px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.activity-item {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  align-items: start;
+  gap: 6px;
+  color: #107c10;
+}
+
+.activity-item > svg,
+.activity-item > span {
+  width: 16px;
+  height: 16px;
+}
+
+.activity-item > div {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+}
+
+.activity-item strong {
+  flex: 0 0 auto;
+  color: #424242;
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.activity-item code {
+  min-width: 0;
+  overflow: hidden;
+  color: #616161;
+  font-size: 10px;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .permission-panel {
   padding: 10px 12px;
   border-top: 1px solid #d6d6d6;

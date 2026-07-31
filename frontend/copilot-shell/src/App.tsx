@@ -33,6 +33,7 @@ import {
 } from "@fluentui/react-icons";
 import { GatewayRequestError, gatewayClient, hostSessionId } from "./gatewayClient";
 import type {
+  AgentActivity,
   AgentPermission,
   CopilotArtifact,
   CopilotAttachment,
@@ -222,6 +223,7 @@ export default function App() {
   const [saveNotice, setSaveNotice] = useState<string | null>(null);
   const [permission, setPermission] = useState<AgentPermission | null>(null);
   const [permissionReplying, setPermissionReplying] = useState(false);
+  const [activity, setActivity] = useState<AgentActivity[]>([]);
   const activeConversationIdRef = useRef(activeConversationId);
   const abortControllerRef = useRef<AbortController | null>(null);
   const currentProjectKey = projectKey(context);
@@ -318,9 +320,16 @@ export default function App() {
     }
     let active = true;
     const poll = () => {
-      void gatewayClient.pendingPermissions(activeConversationIdRef.current)
-        .then((permissions) => {
-          if (active) setPermission(permissions[0] ?? null);
+      const conversationId = activeConversationIdRef.current;
+      void Promise.all([
+        gatewayClient.pendingPermissions(conversationId),
+        gatewayClient.activity(conversationId),
+      ])
+        .then(([permissions, nextActivity]) => {
+          if (active) {
+            setPermission(permissions[0] ?? null);
+            setActivity(nextActivity);
+          }
         })
         .catch(() => undefined);
     };
@@ -362,6 +371,7 @@ export default function App() {
       const controller = new AbortController();
       abortControllerRef.current = controller;
       appendMessage(conversationId, message);
+      setActivity([]);
       setDiagnostic(null);
       setSaveNotice(null);
       setIsRunning(true);
@@ -469,6 +479,7 @@ export default function App() {
     if (composerConversationRef.current === activeConversationId) return;
     composerConversationRef.current = activeConversationId;
     setComposerAttachmentCount(0);
+    setActivity([]);
     void runtime.thread.composer.reset();
   }, [activeConversationId, runtime]);
 
@@ -768,6 +779,29 @@ export default function App() {
           </AssistantRuntimeProvider>
         </section>
 
+        {activity.length > 0 && (
+          <section className="activity-panel" aria-label="智能体执行步骤">
+            <div className="activity-title">
+              <Code20Regular aria-hidden="true" />
+              <strong>执行步骤</strong>
+              <span>{activity.length}</span>
+            </div>
+            <div className="activity-list">
+              {activity.map((step) => (
+                <div className="activity-item" key={step.id}>
+                  {step.status === "running" || step.status === "pending"
+                    ? <Spinner size="extra-tiny" />
+                    : <CheckmarkCircle20Regular aria-hidden="true" />}
+                  <div>
+                    <strong>{toolLabel(step.tool)}</strong>
+                    <code title={step.title}>{step.title}</code>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
         {permission && (
           <section className="permission-panel" role="alert" aria-label="智能体操作审批">
             <div className="permission-heading">
@@ -869,6 +903,18 @@ function permissionLabel(permission: string): string {
     apply_patch: "应用代码修改",
   };
   return labels[permission] ?? "执行工具操作";
+}
+
+function toolLabel(tool: string): string {
+  const labels: Record<string, string> = {
+    glob: "搜索文件",
+    grep: "搜索代码",
+    read: "读取文件",
+    lsp: "分析代码",
+    edit: "修改文件",
+    bash: "运行命令",
+  };
+  return labels[tool] ?? tool;
 }
 
 function resolveParentOrigin(): string {

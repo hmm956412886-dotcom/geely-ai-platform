@@ -294,6 +294,41 @@ class OpenCodeRuntime:
             if isinstance(item, dict) and item.get("sessionID") == session_id
         ]
 
+    def activity(self, host_session_id: str) -> list[dict[str, str]]:
+        session_id = self._session_id(host_session_id)
+        if session_id is None:
+            return []
+        directory = quote(str(self._workspace or ""), safe="")
+        result = self._request_value(
+            "GET",
+            f"/session/{quote(session_id, safe='')}/message?directory={directory}",
+        )
+        if not isinstance(result, list):
+            raise RuntimeError("OpenCode returned invalid activity data")
+        steps: list[dict[str, str]] = []
+        for message in result:
+            if not isinstance(message, dict):
+                continue
+            for part in message.get("parts", []):
+                if not isinstance(part, dict) or part.get("type") != "tool":
+                    continue
+                state = part.get("state")
+                if not isinstance(state, dict):
+                    continue
+                tool = str(part.get("tool") or "tool")
+                title = str(state.get("title") or tool)
+                output = str(state.get("output") or "")
+                steps.append(
+                    {
+                        "id": str(part.get("id") or part.get("callID") or ""),
+                        "tool": tool,
+                        "status": str(state.get("status") or "pending"),
+                        "title": self._public_text(title, 300),
+                        "output": self._public_text(output, 1000),
+                    }
+                )
+        return steps[-20:]
+
     def reply_permission(
         self, host_session_id: str, request_id: str, reply: str
     ) -> None:
@@ -349,15 +384,19 @@ class OpenCodeRuntime:
         }
 
     def _public_resource(self, value: str) -> str:
-        resource = value.strip()[:500]
+        resource = self._public_text(value, 500)
+        if resource.startswith("."):
+            relative = resource[1:].lstrip("/\\")
+            return relative or "."
+        return resource
+
+    def _public_text(self, value: str, limit: int) -> str:
+        resource = value.strip()[:limit]
         if self._workspace is not None:
             workspace = str(self._workspace)
             position = resource.lower().find(workspace.lower())
             if position >= 0:
                 resource = resource[:position] + "." + resource[position + len(workspace):]
-            if resource.startswith("."):
-                relative = resource[1:].lstrip("/\\")
-                return relative or "."
         if Path(resource).is_absolute() or re.search(r"[A-Za-z]:[\\/]", resource):
             return "[工作区外路径已隐藏]"
         return resource

@@ -577,10 +577,24 @@ class AppTests(unittest.TestCase):
                 "resources": ["python -m pytest"],
             }
         ]
+        runtime.activities = [
+            {
+                "id": "part-1",
+                "tool": "bash",
+                "status": "completed",
+                "title": "python -m pytest",
+                "output": "1 passed",
+            }
+        ]
         with patch("ai_gateway.app.get_opencode_runtime", return_value=runtime):
             pending = handle_request(
                 "POST",
                 "/api/v1/agent/permissions?host_session_id=agent-chat",
+                json.dumps({"conversation_id": "conversation-1"}),
+            )
+            activity = handle_request(
+                "POST",
+                "/api/v1/agent/activity?host_session_id=agent-chat",
                 json.dumps({"conversation_id": "conversation-1"}),
             )
             replied = handle_request(
@@ -602,6 +616,9 @@ class AppTests(unittest.TestCase):
 
         self.assertEqual(
             json.loads(pending.body)["result"]["permissions"], runtime.permissions
+        )
+        self.assertEqual(
+            json.loads(activity.body)["result"]["activity"], runtime.activities
         )
         self.assertEqual(
             runtime.permission_replies,
@@ -782,6 +799,7 @@ class AppTests(unittest.TestCase):
         )
         self.assertIn("/api/v1/copilot/query", payload["paths"])
         self.assertIn("/api/v1/agent/permissions", payload["paths"])
+        self.assertIn("/api/v1/agent/activity", payload["paths"])
         self.assertIn("/api/v1/agent/permissions/reply", payload["paths"])
         self.assertIn("/api/v1/agent/abort", payload["paths"])
         copilot = payload["paths"]["/api/v1/copilot/query"]["post"]
@@ -893,6 +911,7 @@ class _FakeOpenCodeRuntime:
         self.released_sessions = []
         self.released_session_groups = []
         self.permissions = []
+        self.activities = []
         self.permission_replies = []
         self.aborted_sessions = []
 
@@ -929,6 +948,9 @@ class _FakeOpenCodeRuntime:
 
     def pending_permissions(self, host_session_id):
         return self.permissions
+
+    def activity(self, host_session_id):
+        return self.activities
 
     def reply_permission(self, host_session_id, request_id, reply):
         self.permission_replies.append((host_session_id, request_id, reply))

@@ -68,6 +68,14 @@ export interface AgentPermission {
   resources: string[];
 }
 
+export interface AgentActivity {
+  id: string;
+  tool: string;
+  status: string;
+  title: string;
+  output: string;
+}
+
 export interface InsightsResponse {
   request_id: string;
   result: {

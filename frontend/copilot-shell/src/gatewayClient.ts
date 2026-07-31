@@ -1,4 +1,5 @@
 import type {
+  AgentActivity,
   AgentPermission,
   CopilotAttachment,
   CopilotHistoryMessage,
@@ -92,6 +93,14 @@ export const gatewayClient = {
       { conversation_id: conversationId },
     );
     return payload.result.permissions;
+  },
+
+  async activity(conversationId: string): Promise<AgentActivity[]> {
+    const payload = await postJson<{ result: { activity: AgentActivity[] } }>(
+      sessionPath("/api/v1/agent/activity"),
+      { conversation_id: conversationId },
+    );
+    return payload.result.activity;
   },
 
   replyPermission(

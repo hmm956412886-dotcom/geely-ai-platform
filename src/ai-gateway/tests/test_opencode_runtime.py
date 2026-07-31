@@ -232,6 +232,27 @@ class OpenCodeRuntimeTests(unittest.TestCase):
                 return FakeResponse(
                     b'{"parts":[{"type":"text","text":"workspace answer"}]}'
                 )
+            if "/session/session-1/message?directory=" in request.full_url:
+                return FakeResponse(
+                    json.dumps(
+                        [
+                            {
+                                "parts": [
+                                    {
+                                        "id": "part-1",
+                                        "type": "tool",
+                                        "tool": "read",
+                                        "state": {
+                                            "status": "completed",
+                                            "title": str(Path(directory) / "sample.py"),
+                                            "output": "loaded",
+                                        },
+                                    }
+                                ]
+                            }
+                        ]
+                    ).encode("utf-8")
+                )
             if "/permission?directory=" in request.full_url:
                 return FakeResponse(
                     b'[{"id":"per-1","sessionID":"session-1",'
@@ -283,6 +304,10 @@ class OpenCodeRuntimeTests(unittest.TestCase):
             )
             runtime.reply_permission("host-a", "per-1", "once")
             self.assertTrue(runtime.abort("host-a"))
+            activity = runtime.activity("host-a")
+            self.assertEqual(activity[0]["tool"], "read")
+            self.assertEqual(activity[0]["title"], ".\\sample.py")
+            self.assertNotIn(str(Path(directory).resolve()), json.dumps(activity))
             self.assertEqual(
                 runtime.prompt(
                     "host-a",
