@@ -88,6 +88,7 @@ class OpenCodeRuntime:
         self._error: str | None = None
         self._auth_configured = False
         self._sessions: dict[str, str] = {}
+        self._last_user_messages: dict[str, str] = {}
         self._rejected_sessions: set[str] = set()
         self._session_lock = Lock()
 
@@ -188,6 +189,7 @@ class OpenCodeRuntime:
         self._auth_configured = False
         with self._session_lock:
             self._sessions.clear()
+            self._last_user_messages.clear()
             self._rejected_sessions.clear()
         if process is not None and process.poll() is None:
             process.terminate()
@@ -276,6 +278,10 @@ class OpenCodeRuntime:
             if self._take_rejection(host_session_id):
                 return "已拒绝本次操作，OpenCode 未执行该工具。"
             raise RuntimeError("OpenCode returned an empty response")
+        info = result.get("info")
+        if isinstance(info, dict) and str(info.get("parentID") or ""):
+            with self._session_lock:
+                self._last_user_messages[host_session_id] = str(info["parentID"])
         with self._session_lock:
             self._rejected_sessions.discard(host_session_id)
         return "\n\n".join(text_parts)
@@ -329,6 +335,59 @@ class OpenCodeRuntime:
                 )
         return steps[-20:]
 
+    def diff(self, host_session_id: str) -> list[dict[str, Any]]:
+        session_id, message_id = self._session_and_message_id(host_session_id)
+        if session_id is None or message_id is None:
+            return []
+        directory = quote(str(self._workspace or ""), safe="")
+        result = self._request_value(
+            "GET",
+            f"/session/{quote(session_id, safe='')}/diff"
+            f"?directory={directory}&messageID={quote(message_id, safe='')}",
+        )
+        if not isinstance(result, list):
+            raise RuntimeError("OpenCode returned invalid diff data")
+        files: list[dict[str, Any]] = []
+        remaining = 40_000
+        for item in result[:20]:
+            if not isinstance(item, dict) or remaining <= 0:
+                continue
+            path = self._public_file(str(item.get("file") or ""))
+            if path is None:
+                continue
+            raw_patch = str(item.get("patch") or "")
+            limit = min(12_000, remaining)
+            patch = self._public_patch(raw_patch[:limit])
+            remaining -= len(patch)
+            status = str(item.get("status") or "modified")
+            if status not in {"added", "deleted", "modified"}:
+                status = "modified"
+            files.append(
+                {
+                    "path": path,
+                    "status": status,
+                    "additions": max(0, int(item.get("additions") or 0)),
+                    "deletions": max(0, int(item.get("deletions") or 0)),
+                    "patch": patch,
+                    "truncated": len(raw_patch) > limit,
+                }
+            )
+        return files
+
+    def revert(self, host_session_id: str) -> bool:
+        session_id, message_id = self._session_and_message_id(host_session_id)
+        if session_id is None or message_id is None:
+            return False
+        self._request_value(
+            "POST",
+            f"/session/{quote(session_id, safe='')}/revert"
+            f"?directory={quote(str(self._workspace or ''), safe='')}",
+            {"messageID": message_id},
+        )
+        with self._session_lock:
+            self._last_user_messages.pop(host_session_id, None)
+        return True
+
     def reply_permission(
         self, host_session_id: str, request_id: str, reply: str
     ) -> None:
@@ -363,6 +422,15 @@ class OpenCodeRuntime:
         with self._session_lock:
             return self._sessions.get(host_session_id)
 
+    def _session_and_message_id(
+        self, host_session_id: str
+    ) -> tuple[str | None, str | None]:
+        with self._session_lock:
+            return (
+                self._sessions.get(host_session_id),
+                self._last_user_messages.get(host_session_id),
+            )
+
     def _take_rejection(self, host_session_id: str) -> bool:
         with self._session_lock:
             rejected = host_session_id in self._rejected_sessions
@@ -390,6 +458,35 @@ class OpenCodeRuntime:
             return relative or "."
         return resource
 
+    def _public_file(self, value: str) -> str | None:
+        if self._workspace is None or not value.strip():
+            return None
+        candidate = Path(value)
+        try:
+            relative = (
+                candidate.resolve().relative_to(self._workspace)
+                if candidate.is_absolute()
+                else (self._workspace / candidate).resolve().relative_to(self._workspace)
+            )
+        except (OSError, ValueError):
+            return None
+        return relative.as_posix()
+
+    def _public_patch(self, value: str) -> str:
+        patch = value
+        if self._workspace is not None:
+            patch = re.sub(
+                re.escape(str(self._workspace)),
+                ".",
+                patch,
+                flags=re.IGNORECASE,
+            )
+        return re.sub(
+            r"(?i)[A-Z]:[\\/][^\s\r\n]+",
+            "[工作区外路径已隐藏]",
+            patch,
+        )
+
     def _public_text(self, value: str, limit: int) -> str:
         resource = value.strip()[:limit]
         if self._workspace is not None:
@@ -404,6 +501,7 @@ class OpenCodeRuntime:
     def release_session(self, host_session_id: str) -> None:
         with self._session_lock:
             session_id = self._sessions.pop(host_session_id, None)
+            self._last_user_messages.pop(host_session_id, None)
             self._rejected_sessions.discard(host_session_id)
         if session_id is None or not self.running:
             return

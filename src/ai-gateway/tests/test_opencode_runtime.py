@@ -230,7 +230,8 @@ class OpenCodeRuntimeTests(unittest.TestCase):
                 return FakeResponse(b'{"id":"session-1"}')
             if request.full_url.endswith("/session/session-1/message"):
                 return FakeResponse(
-                    b'{"parts":[{"type":"text","text":"workspace answer"}]}'
+                    b'{"info":{"parentID":"message-1"},'
+                    b'"parts":[{"type":"text","text":"workspace answer"}]}'
                 )
             if "/session/session-1/message?directory=" in request.full_url:
                 return FakeResponse(
@@ -262,6 +263,33 @@ class OpenCodeRuntimeTests(unittest.TestCase):
                 return FakeResponse(b"true")
             if "/session/session-1/abort?directory=" in request.full_url:
                 return FakeResponse(b"true")
+            if "/session/session-1/diff?directory=" in request.full_url:
+                return FakeResponse(
+                    json.dumps(
+                        [
+                            {
+                                "file": str(Path(directory) / "src" / "sample.py"),
+                                "patch": (
+                                    f"--- {Path(directory) / 'src' / 'sample.py'}\n"
+                                    "+D:\\private\\secret.txt\n"
+                                    "+print('ok')\n"
+                                ),
+                                "additions": 1,
+                                "deletions": 0,
+                                "status": "modified",
+                            },
+                            {
+                                "file": str(Path(directory).parent / "secret.txt"),
+                                "patch": "+secret\n",
+                                "additions": 1,
+                                "deletions": 0,
+                                "status": "modified",
+                            },
+                        ]
+                    ).encode("utf-8")
+                )
+            if "/session/session-1/revert?directory=" in request.full_url:
+                return FakeResponse(b'{"id":"session-1"}')
             if request.get_method() == "DELETE":
                 return FakeResponse(b"true")
             raise AssertionError(request.full_url)
@@ -308,6 +336,14 @@ class OpenCodeRuntimeTests(unittest.TestCase):
             self.assertEqual(activity[0]["tool"], "read")
             self.assertEqual(activity[0]["title"], ".\\sample.py")
             self.assertNotIn(str(Path(directory).resolve()), json.dumps(activity))
+            diff = runtime.diff("host-a")
+            self.assertEqual(len(diff), 1)
+            self.assertEqual(diff[0]["path"], "src/sample.py")
+            self.assertEqual(diff[0]["additions"], 1)
+            self.assertNotIn(str(Path(directory).resolve()), json.dumps(diff))
+            self.assertNotIn("D:\\private", json.dumps(diff))
+            self.assertTrue(runtime.revert("host-a"))
+            self.assertEqual(runtime.diff("host-a"), [])
             self.assertEqual(
                 runtime.prompt(
                     "host-a",

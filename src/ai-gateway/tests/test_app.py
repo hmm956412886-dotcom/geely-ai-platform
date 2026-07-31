@@ -586,6 +586,16 @@ class AppTests(unittest.TestCase):
                 "output": "1 passed",
             }
         ]
+        runtime.diffs = [
+            {
+                "path": "src/sample.py",
+                "status": "modified",
+                "additions": 1,
+                "deletions": 0,
+                "patch": "+print('ok')",
+                "truncated": False,
+            }
+        ]
         with patch("ai_gateway.app.get_opencode_runtime", return_value=runtime):
             pending = handle_request(
                 "POST",
@@ -595,6 +605,16 @@ class AppTests(unittest.TestCase):
             activity = handle_request(
                 "POST",
                 "/api/v1/agent/activity?host_session_id=agent-chat",
+                json.dumps({"conversation_id": "conversation-1"}),
+            )
+            diff = handle_request(
+                "POST",
+                "/api/v1/agent/diff?host_session_id=agent-chat",
+                json.dumps({"conversation_id": "conversation-1"}),
+            )
+            reverted = handle_request(
+                "POST",
+                "/api/v1/agent/revert?host_session_id=agent-chat",
                 json.dumps({"conversation_id": "conversation-1"}),
             )
             replied = handle_request(
@@ -620,6 +640,8 @@ class AppTests(unittest.TestCase):
         self.assertEqual(
             json.loads(activity.body)["result"]["activity"], runtime.activities
         )
+        self.assertEqual(json.loads(diff.body)["result"]["files"], runtime.diffs)
+        self.assertEqual(runtime.reverted_sessions, ["agent-chat:conversation-1"])
         self.assertEqual(
             runtime.permission_replies,
             [("agent-chat:conversation-1", "per-1", "once")],
@@ -627,6 +649,7 @@ class AppTests(unittest.TestCase):
         self.assertEqual(runtime.aborted_sessions, ["agent-chat:conversation-1"])
         self.assertTrue(json.loads(replied.body)["result"]["replied"])
         self.assertTrue(json.loads(aborted.body)["result"]["aborted"])
+        self.assertTrue(json.loads(reverted.body)["result"]["reverted"])
 
     def test_host_can_release_one_session_without_affecting_another(self) -> None:
         source_file = str(FIXTURES / "test-run-cases.csv")
@@ -800,6 +823,8 @@ class AppTests(unittest.TestCase):
         self.assertIn("/api/v1/copilot/query", payload["paths"])
         self.assertIn("/api/v1/agent/permissions", payload["paths"])
         self.assertIn("/api/v1/agent/activity", payload["paths"])
+        self.assertIn("/api/v1/agent/diff", payload["paths"])
+        self.assertIn("/api/v1/agent/revert", payload["paths"])
         self.assertIn("/api/v1/agent/permissions/reply", payload["paths"])
         self.assertIn("/api/v1/agent/abort", payload["paths"])
         copilot = payload["paths"]["/api/v1/copilot/query"]["post"]
@@ -912,8 +937,10 @@ class _FakeOpenCodeRuntime:
         self.released_session_groups = []
         self.permissions = []
         self.activities = []
+        self.diffs = []
         self.permission_replies = []
         self.aborted_sessions = []
+        self.reverted_sessions = []
 
     def start(self, workspace):
         self.started_with = workspace
@@ -951,6 +978,13 @@ class _FakeOpenCodeRuntime:
 
     def activity(self, host_session_id):
         return self.activities
+
+    def diff(self, host_session_id):
+        return self.diffs
+
+    def revert(self, host_session_id):
+        self.reverted_sessions.append(host_session_id)
+        return True
 
     def reply_permission(self, host_session_id, request_id, reply):
         self.permission_replies.append((host_session_id, request_id, reply))

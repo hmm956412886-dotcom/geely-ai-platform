@@ -154,6 +154,30 @@ def _handle_request(
             )
         except RuntimeError as exc:
             return error_response("agent_unavailable", str(exc), status=502)
+    if method == "POST" and path == "/api/v1/agent/diff":
+        payload = _read_json(body)
+        _require_fields(payload, {"conversation_id"})
+        try:
+            files = get_opencode_runtime().diff(
+                _agent_session_key(payload, host_session_id)
+            )
+            return json_response(
+                {"request_id": _request_id(), "result": {"files": files}}
+            )
+        except RuntimeError as exc:
+            return error_response("agent_unavailable", str(exc), status=502)
+    if method == "POST" and path == "/api/v1/agent/revert":
+        payload = _read_json(body)
+        _require_fields(payload, {"conversation_id"})
+        try:
+            reverted = get_opencode_runtime().revert(
+                _agent_session_key(payload, host_session_id)
+            )
+            return json_response(
+                {"request_id": _request_id(), "result": {"reverted": reverted}}
+            )
+        except RuntimeError as exc:
+            return error_response("agent_unavailable", str(exc), status=502)
     if method == "POST" and path == "/api/v1/agent/permissions/reply":
         payload = _read_json(body)
         _require_fields(payload, {"conversation_id", "request_id", "reply"})

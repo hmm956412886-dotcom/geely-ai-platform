@@ -34,6 +34,7 @@ import {
 import { GatewayRequestError, gatewayClient, hostSessionId } from "./gatewayClient";
 import type {
   AgentActivity,
+  AgentFileDiff,
   AgentPermission,
   CopilotArtifact,
   CopilotAttachment,
@@ -224,6 +225,8 @@ export default function App() {
   const [permission, setPermission] = useState<AgentPermission | null>(null);
   const [permissionReplying, setPermissionReplying] = useState(false);
   const [activity, setActivity] = useState<AgentActivity[]>([]);
+  const [fileDiffs, setFileDiffs] = useState<AgentFileDiff[]>([]);
+  const [reverting, setReverting] = useState(false);
   const activeConversationIdRef = useRef(activeConversationId);
   const abortControllerRef = useRef<AbortController | null>(null);
   const currentProjectKey = projectKey(context);
@@ -372,6 +375,7 @@ export default function App() {
       abortControllerRef.current = controller;
       appendMessage(conversationId, message);
       setActivity([]);
+      setFileDiffs([]);
       setDiagnostic(null);
       setSaveNotice(null);
       setIsRunning(true);
@@ -415,6 +419,7 @@ export default function App() {
               : conversation
           ));
         }
+        setFileDiffs(await gatewayClient.diff(conversationId).catch(() => []));
         return formatCopilotResponse(payload);
       }),
     [run],
@@ -480,6 +485,7 @@ export default function App() {
     composerConversationRef.current = activeConversationId;
     setComposerAttachmentCount(0);
     setActivity([]);
+    setFileDiffs([]);
     void runtime.thread.composer.reset();
   }, [activeConversationId, runtime]);
 
@@ -517,6 +523,22 @@ export default function App() {
       setPermissionReplying(false);
     }
   }, [permission, permissionReplying, reportError]);
+
+  const revertLatestTurn = useCallback(async () => {
+    if (reverting || !fileDiffs.length) return;
+    if (!window.confirm("确认撤销本轮智能体产生的全部文件修改？")) return;
+    setReverting(true);
+    try {
+      const reverted = await gatewayClient.revert(activeConversationIdRef.current);
+      if (!reverted) throw new Error("当前没有可撤销的智能体修改。");
+      setFileDiffs([]);
+      setSaveNotice("已撤销本轮智能体修改");
+    } catch (error) {
+      reportError(error);
+    } finally {
+      setReverting(false);
+    }
+  }, [fileDiffs.length, reportError, reverting]);
 
   const startNewConversation = useCallback(async () => {
     if (isRunning) return;
@@ -797,6 +819,39 @@ export default function App() {
                     <code title={step.title}>{step.title}</code>
                   </div>
                 </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {fileDiffs.length > 0 && (
+          <section className="diff-panel" aria-label="本轮文件变更">
+            <div className="diff-heading">
+              <div>
+                <strong>文件变更</strong>
+                <span>{fileDiffs.length} 个文件 · 仅本轮智能体修改</span>
+              </div>
+              <Button
+                size="small"
+                appearance="subtle"
+                onClick={() => void revertLatestTurn()}
+                disabled={reverting || isRunning}
+              >
+                {reverting ? "撤销中…" : "撤销本轮"}
+              </Button>
+            </div>
+            <div className="diff-files">
+              {fileDiffs.map((file) => (
+                <details key={file.path}>
+                  <summary>
+                    <ChevronRight16Regular className="diff-chevron" aria-hidden="true" />
+                    <code title={file.path}>{file.path}</code>
+                    <span className="diff-additions">+{file.additions}</span>
+                    <span className="diff-deletions">−{file.deletions}</span>
+                  </summary>
+                  <pre>{file.patch || "未返回文本补丁"}</pre>
+                  {file.truncated && <small>补丁过长，已截断显示</small>}
+                </details>
               ))}
             </div>
           </section>

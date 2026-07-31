@@ -119,7 +119,7 @@ Host Snapshot 继续传递有上限的运行期事实：
 
 ## 7. 当前开发任务
 
-### 当前状态：OpenCode 消息链路已接入
+### 当前状态：OpenCode 工作区操作闭环已接入
 
 实现范围：
 
@@ -129,7 +129,12 @@ Host Snapshot 继续传递有上限的运行期事实：
 - 已把现有 OpenAI-compatible 模型配置映射为 OpenCode Provider 配置。
 - Gateway 健康状态能区分“Gateway 可用”和“Agent Runtime 未安装/未启动/健康”。
 - 普通问答、附件、Snapshot、测试数据分析和 pytest 生成已切换为 OpenCode 单一路径。
-- 当前仅开放 `glob/grep/read/LSP`；编辑和 Shell 等待权限审批 UI。
+- `glob/grep/read/LSP` 可直接使用；`edit` 和 Shell 每次操作都需要用户批准。
+- 已禁用会绕过审批的 `apply_patch/write`，工作区外访问和硬件控制保持拒绝。
+- 侧栏会显示真实工具活动，以及最近一轮 Agent 产生的文件 Diff。
+- 最近一轮修改可通过 OpenCode 原生 message revert 撤销，不使用工作区级 Git reset。
+- OpenCode `1.18.10` 的原生 Diff/revert 只在有 Git 基线的工作区产生快照；非 Git
+  工作区仍可执行获批编辑，但下一阶段必须在侧栏明确提示该轮不可撤销。
 
 验收标准：
 
@@ -142,8 +147,8 @@ Host Snapshot 继续传递有上限的运行期事实：
 
 ## 8. 后续交付顺序
 
-1. **事件链路**：订阅 OpenCode SSE 事件并支持取消。
-2. **侧栏呈现**：展示思考进度、工具调用、文件 Diff、命令输出和权限确认。
+1. **事件链路**：订阅 OpenCode SSE 事件，实时展示回答和命令输出；取消已支持。
+2. **侧栏呈现**：继续打磨工具调用、文件 Diff、权限确认和窄屏布局。
 3. **宿主上下文**：把当前选择和 Snapshot 作为会话上下文注入，不触发重复模型回答。
 4. **项目说明**：为 CoreTest 工作区提供最小 `AGENTS.md`，记录安全边界、测试命令和现成 SDK/CLI。
 5. **真实验收**：完成“分析任意工程文件”“生成并运行获批测试”“调用项目已有 SDK/CLI”三个闭环。

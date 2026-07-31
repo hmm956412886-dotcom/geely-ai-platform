@@ -76,6 +76,15 @@ export interface AgentActivity {
   output: string;
 }
 
+export interface AgentFileDiff {
+  path: string;
+  status: "added" | "deleted" | "modified";
+  additions: number;
+  deletions: number;
+  patch: string;
+  truncated: boolean;
+}
+
 export interface InsightsResponse {
   request_id: string;
   result: {

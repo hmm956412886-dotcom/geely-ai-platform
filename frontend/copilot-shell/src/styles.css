@@ -388,6 +388,103 @@ textarea {
   white-space: nowrap;
 }
 
+.diff-panel {
+  max-height: 220px;
+  padding: 8px 12px;
+  overflow: auto;
+  border-top: 1px solid #d6d6d6;
+  background: #ffffff;
+}
+
+.diff-heading,
+.diff-heading > div,
+.diff-files {
+  display: flex;
+}
+
+.diff-heading {
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.diff-heading > div,
+.diff-files {
+  flex-direction: column;
+}
+
+.diff-heading strong {
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.diff-heading span {
+  color: #707070;
+  font-size: 10px;
+  line-height: 14px;
+}
+
+.diff-files {
+  margin-top: 5px;
+  gap: 3px;
+}
+
+.diff-files details {
+  border-bottom: 1px solid #ededed;
+}
+
+.diff-files summary {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.diff-chevron {
+  width: 14px;
+  height: 14px;
+  transition: transform 120ms ease;
+}
+
+.diff-files details[open] .diff-chevron {
+  transform: rotate(90deg);
+}
+
+.diff-files summary code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.diff-additions {
+  color: #107c10;
+}
+
+.diff-deletions {
+  color: #c50f1f;
+}
+
+.diff-files pre {
+  margin: 0 0 5px;
+  padding: 7px;
+  overflow: auto;
+  color: #323130;
+  background: #f7f7f7;
+  font-size: 10px;
+  line-height: 15px;
+  white-space: pre;
+}
+
+.diff-files small {
+  display: block;
+  margin-bottom: 5px;
+  color: #707070;
+  font-size: 10px;
+}
+
 .permission-panel {
   padding: 10px 12px;
   border-top: 1px solid #d6d6d6;

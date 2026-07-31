@@ -1,5 +1,6 @@
 import type {
   AgentActivity,
+  AgentFileDiff,
   AgentPermission,
   CopilotAttachment,
   CopilotHistoryMessage,
@@ -101,6 +102,22 @@ export const gatewayClient = {
       { conversation_id: conversationId },
     );
     return payload.result.activity;
+  },
+
+  async diff(conversationId: string): Promise<AgentFileDiff[]> {
+    const payload = await postJson<{ result: { files: AgentFileDiff[] } }>(
+      sessionPath("/api/v1/agent/diff"),
+      { conversation_id: conversationId },
+    );
+    return payload.result.files;
+  },
+
+  async revert(conversationId: string): Promise<boolean> {
+    const payload = await postJson<{ result: { reverted: boolean } }>(
+      sessionPath("/api/v1/agent/revert"),
+      { conversation_id: conversationId },
+    );
+    return payload.result.reverted;
   },
 
   replyPermission(
