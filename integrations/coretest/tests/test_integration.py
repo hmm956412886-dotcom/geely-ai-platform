@@ -8,7 +8,7 @@ import sys
 import unittest
 from unittest.mock import Mock, patch
 
-from coretest_copilot.integration import CoreTestCopilot
+from coretest_copilot.integration import CoreTestCopilot, _project_identity
 
 
 class GeneratedTestSaveTests(unittest.TestCase):
@@ -43,6 +43,33 @@ class GeneratedTestSaveTests(unittest.TestCase):
         download.cancel.assert_called_once_with()
         download.accept.assert_not_called()
         copilot._show_error.assert_called_once()
+
+    def test_existing_generated_test_gets_a_numbered_filename(self) -> None:
+        with TemporaryDirectory() as directory:
+            target = Path(directory) / "generated_tests"
+            target.mkdir()
+            (target / "test_generated.py").write_text("existing", encoding="utf-8")
+            project = SimpleNamespace(url=directory)
+            service = SimpleNamespace(get_active_project=lambda: project)
+            download = Mock()
+            download.suggestedFileName.return_value = "test_generated.py"
+            copilot = CoreTestCopilot.__new__(CoreTestCopilot)
+
+            with patch.dict(sys.modules, {"app.service": _service_module(service)}):
+                copilot._save_generated_file(download)
+
+            download.setDownloadFileName.assert_called_once_with("test_generated_2.py")
+
+
+class ProjectIdentityTests(unittest.TestCase):
+    def test_same_name_projects_in_different_directories_have_distinct_ids(self) -> None:
+        with TemporaryDirectory() as first, TemporaryDirectory() as second:
+            first_id, first_label = _project_identity(SimpleNamespace(name="vehicle", url=first))
+            second_id, second_label = _project_identity(SimpleNamespace(name="vehicle", url=second))
+
+        self.assertEqual(first_label, second_label)
+        self.assertNotEqual(first_id, second_id)
+        self.assertTrue(first_id.startswith("coretest-"))
 
 
 class RuntimeBufferTests(unittest.TestCase):

@@ -20,11 +20,13 @@ function sessionPath(path: string): string {
 
 export class GatewayRequestError extends Error {
   readonly requestId?: string;
+  readonly code?: string;
 
-  constructor(message: string, requestId?: string) {
+  constructor(message: string, requestId?: string, code?: string) {
     super(message);
     this.name = "GatewayRequestError";
     this.requestId = requestId;
+    this.code = code;
   }
 }
 
@@ -37,16 +39,18 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
     throw new GatewayRequestError(
       payload.error?.message ?? `Gateway request failed (${response.status})`,
       payload.request_id,
+      payload.error?.code,
     );
   }
   return payload;
 }
 
-function postJson<T>(path: string, body: unknown): Promise<T> {
+function postJson<T>(path: string, body: unknown, signal?: AbortSignal): Promise<T> {
   return requestJson<T>(path, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
+    signal,
   });
 }
 
@@ -65,22 +69,25 @@ export const gatewayClient = {
     return payload.result;
   },
 
-  analyzeSnapshot(question: string): Promise<AnalysisResponse> {
-    return postJson<AnalysisResponse>(sessionPath("/api/v1/host/snapshot/analyze"), { question });
+  analyzeSnapshot(question: string, signal?: AbortSignal): Promise<AnalysisResponse> {
+    return postJson<AnalysisResponse>(sessionPath("/api/v1/host/snapshot/analyze"), { question }, signal);
   },
 
   queryCopilot(
     question: string,
+    conversationId: string,
     attachments: CopilotAttachment[],
     history: CopilotHistoryMessage[],
     task: "chat" | "generate_test" = "chat",
+    signal?: AbortSignal,
   ): Promise<CopilotResponse> {
     return postJson<CopilotResponse>(sessionPath("/api/v1/copilot/query"), {
       question,
+      conversation_id: conversationId,
       task,
       history,
       attachments: attachments.map(({ name, content }) => ({ name, content })),
-    });
+    }, signal);
   },
 
   insights(context: HostContext): Promise<InsightsResponse> {

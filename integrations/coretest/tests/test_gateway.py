@@ -47,6 +47,33 @@ class GatewayConfigTests(unittest.TestCase):
         self.assertTrue(calls[0][3])
         self.assertFalse(calls[1][3])
 
+    def test_publish_registers_workspace_before_snapshot(self) -> None:
+        bridge = GatewayBridge.__new__(GatewayBridge)
+        calls = []
+
+        def request(method, path, payload=None, *, privileged=False, success=None):
+            calls.append((method, path, payload, privileged))
+            if success:
+                success({"result": payload})
+
+        bridge.request = request
+        bridge.publish(
+            {"selection_kind": "project"},
+            {"kind": "project", "revision": "1"},
+            workspace_root="D:/projects/demo",
+        )
+
+        self.assertEqual(
+            [call[1] for call in calls],
+            [
+                "/api/v1/host/workspace",
+                "/api/v1/host/snapshot",
+                "/api/v1/host/context",
+            ],
+        )
+        self.assertEqual(calls[0][2], {"project_root": "D:/projects/demo"})
+        self.assertTrue(calls[0][3])
+
     def test_load_env_values_reads_only_assignments(self) -> None:
         with TemporaryDirectory() as directory:
             path = Path(directory) / ".env"

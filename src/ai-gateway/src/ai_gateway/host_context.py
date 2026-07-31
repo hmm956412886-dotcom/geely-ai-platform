@@ -17,6 +17,7 @@ SESSION_ID_PATTERN = re.compile(r"^[A-Za-z0-9._-]{1,80}$")
 ALLOWED_FIELDS = {
     "host_application",
     "project_id",
+    "project_label",
     "run_id",
     "source_asset_id",
     "target_asset_id",
@@ -34,6 +35,7 @@ ALLOWED_FIELDS = {
 DEFAULT_CONTEXT = {
     "host_application": None,
     "project_id": None,
+    "project_label": None,
     "run_id": None,
     "source_asset_id": None,
     "target_asset_id": None,

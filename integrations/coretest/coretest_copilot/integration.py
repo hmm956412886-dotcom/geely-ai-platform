@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import deque
 from datetime import datetime, timezone
+import hashlib
 from pathlib import Path
 from typing import Any
 
@@ -23,7 +24,15 @@ from PySide6.QtWidgets import (
 from PySide6.QtWebEngineWidgets import QWebEngineView
 
 from .gateway import GatewayBridge
-from .snapshots import dbc_snapshot, diagnostic_snapshot, pdx_snapshot, project_snapshot, trace_snapshot
+from .snapshots import (
+    dbc_snapshot,
+    diagnostic_snapshot,
+    pdx_snapshot,
+    project_snapshot,
+    SUPPORTED_TEXT_SUFFIXES,
+    text_file_snapshot,
+    trace_snapshot,
+)
 
 
 class CoreTestCopilot:
@@ -250,16 +259,25 @@ class CoreTestCopilot:
         if node is None or node.is_dir:
             return
         path = Path(node.path)
-        if path.suffix.lower() != ".pdx":
+        if path.suffix.lower() not in SUPPORTED_TEXT_SUFFIXES | {".pdx"}:
             return
         try:
-            snapshot = pdx_snapshot(path, self._revision())
+            snapshot = (
+                pdx_snapshot(path, self._revision())
+                if path.suffix.lower() == ".pdx"
+                else text_file_snapshot(path, self._revision())
+            )
         except Exception as exc:
             snapshot = {
-                "kind": "pdx",
+                "kind": "pdx" if path.suffix.lower() == ".pdx" else "file",
                 "revision": self._revision(),
-                "selection": {"pdx_name": path.name},
-                "data": {"filename": path.name, "parse_error": str(exc)[:500]},
+                "selection": {
+                    "pdx_name" if path.suffix.lower() == ".pdx" else "filename": path.name
+                },
+                "data": {
+                    "filename": path.name,
+                    "parse_error" if path.suffix.lower() == ".pdx" else "read_error": str(exc)[:500],
+                },
             }
         self._publish(snapshot, selection_label=path.name)
 
@@ -332,17 +350,25 @@ class CoreTestCopilot:
             return
         target = Path(project.url) / "generated_tests"
         target.mkdir(parents=True, exist_ok=True)
+        filename = Path(download.suggestedFileName()).name
+        destination = target / filename
+        counter = 2
+        while destination.exists():
+            destination = target / f"{Path(filename).stem}_{counter}{Path(filename).suffix}"
+            counter += 1
         download.setDownloadDirectory(str(target))
-        download.setDownloadFileName(Path(download.suggestedFileName()).name)
+        download.setDownloadFileName(destination.name)
         download.accept()
 
     def _publish(self, snapshot: dict[str, Any], *, selection_label: str) -> None:
         from app.service import project_runtime_service
 
         project = project_runtime_service.get_active_project()
+        project_id, project_label = _project_identity(project)
         context = {
             "host_application": "HK CoreTest",
-            "project_id": str(getattr(project, "name", "未选择项目")),
+            "project_id": project_id,
+            "project_label": project_label,
             "run_id": snapshot["kind"],
             "current_view": self._current_view(),
             "selection_kind": snapshot["kind"],
@@ -350,7 +376,8 @@ class CoreTestCopilot:
             "snapshot_revision": snapshot["revision"],
         }
         snapshot["captured_at"] = datetime.now(timezone.utc).isoformat()
-        self.bridge.publish(context, snapshot)
+        workspace_root = str(project.url) if project is not None and project.url else None
+        self.bridge.publish(context, snapshot, workspace_root=workspace_root)
 
     def _current_view(self) -> str:
         main = self.window.main_tabs.tabText(self.window.main_tabs.currentIndex())
@@ -362,3 +389,15 @@ class CoreTestCopilot:
     def _revision(self) -> str:
         self.revision += 1
         return str(self.revision)
+
+
+def _project_identity(project: Any) -> tuple[str | None, str | None]:
+    if project is None:
+        return None, None
+    label = str(getattr(project, "name", "未命名工程"))
+    project_url = getattr(project, "url", None)
+    if not project_url:
+        return None, label
+    normalized = str(Path(project_url).resolve()).casefold()
+    digest = hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:16]
+    return f"coretest-{digest}", label

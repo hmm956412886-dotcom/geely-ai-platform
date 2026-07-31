@@ -29,6 +29,11 @@ $model = Invoke-GatewayJson -Path "/api/v1/model/config"
 Assert-Ok ($null -ne $model.result.configured) "/api/v1/model/config"
 Assert-Ok (-not ($model.result.PSObject.Properties.Name -contains "api_key")) "model config hides api_key"
 
+$agent = Invoke-GatewayJson -Path "/api/v1/agent/status"
+Assert-Ok ($null -ne $agent.result.runtime.installed) "/api/v1/agent/status"
+Assert-Ok (-not ($agent.result.runtime.PSObject.Properties.Name -contains "password")) "agent status hides password"
+Assert-Ok (-not ($agent.result.workspace.PSObject.Properties.Name -contains "project_root")) "agent status hides workspace path"
+
 $manifest = Invoke-GatewayJson -Path "/plugin-manifest.json"
 Assert-Ok ($manifest.webview.entry -eq "/copilot-shell/") "/plugin-manifest.json"
 

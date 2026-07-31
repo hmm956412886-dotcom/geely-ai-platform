@@ -12,6 +12,11 @@ $sidecarRoot = Join-Path $repoRoot "dist\geely-ai-gateway"
 $envExample = Join-Path $repoRoot "config\runtime.env.example"
 $coreTestScripts = Join-Path $coreTestRoot "resource\scripts"
 
+Write-Warning (
+    "OpenCode Agent Runtime is intentionally excluded. " +
+    "Do not add it until docs/14-open-source-compliance.md is satisfied."
+)
+
 Push-Location $frontendRoot
 try {
     & $Pnpm build

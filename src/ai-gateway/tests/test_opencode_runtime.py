@@ -1,0 +1,238 @@
+import json
+from pathlib import Path
+from tempfile import TemporaryDirectory
+import unittest
+from unittest.mock import patch
+
+from ai_gateway.model_client import ModelConfig
+from ai_gateway.opencode_runtime import OpenCodeConfig, OpenCodeRuntime, load_opencode_config
+
+
+class FakeProcess:
+    def __init__(self) -> None:
+        self.returncode = None
+        self.terminated = False
+
+    def poll(self):
+        return self.returncode
+
+    def terminate(self) -> None:
+        self.terminated = True
+        self.returncode = 0
+
+    def wait(self, timeout=None):
+        return self.returncode
+
+
+class FakeResponse:
+    def __init__(self, body: bytes) -> None:
+        self.body = body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return None
+
+    def read(self) -> bytes:
+        return self.body
+
+
+class FakeOpenCodeApi:
+    def __init__(self) -> None:
+        self.requests = []
+
+    def __call__(self, request, **_kwargs):
+        self.requests.append(request)
+        if request.get_method() == "PUT":
+            return FakeResponse(b"true")
+        return FakeResponse(b'{"healthy":true,"version":"1.2.3"}')
+
+
+class OpenCodeRuntimeTests(unittest.TestCase):
+    def test_load_config_accepts_only_localhost(self) -> None:
+        config = load_opencode_config(
+            {"OPENCODE_COMMAND": "custom-opencode", "OPENCODE_PORT": "4900"}
+        )
+
+        self.assertEqual(config.command, "custom-opencode")
+        self.assertEqual(config.host, "127.0.0.1")
+        self.assertEqual(config.port, 4900)
+
+        with self.assertRaisesRegex(ValueError, "127.0.0.1"):
+            load_opencode_config({"OPENCODE_HOST": "0.0.0.0"})
+
+    def test_start_uses_workspace_and_secret_free_provider_file(self) -> None:
+        calls = []
+        process = FakeProcess()
+
+        def start_process(args, **kwargs):
+            calls.append((args, kwargs))
+            return process
+
+        with TemporaryDirectory() as directory:
+            api = FakeOpenCodeApi()
+            runtime = OpenCodeRuntime(
+                config=OpenCodeConfig(command="opencode-test", port=4901),
+                model_config=ModelConfig(
+                    "https://api.example.com/v1", "model-secret", "demo-model"
+                ),
+                process_factory=start_process,
+                command_resolver=lambda _command: "C:/tools/opencode.exe",
+                urlopen=api,
+                password_factory=lambda: "runtime-secret",
+            )
+
+            with patch.dict(
+                "os.environ",
+                {
+                    "AI_GATEWAY_HOST_TOKEN": "host-secret",
+                    "UNRELATED_PRIVATE_VALUE": "private",
+                },
+                clear=False,
+            ):
+                status = runtime.start(Path(directory))
+            args, kwargs = calls[0]
+            config_path = Path(kwargs["env"]["OPENCODE_CONFIG"])
+            config_text = config_path.read_text(encoding="utf-8")
+            provider = json.loads(config_text)
+
+            self.assertEqual(
+                args,
+                [
+                    "C:/tools/opencode.exe",
+                    "serve",
+                    "--hostname",
+                    "127.0.0.1",
+                    "--port",
+                    "4901",
+                ],
+            )
+            self.assertEqual(kwargs["cwd"], str(Path(directory).resolve()))
+            self.assertEqual(kwargs["env"]["OPENCODE_SERVER_PASSWORD"], "runtime-secret")
+            for name in ("DATA", "CONFIG", "CACHE", "STATE"):
+                self.assertTrue(
+                    kwargs["env"][f"XDG_{name}_HOME"].startswith(
+                        str(config_path.parent)
+                    )
+                )
+            self.assertNotIn("CORETEST_OPENCODE_MODEL_API_KEY", kwargs["env"])
+            self.assertNotIn("AI_GATEWAY_HOST_TOKEN", kwargs["env"])
+            self.assertNotIn("UNRELATED_PRIVATE_VALUE", kwargs["env"])
+            self.assertNotIn("model-secret", config_text)
+            self.assertNotIn("apiKey", provider["provider"]["coretest"]["options"])
+            self.assertEqual(provider["model"], "coretest/demo-model")
+            self.assertEqual(provider["permission"]["edit"], "ask")
+            self.assertEqual(provider["permission"]["external_directory"], "deny")
+            self.assertTrue(status["running"])
+            self.assertNotIn(str(Path(directory).resolve()), json.dumps(status))
+
+            health = runtime.health()
+            self.assertTrue(health["healthy"])
+            self.assertEqual(health["version"], "1.2.3")
+            auth_request = next(item for item in api.requests if item.get_method() == "PUT")
+            self.assertTrue(auth_request.full_url.endswith("/auth/coretest"))
+            self.assertEqual(
+                json.loads(auth_request.data.decode("utf-8")),
+                {"type": "api", "key": "model-secret"},
+            )
+
+            runtime.stop()
+            self.assertTrue(process.terminated)
+            self.assertFalse(config_path.exists())
+
+    def test_start_rejects_non_directory_workspace(self) -> None:
+        runtime = OpenCodeRuntime(
+            command_resolver=lambda _command: "C:/tools/opencode.exe"
+        )
+
+        with self.assertRaisesRegex(ValueError, "workspace"):
+            runtime.start(Path("missing-workspace"))
+
+    def test_health_fails_closed_when_model_authentication_fails(self) -> None:
+        process = FakeProcess()
+
+        def api(request, **_kwargs):
+            if request.get_method() == "PUT":
+                raise OSError("connection failed")
+            return FakeResponse(b'{"healthy":true,"version":"1.2.3"}')
+
+        with TemporaryDirectory() as directory:
+            runtime = OpenCodeRuntime(
+                config=OpenCodeConfig(command="opencode-test"),
+                model_config=ModelConfig(
+                    "https://api.example.com/v1", "model-secret", "demo-model"
+                ),
+                process_factory=lambda *_args, **_kwargs: process,
+                command_resolver=lambda _command: "C:/tools/opencode.exe",
+                urlopen=api,
+            )
+            runtime.start(directory)
+
+            health = runtime.health()
+
+            self.assertFalse(health["healthy"])
+            self.assertEqual(runtime.status()["error"], "OpenCode model authentication failed")
+            self.assertNotIn("model-secret", json.dumps(runtime.status()))
+
+    def test_prompt_creates_and_reuses_read_only_session(self) -> None:
+        process = FakeProcess()
+        requests = []
+
+        def api(request, **_kwargs):
+            requests.append(request)
+            if request.full_url.endswith("/global/health"):
+                return FakeResponse(b'{"healthy":true,"version":"1.18.10"}')
+            if request.full_url.endswith("/auth/coretest"):
+                return FakeResponse(b"true")
+            if request.full_url.endswith("/session"):
+                return FakeResponse(b'{"id":"session-1"}')
+            if request.full_url.endswith("/session/session-1/message"):
+                return FakeResponse(
+                    b'{"parts":[{"type":"text","text":"workspace answer"}]}'
+                )
+            if request.get_method() == "DELETE":
+                return FakeResponse(b"true")
+            raise AssertionError(request.full_url)
+
+        with TemporaryDirectory() as directory:
+            runtime = OpenCodeRuntime(
+                model_config=ModelConfig(
+                    "https://api.example.com/v1", "secret", "demo-model"
+                ),
+                process_factory=lambda *_args, **_kwargs: process,
+                command_resolver=lambda _command: "C:/tools/opencode.exe",
+                urlopen=api,
+            )
+            runtime.start(directory)
+
+            self.assertEqual(runtime.prompt("host-a", "inspect the project"), "workspace answer")
+            self.assertEqual(runtime.prompt("host-a", "continue"), "workspace answer")
+            self.assertEqual(
+                runtime.prompt("host-a", "fresh", new_session=True),
+                "workspace answer",
+            )
+            runtime.release_session("host-a")
+
+        session_creates = [
+            request
+            for request in requests
+            if request.get_method() == "POST" and request.full_url.endswith("/session")
+        ]
+        self.assertEqual(len(session_creates), 2)
+        prompts = [
+            request
+            for request in requests
+            if request.full_url.endswith("/session/session-1/message")
+        ]
+        self.assertEqual(len(prompts), 3)
+        prompt_body = json.loads(prompts[0].data.decode("utf-8"))
+        self.assertEqual(prompt_body["parts"], [{"type": "text", "text": "inspect the project"}])
+        self.assertFalse(prompt_body["tools"]["bash"])
+        self.assertFalse(prompt_body["tools"]["edit"])
+        self.assertFalse(prompt_body["tools"]["apply_patch"])
+        self.assertTrue(prompt_body["tools"]["read"])
+
+
+if __name__ == "__main__":
+    unittest.main()

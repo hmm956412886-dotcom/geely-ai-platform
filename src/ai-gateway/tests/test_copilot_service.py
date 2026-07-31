@@ -106,6 +106,15 @@ class CopilotServiceTests(unittest.TestCase):
 
         self.assertEqual(response.status, 400)
 
+    def test_chat_rejects_invalid_conversation_id(self) -> None:
+        response = handle_request(
+            "POST",
+            "/api/v1/copilot/query",
+            json.dumps({"question": "Continue", "conversation_id": "../other"}),
+        )
+
+        self.assertEqual(response.status, 400)
+
     @patch(
         "ai_gateway.copilot_service.chat_completion",
         return_value="```python\ndef test_value():\n    assert 1 == 1\n```",
@@ -148,6 +157,56 @@ class CopilotServiceTests(unittest.TestCase):
         self.assertEqual(
             json.loads(response.body)["artifacts"][0]["name"], "test_test_run_cases.py"
         )
+
+    @patch("ai_gateway.copilot_service.chat_completion", return_value="def test_add():\n    assert True")
+    def test_generate_test_uses_selected_coretest_file_without_attachment(self, completion) -> None:
+        session = "selected-file-generation"
+        handle_request(
+            "POST",
+            f"/api/v1/host/snapshot?host_session_id={session}",
+            json.dumps(
+                {
+                    "kind": "file",
+                    "revision": "1",
+                    "selection": {"filename": "calculator.py"},
+                    "data": {
+                        "filename": "calculator.py",
+                        "size_bytes": 29,
+                        "line_count": 1,
+                        "content": "def add(a, b): return a + b",
+                    },
+                }
+            ),
+        )
+
+        response = handle_request(
+            "POST",
+            f"/api/v1/copilot/query?host_session_id={session}",
+            json.dumps({"question": "生成测试", "task": "generate_test"}, ensure_ascii=False),
+        )
+
+        payload = json.loads(response.body)
+        prompt = "\n".join(message["content"] for message in completion.call_args.args[0])
+        self.assertEqual(response.status, 200)
+        self.assertEqual(payload["artifacts"][0]["name"], "test_calculator.py")
+        self.assertIn("def add", prompt)
+
+    @patch("ai_gateway.copilot_service.chat_completion", return_value="def broken(")
+    def test_generate_test_rejects_invalid_python(self, _completion) -> None:
+        response = handle_request(
+            "POST",
+            "/api/v1/copilot/query",
+            json.dumps(
+                {
+                    "question": "generate tests",
+                    "task": "generate_test",
+                    "attachments": [{"name": "module.py", "content": "value = 1"}],
+                }
+            ),
+        )
+
+        self.assertEqual(response.status, 502)
+        self.assertEqual(json.loads(response.body)["error"]["code"], "model_unavailable")
 
     def test_generate_test_requires_supported_bounded_text_attachment(self) -> None:
         missing = handle_request(

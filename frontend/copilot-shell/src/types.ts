@@ -2,6 +2,7 @@ export interface HostContext {
   host_session_id: string;
   host_application?: string | null;
   project_id: string | null;
+  project_label?: string | null;
   run_id: string | null;
   source_asset_id?: string | null;
   target_asset_id?: string | null;

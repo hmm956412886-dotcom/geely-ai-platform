@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import ast
 import json
 from pathlib import Path
 import re
-from typing import Any
+from typing import Any, Callable
 
 from .model_client import chat_completion
 
@@ -26,8 +27,15 @@ def run_copilot(
     *,
     host_context: dict[str, Any] | None = None,
     host_snapshot: dict[str, Any] | None = None,
+    workspace_agent: Callable[[str], str] | None = None,
 ) -> dict[str, Any]:
-    unknown = set(payload) - {"question", "task", "attachments", "history"}
+    unknown = set(payload) - {
+        "question",
+        "task",
+        "attachments",
+        "history",
+        "conversation_id",
+    }
     if unknown:
         raise ValueError(f"unsupported copilot fields: {', '.join(sorted(unknown))}")
     question = str(payload.get("question") or "").strip()
@@ -35,28 +43,44 @@ def run_copilot(
         raise ValueError("question is required")
     if len(question) > 4000:
         raise ValueError("question must be at most 4000 characters")
+    conversation_id = payload.get("conversation_id")
+    if conversation_id is not None and (
+        not isinstance(conversation_id, str)
+        or re.fullmatch(r"[A-Za-z0-9_-]{1,100}", conversation_id) is None
+    ):
+        raise ValueError("conversation_id must be a short identifier")
     task = str(payload.get("task") or "chat").strip()
     if task not in {"chat", "generate_test"}:
         raise ValueError("task must be chat or generate_test")
     attachments = _attachments(payload.get("attachments"))
     history = _history(payload.get("history"))
-    if task == "generate_test" and not attachments:
-        raise ValueError("at least one attachment is required to generate test code")
+    snapshot_file = _snapshot_file(host_snapshot)
+    if task == "generate_test" and not attachments and snapshot_file is None:
+        raise ValueError("an attachment or selected CoreTest file is required to generate test code")
 
     try:
-        content = chat_completion(
-            _messages(question, task, attachments, history, host_context, host_snapshot)
+        content = (
+            workspace_agent(question)
+            if workspace_agent is not None and task == "chat" and not attachments
+            else chat_completion(
+                _messages(question, task, attachments, history, host_context, host_snapshot)
+            )
         )
     except ValueError as exc:
         raise RuntimeError(str(exc)) from exc
 
     artifacts: list[dict[str, str]] = []
     if task == "generate_test":
-        stem = re.sub(r"[^A-Za-z0-9_]+", "_", Path(attachments[0]["name"]).stem).strip("_")
+        source_name = attachments[0]["name"] if attachments else snapshot_file["name"]
+        stem = re.sub(r"[^A-Za-z0-9_]+", "_", Path(source_name).stem).strip("_")
         filename = f"test_{stem or 'generated'}.py"
         code = _strip_code_fence(content)
+        try:
+            ast.parse(code, filename=filename)
+        except SyntaxError as exc:
+            raise RuntimeError(f"model returned invalid Python near line {exc.lineno or '?'}") from exc
         artifacts.append({"name": filename, "language": "python", "content": code})
-        answer = f"已根据 {len(attachments)} 个文件生成 `{filename}`。"
+        answer = f"已生成并通过语法检查：`{filename}`。"
     else:
         answer = content
     return {"answer": answer, "artifacts": artifacts, "citations": [], "warnings": []}
@@ -158,6 +182,7 @@ def _host_reference(
     context_fields = (
         "host_application",
         "project_id",
+        "project_label",
         "run_id",
         "current_view",
         "selection_kind",
@@ -192,3 +217,13 @@ def _strip_code_fence(content: str) -> str:
         if first_line.lower() in {"```", "```python", "```py"}:
             text = remainder.rsplit("```", 1)[0].strip()
     return text + "\n"
+
+
+def _snapshot_file(snapshot: dict[str, Any] | None) -> dict[str, str] | None:
+    if not snapshot or snapshot.get("kind") != "file":
+        return None
+    data = snapshot.get("data")
+    if not isinstance(data, dict) or not isinstance(data.get("content"), str):
+        return None
+    name = str(data.get("filename") or "selected_file.txt")
+    return {"name": Path(name).name, "content": data["content"]}

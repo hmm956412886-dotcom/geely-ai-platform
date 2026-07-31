@@ -1,182 +1,175 @@
-# CoreTest AI Copilot 产品开发计划
+# CoreTest 工作区智能体产品开发计划
 
-## 1. 最终产品
+## 1. 产品定义
 
-本项目交付的是可嵌入汽车测试软件和网站的 AI Copilot。第一个正式宿主是
-HK CoreTest。产品不是通用聊天平台，也不替代测试软件、AnythingLLM 或设备控制系统。
+本项目交付的是嵌入 HK CoreTest 右侧的本地工作区智能体。交互体验对齐 Codex、Claude Code
+这类代码智能体：用户只需要描述目标，Agent 第一次进入工程也能自行查看目录、搜索代码、阅读说明、
+运行获批命令、生成或修改文件，并根据执行结果继续工作。
 
-```text
-CoreTest / 其他宿主
-  -> 右侧 Copilot WebView
-  -> Host Connector（当前项目、页面、选择和结构化快照）
-  -> 本地 AI Gateway Sidecar（稳定 REST API）
-  -> 确定性分析工具 + 文件问答/测试代码生成 + 可配置模型
-```
-
-用户应能在 CoreTest 中打开右侧 Copilot，选择工程中的 PDX、Trace、DBC 帧或诊断 ECU 后直接提问。
-Copilot 必须知道用户当前正在看什么，先用确定性代码计算事实，再由模型解释结果并给出引用。
-用户添加代码、配置或数据文件后，可以让模型基于文件内容回答问题并生成 pytest 测试模块；生成代码只在用户点击保存后进入当前项目的 `generated_tests`，不自动执行。
-
-## 2. 产品边界
-
-第一版必须提供：
-
-- CoreTest 原生右侧可停靠面板，可显示、隐藏和调整宽度。
-- Gateway 由宿主管理启动、健康检查、异常提示和退出清理。
-- 每个宿主窗口使用独立 `host_session_id`，上下文不串线。
-- 当前项目、主页面、子页面、文件、DBC 节点/帧、Trace 帧、诊断 ECU 自动同步。
-- PDX、Trace、DBC、诊断日志的结构化分析。
-- 真正的多轮对话、新建对话和运行期历史会话；可切换回同一 CoreTest 工程的旧会话，工程之间严格隔离。
-- 最多添加 5 个文本文件，支持普通问答和基于附件生成 pytest。
-- 生成代码在对话中完整预览，可复制，可由用户明确保存到 `generated_tests`。
-- OpenAI-compatible 模型按客户环境配置。
-- 所有 API 回答带 `request_id`，界面仅在故障排查时展示；知识结论带来源引用。
-- Gateway、WebView 和 Host Connector 均不得把客户绝对路径或密钥展示给浏览器。
-
-第一版禁止：
-
-- 发送 CAN 报文、启动回放、执行 UDS、刷写 ECU 或控制硬件通道。
-- 修改业务源码、SQLite 配置、测试配置或客户知识库；`generated_tests` 是唯一允许的生成写入目录。
-- 自动执行生成代码，或让模型直接编辑任意项目文件。
-- 把百万条原始帧或完整 PDX 直接发送给模型。
-- 自行补写 PDX/ODX 解析器，或执行 PDX 容器中的脚本。
-- 引入 Agent 框架、多 Agent、工作流引擎、向量数据库、动态 UI 或第二套聊天框架。
-
-## 3. 已确认的客户软件事实
-
-目标源码：
+产品不是“聊天框加若干固定接口”，也不要求为每个 CoreTest 功能预先绑定一个模型工具。右侧面板只是
+客户端；真正的智能体循环由本地 OpenCode Runtime 承担。
 
 ```text
-https://jihulab.com/hk-group/hk-coretest-ai.git
-commit e27752a834b4dd8cfb1f2d4df7c8f45dc516cece
+HK CoreTest
+  -> QDockWidget + QWebEngineView 右侧面板
+  -> React + assistant-ui + Fluent UI
+  -> AI Gateway（宿主鉴权、工作区注册、运行期上下文和协议适配）
+  -> OpenCode Sidecar（会话、检索、读写、Shell、权限和模型工具调用）
+  -> 唯一 CoreTest 工程目录
 ```
 
-CoreTest 使用 Python、PySide6、SQLModel/SQLite、PyInstaller 和 pyqtgraph。主窗口是
-`QMainWindow + QTabWidget`，现有服务已经解析 DBC、ASC/BLF Trace，并通过 Qt Signal 暴露
-项目和诊断事件。集成必须复用这些服务，不能在 Gateway 中复制解析器。
+## 2. 第一性原理和边界
 
-PDX 是 ODX 诊断描述数据库，描述 ECU、DID、DTC、诊断服务和协议参数，不是测试结果。
-当前极狐提交是脱敏分支，`project_pdx_service.py` 只有接口壳，不能作为正式 PDX 实现。仓库中的
-`somersault.pdx` 已验证为 ODX 2.2 样例，使用成熟开源库 `odxtools` 解析 ECU、诊断层、服务和 CAN
-通信参数；不执行 PDX 内嵌脚本，也不把完整 PDX 发送给模型。PDX 用于解释诊断能力和后续 Trace/
-诊断结果，不输出 `TestRunSummary`。
+### Agent 自己完成的事
 
-## 4. 固定技术方案
+- 从唯一工作区根目录开始探索，不要求宿主上传每个文件。
+- 使用 `glob/grep/read/LSP` 理解工程结构和调用关系。
+- 根据任务创建临时分析脚本、生成代码或修改工程文件。
+- 运行经过权限策略允许的测试、构建、格式化和项目 CLI。
+- 阅读项目中的 `AGENTS.md`、README、SDK 源码、类型定义和示例，现学现用。
+- 通过 OpenCode Skills、MCP 或 CLI 扩展能力，但不为普通项目文件建立固定业务绑定。
 
-| 层 | 采用方案 | 原因 |
+### 宿主必须提供的最小信息
+
+- 一个真实、存在、经过可信 Host Connector 注册的工作区根目录。
+- 当前宿主会话和工程标识。
+- 文件写入、命令执行和外部访问的权限决定。
+- 仅存在于 CoreTest 进程内的运行期状态，例如当前 Trace 帧、诊断 ECU 或已解析 DBC 对象。
+
+文件、源码和磁盘上的 SDK 可以由 Agent 自己发现；CoreTest 进程内存中的对象不能被 Agent 凭空读取。
+这类状态继续通过有上限的 Host Snapshot 提供，或后续封装为一个通用只读 CLI/MCP 服务。该桥接是运行期
+数据边界，不是按问题编写固定接口。
+
+## 3. 固定技术方案
+
+| 层 | 采用方案 | 职责 |
 | --- | --- | --- |
-| CoreTest 面板 | `QDockWidget + QWebEngineView` | Qt 原生停靠体验，复用 Web 前端 |
-| Host Connector | Python + Qt Signal + 标准库 HTTP | 与 CoreTest 同语言，最小改造 |
-| Copilot UI | React + assistant-ui + Fluent UI | 复用成熟对话、原生附件、Markdown 和 Microsoft 风格组件 |
-| 集成协议 | AI Gateway REST/OpenAPI | 与宿主语言、UI 和模型框架解耦 |
-| 分析 | CoreTest 已解析对象 + Gateway 确定性统计 | 避免 LLM 算数和重复解析 |
-| PDX | `odxtools` | 直接复用 ASAM ODX/PDX 成熟解析能力，不自研格式解析器 |
-| 模型 | 官方 `openai-python` + OpenAI-compatible API | 由客户选择部署和密钥，覆盖 Responses / Chat Completions |
-| 打包 | CoreTest PyInstaller + Gateway 独立 Sidecar | AI 故障不影响硬件通信主进程 |
+| CoreTest 面板 | `QDockWidget + QWebEngineView` | 显示、隐藏、停靠和宿主生命周期 |
+| Agent UI | React + assistant-ui + Fluent UI | 消息、工具步骤、Diff、权限请求和取消操作 |
+| 宿主协议 | AI Gateway REST/OpenAPI | Bearer 鉴权、会话隔离、工作区注册和协议稳定性 |
+| Agent Runtime | OpenCode `serve` | 会话、文件工具、Shell、编辑、事件流和权限系统 |
+| Runtime 接口 | OpenCode OpenAPI / `@opencode-ai/sdk` | 创建会话、发送 Prompt、订阅事件、回复权限 |
+| 模型 | OpenAI-compatible Provider | 复用客户的 Base URL、API Key 和模型名 |
+| 汽车数据 | CoreTest 已解析对象 + `odxtools` | 确定性只读事实，不复制解析器 |
+| 打包 | CoreTest + Gateway + OpenCode 独立 Sidecar | Agent 故障不影响 CAN、UDS、刷写和主进程 |
 
-不采用 AnythingLLM、Open WebUI、LibreChat 作为核心运行时：它们是完整聊天/知识产品，会额外引入用户、存储、权限和部署面。Cline、Continue、OpenHands 是具文件写入和命令执行能力的开发代理，不符合 CoreTest 的只读安全边界。CopilotKit 需要其专用 Runtime；当前以 assistant-ui 的可替换 Runtime 满足嵌入需求。
+OpenCode 使用 MIT 许可证，允许商业使用和二次修改。采用它是为了复用已落地的 Agent Runtime，项目不再
+自行实现一套文件搜索、编辑、Shell 工具循环、会话状态和权限系统。
+正式客户交付必须遵守 `docs/14-open-source-compliance.md`：固定版本、校验产物、生成 SBOM 和第三方
+Notices；完整依赖许可证审计通过前不得把 OpenCode 放入交付 ZIP。
 
-## 5. 数据契约
+不采用：
 
-Host Context 只保存轻量定位信息：
+- CopilotKit：它是 UI/Runtime 集成方案，不是完整的工作区代码智能体，本项目已使用 assistant-ui。
+- OpenClaw：更偏个人助手、消息渠道和通用自动化，不是项目目录优先的编码 Runtime。
+- OpenHands：控制中心和沙箱较重，超出单机 CoreTest 侧栏需求。
+- Cline/Roo Code：主要依赖 VS Code/JetBrains 宿主。
+- CLI-Anything：可作为现有软件的 CLI 适配层，但不能替代 Agent Runtime。
 
-```json
-{
-  "host_application": "HK CoreTest",
-  "project_id": "project-name",
-  "current_view": "TRACE / 实时CAN TRACE",
-  "selection_kind": "can_trace_frame",
-  "selection_label": "0x123 RX",
-  "snapshot_revision": "42"
-}
+## 4. 工作区和安全模型
+
+每个 Host Session 只允许注册一个工作区根目录。绝对路径只在 CoreTest Connector、Gateway 和 OpenCode
+进程之间使用，不返回浏览器，不写入普通聊天消息、审计内容或模型 Prompt。
+同一 Gateway 可以让多个会话共享同一个工作区；不同工作区必须启动独立 Gateway 实例，避免 Agent 串到错误工程。
+
+默认权限：
+
+| 能力 | 默认策略 |
+| --- | --- |
+| 工作区内搜索和读取 | `allow` |
+| 工作区内创建、编辑、应用补丁 | `ask` |
+| Shell 命令 | `ask` |
+| 工作区外文件访问 | `deny` |
+| 网络访问 | `ask` 或由客户部署策略关闭 |
+| CAN 发送、UDS、刷写、设备控制 | `deny`，不向 Agent 暴露 |
+
+权限请求必须展示具体工具、命令或目标文件。用户可以仅允许一次；第一版不提供宽泛的“永远允许全部”。
+Agent 子进程继承最少环境变量，不把 Gateway Host Token、客户密钥或无关系统凭据放进 Prompt。
+
+## 5. 模型配置
+
+现有配置继续作为客户侧唯一模型来源：
+
+```text
+AI_MODEL_BASE_URL
+AI_MODEL_API_KEY
+AI_MODEL_NAME
 ```
 
-Host Snapshot 保存有上限的结构化事实，不保存原始大文件：
+Gateway 在启动 OpenCode 时生成对应的 OpenAI-compatible Provider 配置。模型必须可靠支持工具调用；仅支持
+普通文本补全的模型不能完成工作区 Agent 循环。迁移期间，现有 `openai-python` 路径保留给已经落地的
+确定性分析和旧对话回退，Agent 对话完成验收后再删除重复模型编排。
 
-- `trace`：时间范围、总帧数、通道/方向/Frame ID 分布、错误帧和选中帧。
-- `dbc`：文件、节点、帧、信号、单位、范围、发送周期和注释。
-- `diagnostic`：ECU、服务、请求/响应、正负响应、NRC 和最近日志。
-- `pdx`：文件、诊断层、ECU 变体、诊断服务和 CAN 收发 ID。
-- `project`：项目名、支持文件清单和当前任务状态。
+## 6. Host Snapshot 与 SDK 使用
 
-默认单个 Snapshot 不超过 1 MiB，列表按 Top-N 或最近 N 条裁剪。Gateway 只接受 JSON 兼容值，
-拒绝未知类型和超限内容。
+Host Snapshot 继续传递有上限的运行期事实：
 
-## 6. 交付阶段和验收
+- `trace`：时间范围、帧数、通道、方向、Frame ID、错误帧和选中帧。
+- `dbc`：节点、帧、信号、单位、范围、周期和注释。
+- `diagnostic`：ECU、服务、请求响应、NRC 和最近日志。
+- `pdx`：诊断层、ECU 变体、服务和 CAN 收发 ID。
+- `project/file`：用于 UI 展示当前选择；Agent 读取文件时直接访问工作区。
 
-### P0-A：文档与产品范围收敛
+标准 SDK/CLI 的接入优先级：
 
-- 删除重复、过期和过程性开发文档。
-- README 只保留产品入口、启动、测试和三份有效文档。
-- 本文成为唯一任务优先级和成品完成标准。
+1. SDK 已在项目中：Agent 阅读源码、类型和示例后直接编写调用代码。
+2. 软件已有 CLI：将可执行文件加入受控 PATH，并在 `AGENTS.md` 记录常用入口。
+3. 只有 SDK 没有 CLI：优先写一个薄的、可人工调用和测试的 CLI，而不是为每个函数定义 Agent Tool。
+4. 只有进程内对象：复用 Host Snapshot；确有交互需求时再做只读 MCP/CLI 桥。
 
-### P0-B：CoreTest 宿主集成
+## 7. 当前开发任务
 
-- `integrations/coretest` 提供可复制到客户仓库的最小插件模块和安装脚本。
-- CoreTest 主窗口右侧显示 Copilot Dock，菜单/按钮可开关。
-- Host Connector 启动或连接 Gateway，加载会话化 WebView URL。
-- 项目和标签页切换自动更新 Host Context。
-- 主窗口关闭时释放 Session，并只终止由本窗口启动的 Gateway。
-- Gateway 不可用时面板显示可重试错误，不阻塞 CoreTest 主界面。
+### 当前目标：OpenCode Runtime 基础接入
 
-### P0-C：真实数据闭环
+实现范围：
 
-- 新增 Host Snapshot REST 契约、大小限制、会话隔离、审计和测试。
-- Trace 当前视图能输出确定性摘要；快捷按钮和自然语言均可分析。
-- DBC 当前节点/帧能输出字段和信号语义；不重新解析 DBC。
-- 诊断日志能统计正负响应和 NRC；不触发诊断操作。
-- 在工程树选中 PDX 后，使用 `odxtools` 发布有上限的结构化摘要并可直接提问。
-- 未配置模型时仍返回可用的确定性中文分析。
+- 增加 OpenCode Runtime 配置、进程启动、停止和健康检查模块。
+- 增加可信 Host 工作区注册契约；校验目录真实存在并保存于服务端，不回传绝对路径。
+- OpenCode 仅绑定 `127.0.0.1`，由 Gateway 管理认证信息和生命周期。
+- 把现有 OpenAI-compatible 模型配置映射为 OpenCode Provider 配置。
+- Gateway 健康状态能区分“Gateway 可用”和“Agent Runtime 未安装/未启动/健康”。
+- 未安装 OpenCode 时，现有确定性分析和旧 Copilot 功能继续可用，并返回明确状态。
 
-### P0-C2：文件到测试代码闭环
+验收标准：
 
-- `/api/v1/copilot/query` 支持普通问答和 `generate_test` 两种任务。
-- 浏览器只上传当前请求需要的 UTF-8 文本内容，不把附件写入 Gateway 或知识库。
-- 单文件不超过 256 KiB，总计不超过 512 KiB；拒绝路径、二进制和未知字段。
-- 未配置模型时返回明确错误和 `request_id`，不生成假代码。
-- 生成结果必须是可预览、可复制、可保存的 Python 测试模块；保存由用户显式触发。
+1. 单元测试能够用临时工作区和伪进程验证启动参数、工作目录、健康检查和停止。
+2. Host Token 才能注册工作区，WebView Access Token 不能提交本地绝对路径。
+3. 状态接口不返回工作区绝对路径、Runtime 密码或模型 API Key。
+4. 在 Windows 安装 OpenCode 后，Gateway 能在指定工程目录启动 `opencode serve` 并通过
+   `/global/health` 验证。
+5. 现有 Gateway、Connector 和前端测试继续通过。
 
-### P0-C3：侧栏会话体验
+本阶段不改写聊天 UI，不把旧 `/api/v1/copilot/query` 立即删除。先把 Runtime 和安全边界做成可独立验证的
+底座，再切换消息链路。
 
-- 顶部操作在 320–520 px Dock 宽度内保持固定尺寸；悬停、加载图标切换和点击时不得位移或抖动。
-- 当前 CoreTest 运行期间提供工程内历史列表，可新建、切换并继续旧会话；标题取首条用户消息，并显示更新时间和消息数。
-- 会话与 `host_application + project_id` 绑定，切换工程后自动打开该工程最近会话，不得带入其他工程的消息或生成物。
-- 模型请求期间锁定会话切换；响应必须写回请求发起时的会话，不能因界面切换写错位置。
-- 第一版历史只保存在当前 WebView 内存中。未确认保留周期、权限和加密策略前，不把客户对话、代码、日志或附件内容写入磁盘或浏览器持久存储。
-- 关闭 CoreTest 或重新加载 WebView 后不承诺恢复历史；跨进程恢复属于 P1，不能以牺牲客户数据边界为代价提前实现。
+## 8. 后续交付顺序
 
-### P0-D：可交付构建
+1. **会话链路**：Gateway 创建 OpenCode Session、发送 Prompt、订阅 SSE 事件并支持取消。
+2. **侧栏呈现**：展示思考进度、工具调用、文件 Diff、命令输出和权限确认。
+3. **宿主上下文**：把当前选择和 Snapshot 作为会话上下文注入，不触发重复模型回答。
+4. **项目说明**：为 CoreTest 工作区提供最小 `AGENTS.md`，记录安全边界、测试命令和现成 SDK/CLI。
+5. **真实验收**：完成“分析任意工程文件”“生成并运行获批测试”“调用项目已有 SDK/CLI”三个闭环。
+6. **交付打包**：固定 OpenCode 版本，纳入 Windows 交付包，验证端口冲突、退出、升级和离线配置。
+7. **清理旧链路**：Agent 对话稳定后，删除重复的手写模型对话编排，保留确定性汽车数据工具。
 
-- Gateway 单测、eval、Host SDK 测试、前端 typecheck/build 全部通过。
-- CoreTest Connector 单测不依赖硬件。
-- 实际启动 CoreTest，截图验证 Dock 非空、无重叠、可调整宽度。
-- PyInstaller 构建验证 Qt WebEngine、Gateway Sidecar、前端静态资源和 REST 契约资源路径。
-- 启动、健康检查、退出和端口冲突均有可重复验证。
-- 客户机器只需配置模型/Token，不修改业务代码。
+多 Agent、RAG、飞书知识、企业 SSO、GUI 点击模拟和硬件自动控制不进入当前开发顺序。
 
-### P1：有真实输入后开发
-
-- 提供质量规则和阈值后，增加规则判定。
-- 取得真实知识库权限、检索质量和数据规模后，选择成熟知识产品或索引式 RAG。
-- 提供 OIDC/OAuth2 参数后，接企业身份平台。
-- 明确跨进程恢复要求后，再持久化会话。
-
-## 7. 完成定义
+## 9. 完成定义
 
 产品第一版只有同时满足以下条件才算完成：
 
-1. 用户在真实 CoreTest 中打开右侧 Copilot，而不是只看 `/showcase`。
-2. 选择 PDX/Trace/DBC/诊断对象后，Copilot 显示正确上下文并能直接分析实际内容。
-3. 添加代码或配置文件后，能够问答并通过已配置模型生成可保存的 pytest 测试模块。
-4. 至少三类真实数据能得到确定性结果和自然语言解释。
-5. AI 故障不会影响 CAN、UDS、刷写和项目管理功能。
-6. 除用户明确保存到 `generated_tests` 外，无 AI 写操作或设备控制入口。
-7. 安装、配置、启动和升级步骤可重复执行。
-8. 自动测试与一次真实桌面验证均通过。
+1. 用户在真实 CoreTest 右侧打开 Agent，而不是独立 IDE 或演示网页。
+2. Agent 第一次进入当前工程即可自行查看架构和文件，无需逐个上传。
+3. “分析这个文件”会产生可追踪的搜索、读取和必要的临时脚本执行过程，并返回引用。
+4. Agent 能在审批后生成/修改工作区文件并运行测试；拒绝时不会绕过权限。
+5. Agent 能根据项目说明使用至少一个已有 SDK 或 CLI，而不是预先绑定专用按钮。
+6. Trace/DBC/PDX/诊断运行期数据仍通过确定性桥接得到事实，Agent 不猜测二进制格式。
+7. Agent 不能访问工作区外文件，也不能控制 CAN、UDS、刷写或测试设备。
+8. Agent、模型或 Gateway 故障不会影响 CoreTest 主进程和硬件通信。
+9. Windows 客户交付包能够重复构建、启动、退出和升级。
+10. OpenCode 版本、Commit、下载来源、SBOM、第三方许可证和产物哈希完整可追溯。
 
-演示页、Mock CSV、接口壳、Spike 或“以后替换”的实现不能单独标记为产品完成。
-
-## 8. 固定验证
+## 10. 固定验证
 
 ```powershell
 cd D:\geely-ai-platform\src\ai-gateway
@@ -192,5 +185,10 @@ cd D:\geely-ai-platform\samples\host-integration
 python -m unittest discover -s . -p "test_*.py"
 
 cd D:\geely-ai-platform\integrations\coretest
+$env:PYTHONPATH='.'
 python -m unittest discover -s tests -p "test_*.py"
+
+cd D:\geely-ai-platform
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\check-ai-gateway.ps1
+git diff --check
 ```

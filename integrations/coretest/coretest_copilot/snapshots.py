@@ -7,6 +7,13 @@ from pathlib import Path
 from typing import Any, Iterable
 
 
+MAX_TEXT_FILE_BYTES = 256 * 1024
+SUPPORTED_TEXT_SUFFIXES = {
+    ".py", ".json", ".yaml", ".yml", ".xml", ".txt", ".dbc", ".md",
+    ".toml", ".ini", ".cfg", ".csv", ".log", ".asc",
+}
+
+
 def project_snapshot(project: Any, files: Iterable[Any], revision: str) -> dict[str, Any]:
     items = [
         {
@@ -164,6 +171,31 @@ def pdx_snapshot(path: Path, revision: str) -> dict[str, Any]:
             "diagnostic_layer_count": len(layers),
             "diagnostic_layers": layers[:50],
             "ecus": ecus,
+        },
+    }
+
+
+def text_file_snapshot(path: Path, revision: str) -> dict[str, Any]:
+    if path.suffix.lower() not in SUPPORTED_TEXT_SUFFIXES:
+        raise ValueError(f"不支持的文本文件类型：{path.suffix or '无扩展名'}")
+    with path.open("rb") as source:
+        raw = source.read(MAX_TEXT_FILE_BYTES + 1)
+    if len(raw) > MAX_TEXT_FILE_BYTES:
+        raise ValueError("文件超过 256 KiB，无法作为 Copilot 上下文")
+    try:
+        content = raw.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ValueError("文件不是 UTF-8 文本") from exc
+    return {
+        "kind": "file",
+        "revision": revision,
+        "selection": {"filename": path.name},
+        "data": {
+            "filename": path.name,
+            "suffix": path.suffix.lower(),
+            "size_bytes": len(raw),
+            "line_count": len(content.splitlines()),
+            "content": content,
         },
     }
 

@@ -11,7 +11,7 @@ from .host_context import get_host_context, normalize_host_session_id
 
 
 DEFAULT_MAX_SNAPSHOT_BYTES = 1024 * 1024
-ALLOWED_KINDS = {"project", "trace", "dbc", "diagnostic", "pdx"}
+ALLOWED_KINDS = {"project", "file", "trace", "dbc", "diagnostic", "pdx"}
 ALLOWED_FIELDS = {"kind", "revision", "captured_at", "selection", "data"}
 
 _snapshots: dict[str, dict[str, Any]] = {}
@@ -85,6 +85,7 @@ def analyze_host_snapshot(
         "dbc": _dbc_answer,
         "diagnostic": _diagnostic_answer,
         "project": _project_answer,
+        "file": _file_answer,
         "pdx": _pdx_answer,
     }[kind](data, snapshot["selection"])
     return {
@@ -154,6 +155,16 @@ def _project_answer(data: dict[str, Any], selection: dict[str, Any]) -> str:
             categories[category] = categories.get(category, 0) + 1
     counts = "、".join(f"{name} {count} 个" for name, count in sorted(categories.items()))
     return f"当前项目包含 {len(files)} 个受支持文件（{counts or '暂无文件'}），可选择 DBC、Trace 或诊断页面继续分析。"
+
+
+def _file_answer(data: dict[str, Any], selection: dict[str, Any]) -> str:
+    name = str(selection.get("filename") or data.get("filename") or "当前文件")
+    if error := data.get("read_error"):
+        return f"{name} 已被选中，但读取失败：{error}"
+    return (
+        f"已读取 {name}，共 {_integer(data.get('line_count'))} 行、"
+        f"{_integer(data.get('size_bytes'))} 字节。可继续询问文件逻辑、风险或测试建议。"
+    )
 
 
 def _pdx_answer(data: dict[str, Any], selection: dict[str, Any]) -> str:

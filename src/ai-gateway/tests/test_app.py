@@ -10,6 +10,8 @@ from ai_gateway.audit_log import clear_audit_events
 from ai_gateway.host_assets import reset_host_assets
 from ai_gateway.host_context import reset_host_context
 from ai_gateway.host_snapshot import reset_host_snapshots
+from ai_gateway.opencode_runtime import reset_opencode_runtime
+from ai_gateway.workspace import get_workspace_path, reset_workspaces
 
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -20,6 +22,8 @@ class AppTests(unittest.TestCase):
         reset_host_context()
         reset_host_assets()
         reset_host_snapshots()
+        reset_workspaces()
+        reset_opencode_runtime()
         clear_audit_events()
 
     def test_health(self) -> None:
@@ -454,6 +458,93 @@ class AppTests(unittest.TestCase):
         self.assertEqual(response.status, 403)
         self.assertEqual(json.loads(response.body)["error"]["code"], "host_forbidden")
 
+    def test_host_registers_private_workspace_and_starts_agent_runtime(self) -> None:
+        runtime = _FakeOpenCodeRuntime()
+        with TemporaryDirectory() as directory, patch.dict(
+            "os.environ",
+            {
+                "AI_GATEWAY_ACCESS_TOKEN": "copilot-secret",
+                "AI_GATEWAY_HOST_TOKEN": "host-secret",
+            },
+        ), patch("ai_gateway.app.get_opencode_runtime", return_value=runtime):
+            forbidden = handle_request(
+                "POST",
+                "/api/v1/host/workspace?host_session_id=workspace-session",
+                json.dumps({"project_root": directory}),
+                headers={"Authorization": "Bearer copilot-secret"},
+            )
+            registered = handle_request(
+                "POST",
+                "/api/v1/host/workspace?host_session_id=workspace-session",
+                json.dumps({"project_root": directory}),
+                headers={"Authorization": "Bearer host-secret"},
+            )
+            status = handle_request(
+                "GET",
+                "/api/v1/agent/status?host_session_id=workspace-session",
+                headers={"Authorization": "Bearer copilot-secret"},
+            )
+
+        self.assertEqual(forbidden.status, 403)
+        self.assertEqual(registered.status, 200)
+        self.assertEqual(status.status, 200)
+        self.assertEqual(runtime.started_with, get_workspace_path("workspace-session"))
+        self.assertNotIn(directory, registered.body)
+        self.assertNotIn(directory, status.body)
+        self.assertNotIn("runtime-secret", status.body)
+        self.assertTrue(json.loads(status.body)["result"]["workspace"]["registered"])
+
+    def test_releasing_last_workspace_stops_agent_runtime(self) -> None:
+        runtime = _FakeOpenCodeRuntime()
+        with TemporaryDirectory() as directory, patch(
+            "ai_gateway.app.get_opencode_runtime", return_value=runtime
+        ):
+            handle_request(
+                "POST",
+                "/api/v1/host/workspace?host_session_id=release-workspace",
+                json.dumps({"project_root": directory}),
+            )
+            released = handle_request(
+                "DELETE", "/api/v1/host/session?host_session_id=release-workspace"
+            )
+
+        payload = json.loads(released.body)["result"]
+        self.assertTrue(payload["released_workspace"])
+        self.assertEqual(runtime.released_session_groups, ["release-workspace"])
+        self.assertTrue(runtime.stopped)
+
+    def test_copilot_uses_workspace_agent_after_workspace_registration(self) -> None:
+        runtime = _FakeOpenCodeRuntime()
+        with TemporaryDirectory() as directory, patch(
+            "ai_gateway.app.get_opencode_runtime", return_value=runtime
+        ):
+            handle_request(
+                "POST",
+                "/api/v1/host/workspace?host_session_id=agent-chat",
+                json.dumps({"project_root": directory}),
+            )
+            response = handle_request(
+                "POST",
+                "/api/v1/copilot/query?host_session_id=agent-chat",
+                json.dumps(
+                    {
+                        "question": "先查看项目结构再回答",
+                        "conversation_id": "conversation-1",
+                        "task": "chat",
+                        "attachments": [],
+                        "history": [],
+                    }
+                ),
+            )
+
+        payload = json.loads(response.body)
+        self.assertEqual(response.status, 200)
+        self.assertEqual(payload["answer"], "来自工作区 Agent 的回答")
+        self.assertEqual(
+            runtime.prompts,
+            [("agent-chat:conversation-1", "先查看项目结构再回答", True)],
+        )
+
     def test_host_can_release_one_session_without_affecting_another(self) -> None:
         source_file = str(FIXTURES / "test-run-cases.csv")
         for session in ("release-a", "release-b"):
@@ -723,6 +814,42 @@ class AppTests(unittest.TestCase):
         self.assertEqual(response.status, 400)
         self.assertEqual(payload["error"]["code"], "bad_request")
         self.assertIn("unsupported", payload["error"]["message"])
+
+
+class _FakeOpenCodeRuntime:
+    def __init__(self) -> None:
+        self.started_with = None
+        self.stopped = False
+        self.prompts = []
+        self.released_sessions = []
+        self.released_session_groups = []
+
+    def start(self, workspace):
+        self.started_with = workspace
+        return self.status()
+
+    def status(self, *, check_health=False):
+        return {
+            "installed": True,
+            "running": self.started_with is not None and not self.stopped,
+            "healthy": bool(check_health and self.started_with is not None),
+            "version": "test" if check_health else None,
+            "model_configured": True,
+            "error": None,
+        }
+
+    def stop(self) -> None:
+        self.stopped = True
+
+    def prompt(self, host_session_id, question, *, new_session=False):
+        self.prompts.append((host_session_id, question, new_session))
+        return "来自工作区 Agent 的回答"
+
+    def release_session(self, host_session_id):
+        self.released_sessions.append(host_session_id)
+
+    def release_sessions(self, host_session_id):
+        self.released_session_groups.append(host_session_id)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,17 @@
+{
+  "name": "OpenCode",
+  "repository": "https://github.com/anomalyco/opencode.git",
+  "tag": "v1.18.10",
+  "commit": "7902e04c3a67f7c69726bc955efb46e29214c797",
+  "root_license": "MIT",
+  "license_blob": "6439474beed8e0271df9862eff97ffd70ec2464c",
+  "bun_lock_blob": "160958f8da2c355cf4f3817cafbbc6e3f494a199",
+  "cli_package_blob": "84f03d88abee544e06562cfe04b1f8dbf794b06e",
+  "windows_x64_asset": {
+    "name": "opencode-windows-x64.zip",
+    "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.10/opencode-windows-x64.zip",
+    "size": 59459283,
+    "sha256": "b1d85ce5211bfefbc2b4940a19e1639fc75cb87ff82eb79806ffb84b01dd1482"
+  },
+  "delivery_policy": "verified-upstream-runtime"
+}

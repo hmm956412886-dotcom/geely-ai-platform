@@ -9,6 +9,7 @@ from typing import Sequence
 
 from .access_control import validate_bind_access
 from .app import Response, handle_request
+from .opencode_runtime import reset_opencode_runtime
 
 
 class GatewayHandler(BaseHTTPRequestHandler):
@@ -57,6 +58,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     except KeyboardInterrupt:
         return 0
     finally:
+        reset_opencode_runtime()
         server.server_close()
     return 0
 

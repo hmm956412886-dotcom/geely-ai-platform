@@ -29,7 +29,15 @@ from .host_snapshot import (
     update_host_snapshot,
 )
 from .model_client import chat_completion, load_model_config
+from .opencode_runtime import get_opencode_runtime
 from .test_data_adapter import compare_test_runs, load_test_data_insights, load_test_run_summary
+from .workspace import (
+    get_workspace_path,
+    get_workspace_status,
+    register_workspace,
+    release_workspace,
+    workspace_count,
+)
 
 
 @dataclass(frozen=True)
@@ -73,6 +81,7 @@ def handle_request(
             in {
                 ("POST", "/api/v1/host/assets"),
                 ("POST", "/api/v1/host/snapshot"),
+                ("POST", "/api/v1/host/workspace"),
                 ("DELETE", "/api/v1/host/session"),
             }
             and not is_host_authorized(headers)
@@ -111,6 +120,16 @@ def _handle_request(
         return json_response(_contract_json("host-plugin.manifest.json"))
     if method == "GET" and path == "/api/v1/model/config":
         return json_response({"request_id": _request_id(), "result": load_model_config().public_dict()})
+    if method == "GET" and path == "/api/v1/agent/status":
+        return json_response(
+            {
+                "request_id": _request_id(),
+                "result": {
+                    "workspace": get_workspace_status(host_session_id),
+                    "runtime": get_opencode_runtime().status(check_health=True),
+                },
+            }
+        )
     if method == "GET" and path == "/api/v1/host/context":
         return json_response(
             {"request_id": _request_id(), "result": get_host_context(host_session_id)}
@@ -129,6 +148,23 @@ def _handle_request(
                 "result": register_host_asset(_read_json(body), host_session_id),
             }
         )
+    if method == "POST" and path == "/api/v1/host/workspace":
+        workspace = register_workspace(_read_json(body), host_session_id)
+        workspace_path = get_workspace_path(host_session_id)
+        if workspace_path is None:
+            raise ValueError("workspace registration is unavailable")
+        runtime = get_opencode_runtime()
+        try:
+            runtime_status = runtime.start(workspace_path)
+        except (OSError, RuntimeError, ValueError) as exc:
+            runtime_status = runtime.status()
+            runtime_status["error"] = str(exc)
+        return json_response(
+            {
+                "request_id": _request_id(),
+                "result": {"workspace": workspace, "runtime": runtime_status},
+            }
+        )
     if method == "GET" and path == "/api/v1/host/snapshot":
         return json_response(
             {"request_id": _request_id(), "result": get_host_snapshot(host_session_id)}
@@ -142,9 +178,13 @@ def _handle_request(
         )
     if method == "DELETE" and path == "/api/v1/host/session":
         session_id = normalize_host_session_id(host_session_id)
+        get_opencode_runtime().release_sessions(session_id)
         released_assets = release_host_assets(session_id)
         released_context = release_host_context(session_id)
         released_snapshot = release_host_snapshot(session_id)
+        released_workspace = release_workspace(session_id)
+        if released_workspace and workspace_count() == 0:
+            get_opencode_runtime().stop()
         return json_response(
             {
                 "request_id": _request_id(),
@@ -153,6 +193,7 @@ def _handle_request(
                     "released_context": released_context,
                     "released_assets": released_assets,
                     "released_snapshot": released_snapshot,
+                    "released_workspace": released_workspace,
                 },
             }
         )
@@ -166,10 +207,22 @@ def _handle_request(
         return json_response(_test_data_insights(_read_json(body), host_session_id))
     if method == "POST" and path == "/api/v1/copilot/query":
         try:
+            runtime = get_opencode_runtime()
+            payload = _read_json(body)
             result = run_copilot(
-                _read_json(body),
+                payload,
                 host_context=get_host_context(host_session_id),
                 host_snapshot=get_host_snapshot(host_session_id),
+                workspace_agent=(
+                    lambda question: runtime.prompt(
+                        f"{normalize_host_session_id(host_session_id)}:"
+                        f"{payload.get('conversation_id') or 'default'}",
+                        question,
+                        new_session=not payload.get("history"),
+                    )
+                )
+                if get_workspace_path(host_session_id) is not None
+                else None,
             )
             return json_response({"request_id": _request_id(), **result})
         except RuntimeError as exc:

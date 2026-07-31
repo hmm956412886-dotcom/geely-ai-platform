@@ -38,8 +38,8 @@ textarea {
 }
 
 .shell-header {
-  min-height: 54px;
-  padding: 6px 8px 6px 16px;
+  min-height: 70px;
+  padding: 8px 8px 8px 16px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -67,6 +67,41 @@ textarea {
   line-height: 16px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.header-status {
+  margin-top: 2px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #616161;
+  font-size: 10px;
+  line-height: 14px;
+}
+
+.header-status span {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  white-space: nowrap;
+}
+
+.header-status svg {
+  width: 12px;
+  height: 12px;
+}
+
+.header-status .is-connected::before,
+.header-status .is-disconnected::before {
+  width: 6px;
+  height: 6px;
+  content: "";
+  border-radius: 50%;
+  background: #107c10;
+}
+
+.header-status .is-disconnected::before {
+  background: #a4262c;
 }
 
 .header-actions {
@@ -187,11 +222,69 @@ textarea {
 }
 
 .context-bar span {
+  display: flex;
+  min-width: 0;
+  gap: 7px;
   overflow: hidden;
   font-size: 12px;
   line-height: 18px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.context-bar strong {
+  flex: 0 0 auto;
+  color: #0f548c;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.context-bar > svg:last-child {
+  transition: transform 120ms ease;
+}
+
+.context-bar > svg.is-expanded:last-child {
+  transform: rotate(90deg);
+}
+
+.context-details {
+  padding: 8px 12px 9px;
+  border-bottom: 1px solid #e5e5e5;
+  background: #f7f9fb;
+}
+
+.context-details dl {
+  margin: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.context-details dl > div {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: 8px;
+  font-size: 11px;
+  line-height: 17px;
+}
+
+.context-details dt {
+  color: #707070;
+}
+
+.context-details dd {
+  margin: 0;
+  overflow: hidden;
+  color: #323130;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.context-actions {
+  margin-top: 7px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
 }
 
 .attachment-actions {
@@ -224,15 +317,110 @@ textarea {
 }
 
 .artifact-actions {
-  padding: 8px 12px;
+  padding: 7px 10px;
   display: flex;
-  justify-content: flex-end;
+  flex-direction: column;
+  gap: 4px;
   border-top: 1px solid #ededed;
-  background: #fafafa;
+  background: #f7f9fb;
 }
 
-.artifact-actions button {
-  max-width: 100%;
+.artifact-item {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.artifact-item > span {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.artifact-item > span svg {
+  flex: 0 0 auto;
+}
+
+.artifact-item > div {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 3px;
+}
+
+.artifact-item button {
+  min-width: 32px;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+}
+
+.status-strip {
+  padding: 6px 10px;
+  border-top: 1px solid #ededed;
+  color: #424242;
+  background: #ffffff;
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.save-notice {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #107c10;
+}
+
+.save-notice span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.save-notice svg {
+  flex: 0 0 auto;
+}
+
+.diagnostic-details summary {
+  cursor: pointer;
+  color: #8a1c1c;
+}
+
+.diagnostic-details p {
+  margin: 5px 0;
+  overflow-wrap: anywhere;
+  color: #616161;
+}
+
+.request-id-row {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.request-id-row code {
+  min-width: 0;
+  overflow: hidden;
+  color: #616161;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.request-id-row button {
+  flex: 0 0 28px;
+  min-width: 28px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
 }
 
 @media (max-width: 560px) {
@@ -242,6 +430,31 @@ textarea {
   }
 
   .title-block p {
-    max-width: 220px;
+    max-width: 180px;
+  }
+
+  .shell-header {
+    gap: 4px;
+    padding-left: 12px;
+  }
+
+  .header-actions > button {
+    flex-basis: 30px;
+    width: 30px;
+    min-width: 30px;
+  }
+}
+
+@media (max-width: 340px) {
+  .title-block p {
+    max-width: 130px;
+  }
+
+  .header-status {
+    gap: 5px;
+  }
+
+  .context-bar {
+    padding-inline: 10px;
   }
 }

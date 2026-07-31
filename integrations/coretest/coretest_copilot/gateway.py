@@ -87,14 +87,34 @@ class GatewayBridge:
         self.ready = False
         self.start()
 
-    def publish(self, context: dict[str, Any], snapshot: dict[str, Any]) -> None:
-        self.request(
-            "POST",
-            "/api/v1/host/snapshot",
-            snapshot,
-            privileged=True,
-            success=lambda _result: self.request("POST", "/api/v1/host/context", context),
-        )
+    def publish(
+        self,
+        context: dict[str, Any],
+        snapshot: dict[str, Any],
+        *,
+        workspace_root: str | None = None,
+    ) -> None:
+        def publish_snapshot(_result: dict[str, Any] | None = None) -> None:
+            self.request(
+                "POST",
+                "/api/v1/host/snapshot",
+                snapshot,
+                privileged=True,
+                success=lambda _response: self.request(
+                    "POST", "/api/v1/host/context", context
+                ),
+            )
+
+        if workspace_root:
+            self.request(
+                "POST",
+                "/api/v1/host/workspace",
+                {"project_root": workspace_root},
+                privileged=True,
+                success=publish_snapshot,
+            )
+        else:
+            publish_snapshot()
 
     def release(self) -> None:
         if self.ready:
