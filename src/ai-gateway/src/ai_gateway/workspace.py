@@ -31,7 +31,10 @@ def register_workspace(
 
     session_id = normalize_host_session_id(host_session_id)
     with _lock:
-        if _workspaces and root not in _workspaces.values():
+        other_roots = {
+            workspace for key, workspace in _workspaces.items() if key != session_id
+        }
+        if other_roots and root not in other_roots:
             raise ValueError("Gateway is already bound to another workspace")
         _workspaces[session_id] = root
     return {

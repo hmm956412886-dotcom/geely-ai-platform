@@ -10,6 +10,7 @@ from PySide6.QtNetwork import QNetworkReply
 
 from coretest_copilot.gateway import (
     GatewayBridge,
+    _configuration_file,
     _gateway_executable,
     _load_env_values,
     _server_arguments,
@@ -90,6 +91,22 @@ class GatewayConfigTests(unittest.TestCase):
 
     def test_load_env_values_ignores_missing_file(self) -> None:
         self.assertEqual(_load_env_values(Path("missing.env")), {})
+
+    def test_configuration_file_accepts_legacy_env_file(self) -> None:
+        with TemporaryDirectory() as directory:
+            app_root = Path(directory)
+            legacy = app_root / ".env"
+            legacy.write_text("AI_MODEL_NAME=demo-model\n", encoding="utf-8")
+            fake_module = app_root / "app" / "coretest_copilot" / "gateway.py"
+            with patch(
+                "coretest_copilot.gateway.Path.cwd", return_value=app_root / "workspace"
+            ), patch(
+                "coretest_copilot.gateway.Path.resolve",
+                return_value=fake_module,
+            ):
+                resolved = _configuration_file(None, None)
+
+        self.assertEqual(resolved, legacy)
 
     def test_gateway_executable_uses_configured_sidecar(self) -> None:
         with TemporaryDirectory() as directory:

@@ -1,11 +1,19 @@
 import json
+from hashlib import sha256
+from io import BytesIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import patch
+from zipfile import ZipFile
 
 from ai_gateway.model_client import ModelConfig
-from ai_gateway.opencode_runtime import OpenCodeConfig, OpenCodeRuntime, load_opencode_config
+from ai_gateway.opencode_runtime import (
+    OpenCodeConfig,
+    OpenCodeRuntime,
+    _install_opencode,
+    load_opencode_config,
+)
 
 
 class FakeProcess:
@@ -38,6 +46,12 @@ class FakeResponse:
         return self.body
 
 
+class StreamingResponse(FakeResponse):
+    def read(self, size=-1) -> bytes:
+        chunk, self.body = self.body[:size], self.body[size:]
+        return chunk
+
+
 class FakeOpenCodeApi:
     def __init__(self) -> None:
         self.requests = []
@@ -50,6 +64,31 @@ class FakeOpenCodeApi:
 
 
 class OpenCodeRuntimeTests(unittest.TestCase):
+    def test_install_opencode_verifies_and_extracts_pinned_archive(self) -> None:
+        archive = BytesIO()
+        with ZipFile(archive, "w") as bundle:
+            bundle.writestr("opencode.exe", b"verified-runtime")
+        payload = archive.getvalue()
+
+        with TemporaryDirectory() as directory:
+            target = Path(directory) / "version" / "opencode.exe"
+            _install_opencode(
+                target,
+                url="https://example.test/opencode.zip",
+                expected_sha256=sha256(payload).hexdigest(),
+                opener=lambda *_args, **_kwargs: StreamingResponse(payload),
+            )
+
+            self.assertEqual(target.read_bytes(), b"verified-runtime")
+
+        with TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(RuntimeError, "SHA-256"):
+                _install_opencode(
+                    Path(directory) / "opencode.exe",
+                    expected_sha256="0" * 64,
+                    opener=lambda *_args, **_kwargs: StreamingResponse(payload),
+                )
+
     def test_load_config_accepts_only_localhost(self) -> None:
         config = load_opencode_config(
             {"OPENCODE_COMMAND": "custom-opencode", "OPENCODE_PORT": "4900"}

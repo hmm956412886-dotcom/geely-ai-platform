@@ -54,6 +54,14 @@ class WorkspaceTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "another workspace"):
                 register_workspace({"project_root": second}, "second")
 
+    def test_session_can_switch_its_workspace_root(self) -> None:
+        with TemporaryDirectory() as first, TemporaryDirectory() as second:
+            register_workspace({"project_root": first}, "coretest")
+            result = register_workspace({"project_root": second}, "coretest")
+
+            self.assertEqual(result["workspace_name"], Path(second).name)
+            self.assertEqual(get_workspace_path("coretest"), Path(second).resolve())
+
 
 if __name__ == "__main__":
     unittest.main()

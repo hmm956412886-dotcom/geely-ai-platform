@@ -4,19 +4,30 @@ from __future__ import annotations
 
 from base64 import b64encode
 from dataclasses import dataclass
+from hashlib import sha256
 import json
 import os
 from pathlib import Path
 import secrets
 import shutil
 import subprocess
+import sys
 from tempfile import TemporaryDirectory
 from threading import Lock
 from typing import Any, Callable, Mapping
 from urllib.parse import quote
 from urllib.request import Request, urlopen
+from zipfile import ZipFile
 
 from .model_client import ModelConfig, load_model_config
+
+
+OPENCODE_VERSION = "1.18.10"
+OPENCODE_WINDOWS_URL = (
+    "https://github.com/anomalyco/opencode/releases/download/"
+    f"v{OPENCODE_VERSION}/opencode-windows-x64.zip"
+)
+OPENCODE_WINDOWS_SHA256 = "b1d85ce5211bfefbc2b4940a19e1639fc75cb87ff82eb79806ffb84b01dd1482"
 
 
 @dataclass(frozen=True)
@@ -46,7 +57,7 @@ def load_opencode_config(env: dict[str, str] | None = None) -> OpenCodeConfig:
     if timeout <= 0:
         raise ValueError("OPENCODE_HEALTH_TIMEOUT_SECONDS must be positive")
     return OpenCodeConfig(
-        command=(env.get("OPENCODE_COMMAND") or "opencode").strip() or "opencode",
+        command=(env.get("OPENCODE_COMMAND") or "auto").strip() or "auto",
         host=host,
         port=port,
         health_timeout_seconds=timeout,
@@ -60,7 +71,7 @@ class OpenCodeRuntime:
         config: OpenCodeConfig | None = None,
         model_config: ModelConfig | None = None,
         process_factory: Callable[..., Any] = subprocess.Popen,
-        command_resolver: Callable[[str], str | None] = shutil.which,
+        command_resolver: Callable[[str], str | None] = lambda command: resolve_opencode_command(command),
         urlopen: Callable[..., Any] = urlopen,
         password_factory: Callable[[], str] = lambda: secrets.token_urlsafe(24),
     ) -> None:
@@ -351,6 +362,74 @@ def _workspace_path(value: str | Path) -> Path:
     return workspace
 
 
+def resolve_opencode_command(command: str) -> str | None:
+    if command.lower() != "auto":
+        candidate = Path(command).expanduser()
+        if candidate.is_file():
+            return str(candidate.resolve())
+        return shutil.which(command)
+
+    executable = "opencode.exe" if os.name == "nt" else "opencode"
+    for candidate in (
+        Path(sys.executable).resolve().parent / executable,
+        Path(sys.executable).resolve().parent / "opencode" / executable,
+        Path(__file__).resolve().parent / "bin" / executable,
+    ):
+        if candidate.is_file():
+            return str(candidate.resolve())
+    if installed := shutil.which("opencode"):
+        return installed
+    if os.name != "nt":
+        return None
+
+    local_app_data = os.getenv("LOCALAPPDATA")
+    cache_root = (
+        Path(local_app_data) / "HK-CoreTest" / "OpenCode"
+        if local_app_data
+        else Path.home() / ".cache" / "hk-coretest" / "opencode"
+    )
+    target = cache_root / OPENCODE_VERSION / "opencode.exe"
+    if not target.is_file():
+        with _install_lock:
+            if not target.is_file():
+                _install_opencode(target)
+    return str(target.resolve())
+
+
+def _install_opencode(
+    target: Path,
+    *,
+    url: str = OPENCODE_WINDOWS_URL,
+    expected_sha256: str = OPENCODE_WINDOWS_SHA256,
+    opener: Callable[..., Any] = urlopen,
+) -> None:
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with TemporaryDirectory(prefix="coretest-opencode-download-") as directory:
+        archive = Path(directory) / "opencode.zip"
+        digest = sha256()
+        try:
+            with opener(url, timeout=120) as response, archive.open("wb") as output:
+                while chunk := response.read(1024 * 1024):
+                    digest.update(chunk)
+                    output.write(chunk)
+        except OSError as exc:
+            raise RuntimeError(
+                f"OpenCode {OPENCODE_VERSION} download failed; check network access"
+            ) from exc
+        if digest.hexdigest().lower() != expected_sha256.lower():
+            raise RuntimeError("OpenCode download failed SHA-256 verification")
+        try:
+            with ZipFile(archive) as bundle:
+                staged = target.with_suffix(".tmp")
+                with bundle.open("opencode.exe") as source, staged.open("wb") as output:
+                    shutil.copyfileobj(source, output)
+                staged.replace(target)
+        except (KeyError, OSError) as exc:
+            target.with_suffix(".tmp").unlink(missing_ok=True)
+            target.unlink(missing_ok=True)
+            raise RuntimeError("OpenCode download archive is invalid") from exc
+
+
 def _opencode_provider_config(model: ModelConfig) -> dict[str, Any]:
     config: dict[str, Any] = {
         "$schema": "https://opencode.ai/config.json",
@@ -429,6 +508,7 @@ def _minimal_process_environment(source: Mapping[str, str]) -> dict[str, str]:
 
 
 _runtime: OpenCodeRuntime | None = None
+_install_lock = Lock()
 
 
 def get_opencode_runtime() -> OpenCodeRuntime:

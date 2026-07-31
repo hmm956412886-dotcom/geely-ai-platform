@@ -148,12 +148,16 @@ def _handle_request(
             }
         )
     if method == "POST" and path == "/api/v1/host/workspace":
+        previous_workspace = get_workspace_path(host_session_id)
         workspace = register_workspace(_read_json(body), host_session_id)
         workspace_path = get_workspace_path(host_session_id)
         if workspace_path is None:
             raise ValueError("workspace registration is unavailable")
         runtime = get_opencode_runtime()
         try:
+            if previous_workspace is not None and previous_workspace != workspace_path:
+                runtime.release_sessions(normalize_host_session_id(host_session_id))
+                runtime.stop()
             runtime_status = runtime.start(workspace_path)
         except (OSError, RuntimeError, ValueError) as exc:
             runtime_status = runtime.status()

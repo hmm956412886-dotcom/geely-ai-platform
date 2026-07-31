@@ -51,22 +51,19 @@ class GatewayBridge:
         gateway_src = _gateway_src()
         if gateway_executable is None and gateway_src is None:
             self._fail(
-                "未找到 AI Gateway。请安装 Sidecar，或设置 CORETEST_AI_GATEWAY_EXE / "
-                "CORETEST_AI_PLATFORM_ROOT。"
+                "当前源码不包含内置 AI Gateway，请重新拉取完整的 CoreTest Copilot 分支。"
             )
             return
         environment = QProcessEnvironment.systemEnvironment()
-        env_path = (
-            gateway_executable.parent / ".env"
-            if gateway_executable is not None
-            else gateway_src.parents[2] / ".env"
-        )
+        env_path = _configuration_file(gateway_executable, gateway_src)
         for name, value in _load_env_values(env_path).items():
             if value and not environment.contains(name):
                 environment.insert(name, value)
         self._access_token = environment.value("AI_GATEWAY_ACCESS_TOKEN").strip()
         self._host_token = environment.value("AI_GATEWAY_HOST_TOKEN").strip()
         environment.insert("PYTHONUNBUFFERED", "1")
+        if gateway_src is not None:
+            environment.insert("AI_GATEWAY_ASSET_ROOT", str(gateway_src.parent))
         self.process.setProcessEnvironment(environment)
         server_args = _server_arguments(self.base_url)
         if gateway_executable is not None:
@@ -199,12 +196,13 @@ class GatewayBridge:
 
 def _gateway_src() -> Path | None:
     configured = os.getenv("CORETEST_AI_PLATFORM_ROOT", "").strip()
-    candidates = [Path(configured)] if configured else []
+    embedded = Path(__file__).resolve().parent / "runtime" / "src"
+    candidates = [embedded, Path(configured)] if configured else [embedded]
     candidates.extend(Path(__file__).resolve().parents)
     for root in candidates:
-        source = root / "src" / "ai-gateway" / "src"
-        if (source / "ai_gateway" / "server.py").is_file():
-            return source
+        for source in (root, root / "src" / "ai-gateway" / "src"):
+            if (source / "ai_gateway" / "server.py").is_file():
+                return source
     return None
 
 
@@ -245,3 +243,17 @@ def _load_env_values(path: Path) -> dict[str, str]:
         if name:
             values[name] = value.strip()
     return values
+
+
+def _configuration_file(
+    gateway_executable: Path | None, gateway_src: Path | None
+) -> Path:
+    candidates = [Path.cwd() / "ai-model.env"]
+    candidates.extend(parent / "ai-model.env" for parent in Path(__file__).resolve().parents)
+    if gateway_executable is not None:
+        candidates.append(gateway_executable.parent / "ai-model.env")
+        candidates.append(gateway_executable.parent / ".env")
+    if gateway_src is not None:
+        candidates.append(gateway_src.parent / "ai-model.env")
+    candidates.extend(parent / ".env" for parent in Path(__file__).resolve().parents)
+    return next((path for path in candidates if path.is_file()), candidates[0])
