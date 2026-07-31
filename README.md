@@ -11,21 +11,21 @@
 ## 当前产品能力
 
 - CoreTest 原生右侧 Copilot，可停靠、显示、隐藏和调整宽度。
-- 现有普通模型问答、附件分析和 pytest 生成链路可用，迁移期间作为回退保留。
-- 正在接入 OpenCode Sidecar，使 Agent 无需逐个上传文件即可探索完整工程。
+- 普通问答、附件分析、当前对象分析和 pytest 生成统一由 OpenCode 完成。
+- OpenCode Sidecar 可在唯一注册工作区内自行搜索和读取工程，无需逐个上传文件。
 - 当前项目、页面、DBC 节点/帧、Trace 帧和诊断 ECU 自动同步到独立宿主会话。
 - 在工程树选中 PDX 后，使用开源 `odxtools` 解析 ECU、诊断层、服务和 CAN 通信参数并直接分析。
 - 支持有真实历史的多轮对话和与当前工程关联的新建对话。
-- Trace、DBC、诊断日志和 PDX 的确定性只读分析。
+- Trace、DBC、诊断日志和 PDX 由宿主提供确定性事实，再交给 OpenCode 分析。
 - AI Gateway Sidecar 生命周期、分级 Bearer Token、OpenAPI、Plugin Manifest 和审计 `request_id`。
-- 官方 `openai-python` 通过 OpenAI-compatible Responses 或 Chat Completions API 调用客户模型。
+- OpenCode 使用客户配置的 OpenAI-compatible Provider 调用模型。
 
-最终权限模型为：工作区内读取默认允许；写文件和 Shell 命令必须审批；工作区外访问和 CAN、UDS、刷写、
-设备控制始终禁止。现有确定性 PDX/Trace/DBC/诊断分析继续保留。
+当前权限模型为：工作区内读取允许；写文件和 Shell 命令暂时禁用，待侧栏权限审批 UI 完成后开放逐次审批；
+工作区外访问和 CAN、UDS、刷写、设备控制始终禁止。
 
 ## 当前交付目标
 
-当前先完成 OpenCode Runtime 的本地进程、健康检查、可信工作区注册和模型配置映射；随后把消息、工具调用、
+当前已完成 OpenCode Runtime、本地健康检查、可信工作区注册、模型配置映射和消息链路切换；下一步把工具调用、
 Diff、命令输出和权限请求接入现有右侧面板。具体边界和验收标准以
 [产品开发计划](docs/13-reusable-ai-plugin-development-plan.md) 为准。
 
@@ -39,8 +39,8 @@ $env:AI_MODEL_API_KEY='客户自己的Key'
 $env:AI_MODEL_NAME='模型名'
 ```
 
-这些值会映射到 OpenCode 的 OpenAI-compatible Provider。未配置模型或未安装 OpenCode 时，
-Trace/DBC/诊断确定性分析和迁移期旧功能仍可用，并返回明确的 Agent Runtime 状态。
+这些值会映射到 OpenCode 的 OpenAI-compatible Provider。未注册工作区、未配置模型或未安装 OpenCode 时，
+AI 接口返回明确的 Agent Runtime 错误；测试数据摘要、比较等非 AI 数据接口仍可用。
 
 ## 启动产品
 

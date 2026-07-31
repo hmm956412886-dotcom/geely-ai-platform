@@ -14,7 +14,7 @@
 
 ```text
 frontend/copilot-shell/     可嵌入 Copilot UI
-src/ai-gateway/             REST Gateway、OpenCode 生命周期/协议适配和确定性分析
+src/ai-gateway/             REST Gateway、OpenCode 生命周期/协议适配和确定性数据解析
 integrations/coretest/      CoreTest Qt Host Connector 和安装集成
 samples/host-integration/   与具体宿主无关的 REST SDK 样例
 contracts/                  OpenAPI 和 Host Manifest
@@ -38,7 +38,7 @@ scripts/                    启动和部署检查
 - Gateway 对外只返回工作区是否已注册、Runtime 版本和健康状态，不返回路径、密码和模型密钥。
 - OpenCode 进程的 `cwd` 必须是已校验的工作区根目录。
 - 测试不得依赖开发机已经安装 OpenCode；用伪进程和伪健康响应覆盖生命周期逻辑，真实二进制另做 Windows 集成验收。
-- 迁移期间不顺手重写现有 Copilot UI 或确定性汽车数据工具。
+- 所有 AI 回答只走 OpenCode；确定性代码只负责解析和传递事实，不生成替代回答。
 
 ## API 要求
 

@@ -183,13 +183,22 @@ class OpenCodeRuntime:
                 process.wait(timeout=1)
         self._cleanup_config()
 
-    def prompt(self, host_session_id: str, question: str, *, new_session: bool = False) -> str:
+    def prompt(
+        self,
+        host_session_id: str,
+        question: str,
+        *,
+        system: str,
+        history: list[dict[str, str]],
+        new_session: bool = False,
+    ) -> str:
         if not self.health()["healthy"]:
             raise RuntimeError(self._error or "OpenCode Runtime is unavailable")
         if new_session:
             self.release_session(host_session_id)
         with self._session_lock:
             session_id = self._sessions.get(host_session_id)
+            created = session_id is None
             if session_id is None:
                 session = self._request_json(
                     "POST",
@@ -201,11 +210,22 @@ class OpenCodeRuntime:
                     raise RuntimeError("OpenCode did not create a session")
                 self._sessions[host_session_id] = session_id
 
+            prompt = question
+            if created and history:
+                prompt = (
+                    "--- PREVIOUS CONVERSATION ---\n"
+                    + "\n".join(
+                        f"{item['role'].upper()}: {item['content']}" for item in history
+                    )
+                    + "\n--- END PREVIOUS CONVERSATION ---\n\n"
+                    + question
+                )
             result = self._request_json(
                 "POST",
                 f"/session/{quote(session_id, safe='')}/message",
                 {
-                    "parts": [{"type": "text", "text": question}],
+                    "system": system,
+                    "parts": [{"type": "text", "text": prompt}],
                     "tools": {
                         "read": True,
                         "glob": True,

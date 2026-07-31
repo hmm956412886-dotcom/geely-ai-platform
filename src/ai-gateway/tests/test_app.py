@@ -56,25 +56,45 @@ class AppTests(unittest.TestCase):
         self.assertEqual(payload["result"]["run_id"], "RUN_CSV_001")
         self.assertEqual(payload["result"]["failed_cases"], 1)
 
-    def test_analyze_combines_deterministic_data(self) -> None:
+    def test_analyze_sends_deterministic_data_to_opencode(self) -> None:
+        runtime = _FakeOpenCodeRuntime()
+        with TemporaryDirectory() as directory, patch(
+            "ai_gateway.app.get_opencode_runtime", return_value=runtime
+        ):
+            handle_request(
+                "POST",
+                "/api/v1/host/workspace?host_session_id=analyze-data",
+                json.dumps({"project_root": directory}),
+            )
+            response = handle_request(
+                "POST",
+                "/api/v1/analyze?host_session_id=analyze-data",
+                json.dumps(
+                    {
+                        "question": "分析失败原因",
+                        "source_file": str(FIXTURES / "test-run-cases.json"),
+                    }
+                ),
+            )
+
+        payload = json.loads(response.body)
+        self.assertEqual(response.status, 200)
+        self.assertEqual(payload["answer"], "来自工作区 Agent 的回答")
+        self.assertEqual(payload["data"]["source"]["type"], "json")
+        self.assertIn("RUN_JSON_001", runtime.prompts[0][1])
+
+    def test_test_data_summary_reads_json_source_file(self) -> None:
         response = handle_request(
             "POST",
-            "/api/v1/analyze",
-            json.dumps(
-                {
-                    "question": "分析失败原因",
-                    "source_file": str(FIXTURES / "test-run-cases.json"),
-                }
-            ),
+            "/api/v1/test-data/summary",
+            json.dumps({"source_file": str(FIXTURES / "test-run-cases.json")}),
         )
 
         payload = json.loads(response.body)
         self.assertEqual(response.status, 200)
-        self.assertIn("answer", payload)
-        self.assertEqual(payload["citations"], [])
-        self.assertEqual(payload["data"]["source"]["type"], "json")
+        self.assertEqual(payload["result"]["run_id"], "RUN_JSON_001")
 
-    def test_analyze_reads_source_file(self) -> None:
+    def test_analyze_requires_registered_workspace(self) -> None:
         response = handle_request(
             "POST",
             "/api/v1/analyze",
@@ -82,26 +102,9 @@ class AppTests(unittest.TestCase):
         )
 
         payload = json.loads(response.body)
-        self.assertEqual(response.status, 200)
-        self.assertEqual(payload["data"]["run_id"], "RUN_JSON_001")
-        self.assertIn("本次测试共 3 个用例", payload["answer"])
-
-    def test_analyze_use_model_falls_back_when_unconfigured(self) -> None:
-        response = handle_request(
-            "POST",
-            "/api/v1/analyze",
-            json.dumps(
-                {
-                    "source_file": str(FIXTURES / "test-run-cases.json"),
-                    "use_model": True,
-                }
-            ),
-        )
-
-        payload = json.loads(response.body)
-        self.assertEqual(response.status, 200)
-        self.assertIn("本次测试共", payload["answer"])
-        self.assertIn("model api is not configured", payload["warnings"][0])
+        self.assertEqual(response.status, 502)
+        self.assertEqual(payload["error"]["code"], "model_unavailable")
+        self.assertIn("workspace is not registered", payload["error"]["message"])
 
     def test_model_config_does_not_expose_secret(self) -> None:
         response = handle_request("GET", "/api/v1/model/config")
@@ -247,6 +250,7 @@ class AppTests(unittest.TestCase):
 
     def test_host_snapshot_roundtrip_and_trace_analysis(self) -> None:
         session = "coretest-trace"
+        runtime = _FakeOpenCodeRuntime()
         snapshot = {
             "kind": "trace",
             "revision": "7",
@@ -258,25 +262,33 @@ class AppTests(unittest.TestCase):
                 "top_frame_ids": [{"frame_id": "0x123", "count": 40}],
             },
         }
-        published = handle_request(
-            "POST",
-            f"/api/v1/host/snapshot?host_session_id={session}",
-            json.dumps(snapshot),
-        )
-        read = handle_request("GET", f"/api/v1/host/snapshot?host_session_id={session}")
-        analysis = handle_request(
-            "POST",
-            f"/api/v1/host/snapshot/analyze?host_session_id={session}",
-            json.dumps({"question": "分析当前 Trace"}, ensure_ascii=False),
-        )
+        with TemporaryDirectory() as directory, patch(
+            "ai_gateway.app.get_opencode_runtime", return_value=runtime
+        ):
+            handle_request(
+                "POST",
+                f"/api/v1/host/workspace?host_session_id={session}",
+                json.dumps({"project_root": directory}),
+            )
+            published = handle_request(
+                "POST",
+                f"/api/v1/host/snapshot?host_session_id={session}",
+                json.dumps(snapshot),
+            )
+            read = handle_request("GET", f"/api/v1/host/snapshot?host_session_id={session}")
+            analysis = handle_request(
+                "POST",
+                f"/api/v1/host/snapshot/analyze?host_session_id={session}",
+                json.dumps({"question": "分析当前 Trace"}, ensure_ascii=False),
+            )
 
         self.assertEqual(published.status, 200)
         self.assertEqual(json.loads(read.body)["result"]["revision"], "7")
         payload = json.loads(analysis.body)
         self.assertEqual(analysis.status, 200)
-        self.assertIn("120 帧", payload["answer"])
-        self.assertIn("0x123", payload["answer"])
-        self.assertEqual(payload["data"]["kind"], "trace")
+        self.assertEqual(payload["answer"], "来自工作区 Agent 的回答")
+        self.assertIn("120", runtime.prompts[0][1])
+        self.assertIn("0x123", runtime.prompts[0][1])
 
     def test_host_snapshot_is_session_isolated_and_size_limited(self) -> None:
         handle_request(
@@ -298,38 +310,46 @@ class AppTests(unittest.TestCase):
         self.assertEqual(oversized.status, 400)
         self.assertIn("size limit", oversized.body)
 
-    def test_pdx_snapshot_returns_deterministic_analysis(self) -> None:
+    def test_pdx_snapshot_is_analyzed_by_opencode(self) -> None:
         session = "coretest-pdx"
-        published = handle_request(
-            "POST",
-            f"/api/v1/host/snapshot?host_session_id={session}",
-            json.dumps(
-                {
-                    "kind": "pdx",
-                    "revision": "8",
-                    "selection": {"pdx_name": "somersault.pdx"},
-                    "data": {
-                        "ecu_count": 2,
-                        "diagnostic_layer_count": 4,
-                        "ecus": [
-                            {"name": "somersault_lazy", "service_count": 6},
-                            {"name": "somersault_assiduous", "service_count": 6},
-                        ],
-                    },
-                }
-            ),
-        )
-        analysis = handle_request(
-            "POST",
-            f"/api/v1/host/snapshot/analyze?host_session_id={session}",
-            json.dumps({"question": "Analyze this PDX"}),
-        )
+        runtime = _FakeOpenCodeRuntime()
+        with TemporaryDirectory() as directory, patch(
+            "ai_gateway.app.get_opencode_runtime", return_value=runtime
+        ):
+            handle_request(
+                "POST",
+                f"/api/v1/host/workspace?host_session_id={session}",
+                json.dumps({"project_root": directory}),
+            )
+            published = handle_request(
+                "POST",
+                f"/api/v1/host/snapshot?host_session_id={session}",
+                json.dumps(
+                    {
+                        "kind": "pdx",
+                        "revision": "8",
+                        "selection": {"pdx_name": "somersault.pdx"},
+                        "data": {
+                            "ecu_count": 2,
+                            "diagnostic_layer_count": 4,
+                            "ecus": [
+                                {"name": "somersault_lazy", "service_count": 6},
+                                {"name": "somersault_assiduous", "service_count": 6},
+                            ],
+                        },
+                    }
+                ),
+            )
+            analysis = handle_request(
+                "POST",
+                f"/api/v1/host/snapshot/analyze?host_session_id={session}",
+                json.dumps({"question": "Analyze this PDX"}),
+            )
 
         self.assertEqual(published.status, 200)
         self.assertEqual(analysis.status, 200)
-        answer = json.loads(analysis.body)["answer"]
-        self.assertIn("somersault.pdx", answer)
-        self.assertIn("somersault_lazy", answer)
+        self.assertIn("somersault.pdx", runtime.prompts[0][1])
+        self.assertIn("somersault_lazy", runtime.prompts[0][1])
 
     def test_copilot_token_cannot_publish_host_snapshot(self) -> None:
         with patch.dict(
@@ -386,8 +406,8 @@ class AppTests(unittest.TestCase):
         )
         analysis = handle_request(
             "POST",
-            "/api/v1/analyze?host_session_id=session-assets",
-            json.dumps({"source_asset_id": "current-run", "question": "分析失败原因"}),
+            "/api/v1/test-data/summary?host_session_id=session-assets",
+            json.dumps({"source_asset_id": "current-run"}),
         )
 
         registration_payload = json.loads(registration.body)
@@ -396,7 +416,7 @@ class AppTests(unittest.TestCase):
         self.assertEqual(registration_payload["result"]["asset_id"], "current-run")
         self.assertNotIn("file_path", registration_payload["result"])
         self.assertEqual(analysis.status, 200)
-        self.assertEqual(analysis_payload["data"]["source"], {"type": "host_asset", "ref": "current-run"})
+        self.assertEqual(analysis_payload["result"]["source"], {"type": "host_asset", "ref": "current-run"})
         self.assertNotIn(source_file, analysis.body)
 
     def test_access_control_requires_registered_assets_instead_of_file_paths(self) -> None:
@@ -413,7 +433,7 @@ class AppTests(unittest.TestCase):
         ):
             direct = handle_request(
                 "POST",
-                "/api/v1/analyze?host_session_id=secure-session",
+                "/api/v1/test-data/summary?host_session_id=secure-session",
                 json.dumps({"source_file": str(FIXTURES / "test-run-cases.csv")}),
                 headers=headers,
             )
@@ -430,7 +450,7 @@ class AppTests(unittest.TestCase):
             )
             analysis = handle_request(
                 "POST",
-                "/api/v1/analyze?host_session_id=secure-session",
+                "/api/v1/test-data/summary?host_session_id=secure-session",
                 json.dumps({"source_asset_id": "secure-run"}),
                 headers=headers,
             )
@@ -540,10 +560,13 @@ class AppTests(unittest.TestCase):
         payload = json.loads(response.body)
         self.assertEqual(response.status, 200)
         self.assertEqual(payload["answer"], "来自工作区 Agent 的回答")
-        self.assertEqual(
-            runtime.prompts,
-            [("agent-chat:conversation-1", "先查看项目结构再回答", True)],
-        )
+        self.assertEqual(len(runtime.prompts), 1)
+        session_id, question, system, history, new_session = runtime.prompts[0]
+        self.assertEqual(session_id, "agent-chat:conversation-1")
+        self.assertEqual(question, "用户任务：先查看项目结构再回答")
+        self.assertIn("工作区智能体", system)
+        self.assertEqual(history, [])
+        self.assertTrue(new_session)
 
     def test_host_can_release_one_session_without_affecting_another(self) -> None:
         source_file = str(FIXTURES / "test-run-cases.csv")
@@ -569,12 +592,12 @@ class AppTests(unittest.TestCase):
         )
         old_asset = handle_request(
             "POST",
-            "/api/v1/analyze?host_session_id=release-a",
+            "/api/v1/test-data/summary?host_session_id=release-a",
             json.dumps({"source_asset_id": "current"}),
         )
         other_asset = handle_request(
             "POST",
-            "/api/v1/analyze?host_session_id=release-b",
+            "/api/v1/test-data/summary?host_session_id=release-b",
             json.dumps({"source_asset_id": "current"}),
         )
 
@@ -637,7 +660,7 @@ class AppTests(unittest.TestCase):
         )
         handle_request(
             "POST",
-            f"/api/v1/analyze?host_session_id={session}",
+            f"/api/v1/test-data/summary?host_session_id={session}",
             json.dumps({"source_file": str(FIXTURES / "test-run-cases.csv")}),
         )
         response = handle_request("GET", "/api/v1/audit/events")
@@ -646,7 +669,7 @@ class AppTests(unittest.TestCase):
         event = payload["result"]["events"][-1]
         self.assertEqual(response.status, 200)
         self.assertEqual(event["method"], "POST")
-        self.assertEqual(event["path"], "/api/v1/analyze")
+        self.assertEqual(event["path"], "/api/v1/test-data/summary")
         self.assertEqual(event["status"], 200)
         self.assertTrue(event["request_id"].startswith("req_"))
         self.assertEqual(event["project_id"], "vehicle-a")
@@ -841,8 +864,12 @@ class _FakeOpenCodeRuntime:
     def stop(self) -> None:
         self.stopped = True
 
-    def prompt(self, host_session_id, question, *, new_session=False):
-        self.prompts.append((host_session_id, question, new_session))
+    def prompt(
+        self, host_session_id, question, *, system, history, new_session=False
+    ):
+        self.prompts.append(
+            (host_session_id, question, system, history, new_session)
+        )
         return "来自工作区 Agent 的回答"
 
     def release_session(self, host_session_id):

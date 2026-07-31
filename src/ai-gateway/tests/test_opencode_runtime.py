@@ -206,10 +206,29 @@ class OpenCodeRuntimeTests(unittest.TestCase):
             )
             runtime.start(directory)
 
-            self.assertEqual(runtime.prompt("host-a", "inspect the project"), "workspace answer")
-            self.assertEqual(runtime.prompt("host-a", "continue"), "workspace answer")
             self.assertEqual(
-                runtime.prompt("host-a", "fresh", new_session=True),
+                runtime.prompt(
+                    "host-a", "inspect the project", system="read only", history=[]
+                ),
+                "workspace answer",
+            )
+            self.assertEqual(
+                runtime.prompt(
+                    "host-a",
+                    "continue",
+                    system="read only",
+                    history=[{"role": "user", "content": "first"}],
+                ),
+                "workspace answer",
+            )
+            self.assertEqual(
+                runtime.prompt(
+                    "host-a",
+                    "fresh",
+                    system="read only",
+                    history=[],
+                    new_session=True,
+                ),
                 "workspace answer",
             )
             runtime.release_session("host-a")
@@ -227,6 +246,7 @@ class OpenCodeRuntimeTests(unittest.TestCase):
         ]
         self.assertEqual(len(prompts), 3)
         prompt_body = json.loads(prompts[0].data.decode("utf-8"))
+        self.assertEqual(prompt_body["system"], "read only")
         self.assertEqual(prompt_body["parts"], [{"type": "text", "text": "inspect the project"}])
         self.assertFalse(prompt_body["tools"]["bash"])
         self.assertFalse(prompt_body["tools"]["edit"])

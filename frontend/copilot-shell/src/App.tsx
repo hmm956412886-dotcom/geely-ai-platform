@@ -33,7 +33,6 @@ import {
 } from "@fluentui/react-icons";
 import { GatewayRequestError, gatewayClient, hostSessionId } from "./gatewayClient";
 import type {
-  AnalysisResponse,
   CopilotArtifact,
   CopilotAttachment,
   CopilotHistoryMessage,
@@ -165,7 +164,7 @@ function conversationHistory(messages: ChatMessage[]): CopilotHistoryMessage[] {
   return messages.slice(-20).map(({ role, content }) => ({ role, content }));
 }
 
-function formatReferences(payload: AnalysisResponse): string {
+function formatReferences(payload: CopilotResponse): string {
   const source = payload.citations.length
     ? `\n\n### 来源\n${payload.citations
         .map((citation) => `- [${citation.title}](${citation.source_url}) · ${citation.provider}`)
@@ -173,10 +172,6 @@ function formatReferences(payload: AnalysisResponse): string {
     : "";
   const warning = payload.warnings.length ? `\n\n> ${payload.warnings.join("；")}` : "";
   return `${source}${warning}`;
-}
-
-function formatResponse(payload: AnalysisResponse): string {
-  return `### 当前数据摘要\n\n${payload.answer}${formatReferences(payload)}`;
 }
 
 function formatCopilotResponse(payload: CopilotResponse): string {
@@ -360,15 +355,6 @@ export default function App() {
       }
     },
     [appendAssistant, appendMessage, isRunning, reportError],
-  );
-
-  const analyze = useCallback(
-    (question: string) =>
-      run(
-        userMessage(question),
-        async (_, signal) => formatResponse(await gatewayClient.analyzeSnapshot(question, signal)),
-      ),
-    [run],
   );
 
   const askCopilot = useCallback(
@@ -655,7 +641,9 @@ export default function App() {
               <Button
                 size="small"
                 appearance="subtle"
-                onClick={() => void analyze(`概括当前 ${dataLabel} 的关键信息。`)}
+                onClick={() => void askCopilot(
+                  `概括当前 ${dataLabel} 的关键信息。`, [], conversationHistory(messages), "chat"
+                )}
                 disabled={isRunning}
               >
                 概括
@@ -663,7 +651,9 @@ export default function App() {
               <Button
                 size="small"
                 appearance="subtle"
-                onClick={() => void analyze(`检查当前 ${dataLabel} 的异常和风险。`)}
+                onClick={() => void askCopilot(
+                  `检查当前 ${dataLabel} 的异常和风险。`, [], conversationHistory(messages), "chat"
+                )}
                 disabled={isRunning}
               >
                 查异常

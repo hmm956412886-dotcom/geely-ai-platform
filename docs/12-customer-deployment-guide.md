@@ -36,8 +36,6 @@ AI_MODEL_BASE_URL=https://api.example.com/v1
 AI_MODEL_API_KEY=客户自己的 Key
 AI_MODEL_NAME=客户模型名
 AI_MODEL_TIMEOUT_SECONDS=30
-AI_MODEL_WIRE_API=chat_completions
-AI_MODEL_REASONING_EFFORT=
 
 # OpenCode Runtime（开发阶段可使用 PATH 中的 opencode）
 OPENCODE_COMMAND=opencode
@@ -49,11 +47,10 @@ OPENCODE_PORT=4097
 
 - `.env` 已被 `.gitignore` 忽略。
 - 不要把真实 API Key 写入 `runtime.env.example`。
-- 使用 OpenAI Responses API 的服务将 `AI_MODEL_WIRE_API` 设为 `responses`；可按模型能力设置 `AI_MODEL_REASONING_EFFORT=high`。仍必须在客户机器提供 `AI_MODEL_API_KEY`。
 - Agent 模型必须支持可靠的工具调用；只支持普通文本补全的 OpenAI-compatible 服务不能完成文件和 Shell 工具循环。
 - `OPENCODE_COMMAND` 可填写开发机 OpenCode 路径。正式客户版本必须匹配 `config/open-source-lock.json` 的锁定版本并校验 SHA-256，不得使用滚动最新版或来源不明的文件。
 - OpenCode 只允许绑定 `127.0.0.1`。Runtime 密码由 Gateway 管理，不写入 WebView URL，也不作为普通环境配置分发。
-- 不配置模型 API 时，系统仍可用本地确定性分析；普通对话和测试代码生成需要真实模型配置。
+- 不配置模型 API、未安装 OpenCode 或未注册工作区时，AI 接口不可用并返回明确状态；测试数据摘要和比较等非 AI 接口仍可用。
 - Gateway 只在当前机器使用时可以不设置 Token；绑定局域网地址或交付客户时必须同时设置访问 Token 和 Host Token，并通过 HTTPS / 反向代理暴露。
 - `AI_GATEWAY_ACCESS_TOKEN` 交给 Copilot WebView，只能调用普通 API；`AI_GATEWAY_HOST_TOKEN` 只保留在可信 CoreTest Connector 和 Sidecar，不能进入 WebView URL。
 - 默认最多保留 256 个 Host Session；CoreTest 关闭窗口时必须释放当前会话。
@@ -142,7 +139,7 @@ Gateway REST/OpenAPI 仍是稳定集成协议，但第一版只以真实 CoreTes
 ## 6. 当前安全边界
 
 - 汽车数据分析默认只读。
-- 生成代码只在用户明确点击保存后写入当前项目 `generated_tests`，不自动执行。
+- 当前 OpenCode 只开放搜索和读取；生成代码可在侧栏展示，但文件写入和 Shell 在权限审批 UI 完成前禁用。
 - 不写客户数据库。
 - 不修改测试配置。
 - 不控制测试设备。

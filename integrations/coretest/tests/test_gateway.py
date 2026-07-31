@@ -78,14 +78,14 @@ class GatewayConfigTests(unittest.TestCase):
         with TemporaryDirectory() as directory:
             path = Path(directory) / ".env"
             path.write_text(
-                "# CoreTest model settings\nAI_MODEL_BASE_URL=https://api.example.com\ninvalid\nAI_MODEL_WIRE_API=responses\n",
+                "# CoreTest model settings\nAI_MODEL_BASE_URL=https://api.example.com\ninvalid\nOPENCODE_COMMAND=opencode.exe\n",
                 encoding="utf-8",
             )
 
             values = _load_env_values(path)
 
         self.assertEqual(values["AI_MODEL_BASE_URL"], "https://api.example.com")
-        self.assertEqual(values["AI_MODEL_WIRE_API"], "responses")
+        self.assertEqual(values["OPENCODE_COMMAND"], "opencode.exe")
         self.assertNotIn("invalid", values)
 
     def test_load_env_values_ignores_missing_file(self) -> None:

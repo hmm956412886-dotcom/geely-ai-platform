@@ -77,8 +77,8 @@ Notices；完整依赖许可证审计通过前不得把 OpenCode 放入交付 ZI
 | 能力 | 默认策略 |
 | --- | --- |
 | 工作区内搜索和读取 | `allow` |
-| 工作区内创建、编辑、应用补丁 | `ask` |
-| Shell 命令 | `ask` |
+| 工作区内创建、编辑、应用补丁 | 当前 `deny`；权限 UI 完成后改为 `ask` |
+| Shell 命令 | 当前 `deny`；权限 UI 完成后改为 `ask` |
 | 工作区外文件访问 | `deny` |
 | 网络访问 | `ask` 或由客户部署策略关闭 |
 | CAN 发送、UDS、刷写、设备控制 | `deny`，不向 Agent 暴露 |
@@ -96,9 +96,9 @@ AI_MODEL_API_KEY
 AI_MODEL_NAME
 ```
 
-Gateway 在启动 OpenCode 时生成对应的 OpenAI-compatible Provider 配置。模型必须可靠支持工具调用；仅支持
-普通文本补全的模型不能完成工作区 Agent 循环。迁移期间，现有 `openai-python` 路径保留给已经落地的
-确定性分析和旧对话回退，Agent 对话完成验收后再删除重复模型编排。
+Gateway 在启动 OpenCode 时生成对应的 OpenAI-compatible Provider 配置，并通过本机鉴权接口单独写入 Key，
+不把 Key 传给子进程环境。模型必须可靠支持工具调用；仅支持普通文本补全的模型不能完成工作区 Agent 循环。
+普通问答、附件、Snapshot、测试数据分析和 pytest 生成均统一进入 OpenCode，不保留旧模型回退路径。
 
 ## 6. Host Snapshot 与 SDK 使用
 
@@ -119,16 +119,17 @@ Host Snapshot 继续传递有上限的运行期事实：
 
 ## 7. 当前开发任务
 
-### 当前目标：OpenCode Runtime 基础接入
+### 当前状态：OpenCode 消息链路已接入
 
 实现范围：
 
-- 增加 OpenCode Runtime 配置、进程启动、停止和健康检查模块。
-- 增加可信 Host 工作区注册契约；校验目录真实存在并保存于服务端，不回传绝对路径。
+- 已增加 OpenCode Runtime 配置、进程启动、停止和健康检查模块。
+- 已增加可信 Host 工作区注册契约；校验目录真实存在并保存于服务端，不回传绝对路径。
 - OpenCode 仅绑定 `127.0.0.1`，由 Gateway 管理认证信息和生命周期。
-- 把现有 OpenAI-compatible 模型配置映射为 OpenCode Provider 配置。
+- 已把现有 OpenAI-compatible 模型配置映射为 OpenCode Provider 配置。
 - Gateway 健康状态能区分“Gateway 可用”和“Agent Runtime 未安装/未启动/健康”。
-- 未安装 OpenCode 时，现有确定性分析和旧 Copilot 功能继续可用，并返回明确状态。
+- 普通问答、附件、Snapshot、测试数据分析和 pytest 生成已切换为 OpenCode 单一路径。
+- 当前仅开放 `glob/grep/read/LSP`；编辑和 Shell 等待权限审批 UI。
 
 验收标准：
 
@@ -137,20 +138,17 @@ Host Snapshot 继续传递有上限的运行期事实：
 3. 状态接口不返回工作区绝对路径、Runtime 密码或模型 API Key。
 4. 在 Windows 安装 OpenCode 后，Gateway 能在指定工程目录启动 `opencode serve` 并通过
    `/global/health` 验证。
-5. 现有 Gateway、Connector 和前端测试继续通过。
-
-本阶段不改写聊天 UI，不把旧 `/api/v1/copilot/query` 立即删除。先把 Runtime 和安全边界做成可独立验证的
-底座，再切换消息链路。
+5. Gateway、Connector 和前端测试继续通过。
 
 ## 8. 后续交付顺序
 
-1. **会话链路**：Gateway 创建 OpenCode Session、发送 Prompt、订阅 SSE 事件并支持取消。
+1. **事件链路**：订阅 OpenCode SSE 事件并支持取消。
 2. **侧栏呈现**：展示思考进度、工具调用、文件 Diff、命令输出和权限确认。
 3. **宿主上下文**：把当前选择和 Snapshot 作为会话上下文注入，不触发重复模型回答。
 4. **项目说明**：为 CoreTest 工作区提供最小 `AGENTS.md`，记录安全边界、测试命令和现成 SDK/CLI。
 5. **真实验收**：完成“分析任意工程文件”“生成并运行获批测试”“调用项目已有 SDK/CLI”三个闭环。
 6. **交付打包**：固定 OpenCode 版本，纳入 Windows 交付包，验证端口冲突、退出、升级和离线配置。
-7. **清理旧链路**：Agent 对话稳定后，删除重复的手写模型对话编排，保留确定性汽车数据工具。
+7. **交付验收**：验证所有 AI 入口均只走 OpenCode，确定性汽车数据代码只提供事实。
 
 多 Agent、RAG、飞书知识、企业 SSO、GUI 点击模拟和硬件自动控制不进入当前开发顺序。
 

@@ -1,5 +1,4 @@
 import type {
-  AnalysisResponse,
   CopilotAttachment,
   CopilotHistoryMessage,
   CopilotResponse,
@@ -67,10 +66,6 @@ export const gatewayClient = {
       payloadContext,
     );
     return payload.result;
-  },
-
-  analyzeSnapshot(question: string, signal?: AbortSignal): Promise<AnalysisResponse> {
-    return postJson<AnalysisResponse>(sessionPath("/api/v1/host/snapshot/analyze"), { question }, signal);
   },
 
   queryCopilot(

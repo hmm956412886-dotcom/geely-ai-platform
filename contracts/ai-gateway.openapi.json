@@ -167,7 +167,7 @@
       "get": {"summary": "Return bounded host snapshot", "responses": {"200": {"description": "Current snapshot"}}},
       "post": {"summary": "Publish bounded host snapshot", "x-required-token": "host", "security": [{"hostBearerAuth": []}], "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/HostSnapshot"}}}}, "responses": {"200": {"description": "Stored snapshot"}, "400": {"$ref": "#/components/responses/BadRequest"}, "401": {"$ref": "#/components/responses/Unauthorized"}}}
     },
-    "/api/v1/host/snapshot/analyze": {"post": {"summary": "Analyze current host snapshot without side effects", "parameters": [{"$ref": "#/components/parameters/HostSessionId"}], "responses": {"200": {"description": "Deterministic analysis"}, "400": {"$ref": "#/components/responses/BadRequest"}}}},
+    "/api/v1/host/snapshot/analyze": {"post": {"summary": "Analyze the current host snapshot with OpenCode", "parameters": [{"$ref": "#/components/parameters/HostSessionId"}], "responses": {"200": {"description": "OpenCode analysis"}, "400": {"$ref": "#/components/responses/BadRequest"}, "502": {"$ref": "#/components/responses/ModelUnavailable"}}}},
     "/api/v1/copilot/query": {
       "post": {
         "summary": "Chat or generate pytest from bounded text attachments",
@@ -183,7 +183,7 @@
     },
     "/api/v1/host/session": {"delete": {"summary": "Release host session", "x-required-token": "host", "security": [{"hostBearerAuth": []}], "parameters": [{"$ref": "#/components/parameters/HostSessionId"}], "responses": {"200": {"description": "Session released"}, "401": {"$ref": "#/components/responses/Unauthorized"}}}},
     "/api/v1/audit/events": {"get": {"summary": "Return recent audit events", "responses": {"200": {"description": "Recent events"}}}},
-    "/api/v1/analyze": {"post": {"summary": "Analyze test data with deterministic results", "parameters": [{"$ref": "#/components/parameters/HostSessionId"}], "responses": {"200": {"description": "Analysis"}}}},
+    "/api/v1/analyze": {"post": {"summary": "Parse test data and analyze it with OpenCode", "parameters": [{"$ref": "#/components/parameters/HostSessionId"}], "responses": {"200": {"description": "OpenCode analysis with parsed test facts"}, "400": {"$ref": "#/components/responses/BadRequest"}, "502": {"$ref": "#/components/responses/ModelUnavailable"}}}},
     "/api/v1/test-data/summary": {"post": {"summary": "Return test run summary", "parameters": [{"$ref": "#/components/parameters/HostSessionId"}], "responses": {"200": {"description": "Summary"}}}},
     "/api/v1/test-data/compare": {"post": {"summary": "Compare test runs", "parameters": [{"$ref": "#/components/parameters/HostSessionId"}], "responses": {"200": {"description": "Comparison"}}}},
     "/api/v1/test-data/insights": {"post": {"summary": "Return deterministic test data insights", "parameters": [{"$ref": "#/components/parameters/HostSessionId"}], "responses": {"200": {"description": "Insights"}}}}

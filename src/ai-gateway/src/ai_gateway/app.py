@@ -23,12 +23,11 @@ from .host_context import (
     update_host_context,
 )
 from .host_snapshot import (
-    analyze_host_snapshot,
     get_host_snapshot,
     release_host_snapshot,
     update_host_snapshot,
 )
-from .model_client import chat_completion, load_model_config
+from .model_client import load_model_config
 from .opencode_runtime import get_opencode_runtime
 from .test_data_adapter import compare_test_runs, load_test_data_insights, load_test_run_summary
 from .workspace import (
@@ -207,41 +206,31 @@ def _handle_request(
         return json_response(_test_data_insights(_read_json(body), host_session_id))
     if method == "POST" and path == "/api/v1/copilot/query":
         try:
-            runtime = get_opencode_runtime()
             payload = _read_json(body)
-            result = run_copilot(
-                payload,
-                host_context=get_host_context(host_session_id),
-                host_snapshot=get_host_snapshot(host_session_id),
-                workspace_agent=(
-                    lambda question: runtime.prompt(
-                        f"{normalize_host_session_id(host_session_id)}:"
-                        f"{payload.get('conversation_id') or 'default'}",
-                        question,
-                        new_session=not payload.get("history"),
-                    )
-                )
-                if get_workspace_path(host_session_id) is not None
-                else None,
-            )
+            result = _workspace_copilot(payload, host_session_id)
             return json_response({"request_id": _request_id(), **result})
         except RuntimeError as exc:
             return error_response("model_unavailable", str(exc), status=502)
     if method == "POST" and path == "/api/v1/host/snapshot/analyze":
-        question = str(_read_json(body).get("question") or "分析当前界面")
-        result = analyze_host_snapshot(question, host_session_id)
-        return json_response(
-            {
-                "request_id": _request_id(),
-                "answer": result["answer"],
-                "data": result["snapshot"],
-                "citations": result["citations"],
-                "warnings": result["warnings"],
-                "question": result["question"],
-            }
-        )
+        try:
+            payload = _read_json(body)
+            result = _workspace_copilot(
+                {
+                    "question": str(payload.get("question") or "分析当前界面"),
+                    "conversation_id": str(
+                        payload.get("conversation_id") or "current-object"
+                    ),
+                },
+                host_session_id,
+            )
+            return json_response({"request_id": _request_id(), **result})
+        except RuntimeError as exc:
+            return error_response("model_unavailable", str(exc), status=502)
     if method == "POST" and path == "/api/v1/analyze":
-        return json_response(_analyze(_read_json(body), host_session_id))
+        try:
+            return json_response(_analyze(_read_json(body), host_session_id))
+        except RuntimeError as exc:
+            return error_response("model_unavailable", str(exc), status=502)
     return error_response("not_found", f"No route for {method} {path}", status=404)
 
 
@@ -392,19 +381,25 @@ def _analyze(payload: dict[str, Any], host_session_id: str | None = None) -> dic
         }
     summary = _test_data_summary(summary_payload, host_session_id)
     result = summary["result"]
-    answer = _fallback_analysis_answer(result)
-    model_warning = None
-    if payload.get("use_model"):
-        try:
-            answer = chat_completion(_analysis_messages(question, result))
-        except ValueError as exc:
-            model_warning = str(exc)
+    agent = _workspace_copilot(
+        {
+            "question": question,
+            "conversation_id": "test-data-analysis",
+            "attachments": [
+                {
+                    "name": "test-data.json",
+                    "content": json.dumps(result, ensure_ascii=False),
+                }
+            ],
+        },
+        host_session_id,
+    )
     return {
         "request_id": _request_id(),
-        "answer": answer,
+        "answer": agent["answer"],
         "data": result,
         "citations": [],
-        "warnings": [model_warning] if model_warning else [],
+        "warnings": [],
         "question": question,
     }
 
@@ -430,32 +425,26 @@ def _mask_asset_source(result: dict[str, Any], asset_id: str | None) -> None:
         result["source"] = {"type": "host_asset", "ref": asset_id}
 
 
-def _fallback_analysis_answer(result: dict[str, Any]) -> str:
-    first_failure = result["failures"][0]["name"] if result["failures"] else "当前测试结果"
-    return (
-        f"本次测试共 {result['total_cases']} 个用例，失败 {result['failed_cases']} 个，"
-        f"通过率 {result['metrics']['pass_rate']:.2%}。主要风险集中在{first_failure}，"
-        "建议先核对扭矩误差阈值、测试环境和相关标定版本。"
+def _workspace_copilot(
+    payload: dict[str, Any], host_session_id: str | None
+) -> dict[str, Any]:
+    if get_workspace_path(host_session_id) is None:
+        raise RuntimeError("OpenCode workspace is not registered")
+    runtime = get_opencode_runtime()
+    session_id = normalize_host_session_id(host_session_id)
+    conversation_id = payload.get("conversation_id") or "default"
+    return run_copilot(
+        payload,
+        host_context=get_host_context(session_id),
+        host_snapshot=get_host_snapshot(session_id),
+        workspace_agent=lambda question, system, history, new_session: runtime.prompt(
+            f"{session_id}:{conversation_id}",
+            question,
+            system=system,
+            history=history,
+            new_session=new_session,
+        ),
     )
-
-
-def _analysis_messages(
-    question: str,
-    result: dict[str, Any],
-) -> list[dict[str, str]]:
-    return [
-        {
-            "role": "system",
-            "content": "你是汽车测试数据分析助手。只能基于给定测试数据和引用来源回答，不要编造。",
-        },
-        {
-            "role": "user",
-            "content": json.dumps(
-                {"question": question, "test_data": result},
-                ensure_ascii=False,
-            ),
-        },
-    ]
 
 
 def _request_id() -> str:

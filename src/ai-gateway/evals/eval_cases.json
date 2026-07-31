@@ -21,19 +21,16 @@
     "body_contains": "Geely Test AI Workbench"
   },
   {
-    "name": "analyze_csv",
+    "name": "summarize_csv",
     "method": "POST",
-    "path": "/api/v1/analyze?host_session_id=eval-session",
+    "path": "/api/v1/test-data/summary?host_session_id=eval-session",
     "body": {
       "source_asset_id": "eval-current"
     },
     "expect_status": 200,
     "expect": {
-      "data.run_id": "RUN_CSV_001",
-      "data.failed_cases": 1
-    },
-    "contains": {
-      "answer": "本次测试共"
+      "result.run_id": "RUN_CSV_001",
+      "result.failed_cases": 1
     },
     "prefix": {
       "request_id": "req_"
@@ -91,7 +88,7 @@
     }
   },
   {
-    "name": "copilot_requires_model",
+    "name": "copilot_requires_workspace",
     "method": "POST",
     "path": "/api/v1/copilot/query?host_session_id=eval-coretest",
     "body": {
@@ -102,22 +99,22 @@
       "error.code": "model_unavailable"
     },
     "contains": {
-      "error.message": "model api is not configured"
+      "error.message": "workspace is not registered"
     }
   },
   {
-    "name": "analyze_host_snapshot",
+    "name": "snapshot_analysis_requires_workspace",
     "method": "POST",
     "path": "/api/v1/host/snapshot/analyze?host_session_id=eval-coretest",
     "body": {
       "question": "分析当前 Trace"
     },
-    "expect_status": 200,
+    "expect_status": 502,
     "expect": {
-      "data.kind": "trace"
+      "error.code": "model_unavailable"
     },
     "contains": {
-      "answer": "120 帧"
+      "error.message": "workspace is not registered"
     }
   },
   {
@@ -136,16 +133,16 @@
     }
   },
   {
-    "name": "analyze_host_asset",
+    "name": "summarize_host_asset",
     "method": "POST",
-    "path": "/api/v1/analyze?host_session_id=eval-session",
+    "path": "/api/v1/test-data/summary?host_session_id=eval-session",
     "body": {
       "source_asset_id": "eval-current"
     },
     "expect_status": 200,
     "expect": {
-      "data.source.type": "host_asset",
-      "data.source.ref": "eval-current"
+      "result.source.type": "host_asset",
+      "result.source.ref": "eval-current"
     }
   },
   {
@@ -184,25 +181,12 @@
     }
   },
   {
-    "name": "model_fallback",
-    "method": "POST",
-    "path": "/api/v1/analyze?host_session_id=eval-session",
-    "body": {
-      "source_asset_id": "eval-current",
-      "use_model": true
-    },
-    "expect_status": 200,
-    "contains": {
-      "warnings.0": "model api is not configured"
-    }
-  },
-  {
     "name": "audit_events",
     "method": "GET",
     "path": "/api/v1/audit/events",
     "expect_status": 200,
     "expect": {
-      "result.events.0.path": "/api/v1/analyze"
+      "result.events.0.path": "/api/v1/test-data/summary"
     }
   },
   {
