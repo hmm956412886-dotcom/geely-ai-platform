@@ -94,6 +94,12 @@ export interface AgentFileDiff {
   truncated: boolean;
 }
 
+export interface AgentDiffResult {
+  files: AgentFileDiff[];
+  revert_available: boolean;
+  revert_reason: "no_turn" | "no_file_changes" | "workspace_has_no_git_baseline" | null;
+}
+
 export interface InsightsResponse {
   request_id: string;
   result: {

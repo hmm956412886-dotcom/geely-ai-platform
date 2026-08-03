@@ -408,6 +408,14 @@ textarea {
   gap: 8px;
 }
 
+.diff-heading > div {
+  min-width: 0;
+}
+
+.diff-heading button {
+  flex: 0 0 auto;
+}
+
 .diff-heading > div,
 .diff-files {
   flex-direction: column;
@@ -427,6 +435,24 @@ textarea {
 .diff-files {
   margin-top: 5px;
   gap: 3px;
+}
+
+.diff-warning {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  gap: 6px;
+  margin-top: 6px;
+  padding: 6px 7px;
+  color: #5d4500;
+  background: #fff8e1;
+  font-size: 10px;
+  line-height: 15px;
+}
+
+.diff-warning svg {
+  width: 16px;
+  height: 16px;
+  color: #8a5d00;
 }
 
 .diff-files details {

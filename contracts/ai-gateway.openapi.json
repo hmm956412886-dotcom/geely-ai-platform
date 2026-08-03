@@ -160,6 +160,25 @@
           "truncated": {"type": "boolean"}
         }
       },
+      "AgentDiffResult": {
+        "type": "object",
+        "required": ["files", "revert_available", "revert_reason"],
+        "additionalProperties": false,
+        "properties": {
+          "files": {"type": "array", "maxItems": 20, "items": {"$ref": "#/components/schemas/AgentFileDiff"}},
+          "revert_available": {"type": "boolean"},
+          "revert_reason": {"type": "string", "nullable": true, "enum": ["no_turn", "no_file_changes", "workspace_has_no_git_baseline", null]}
+        }
+      },
+      "AgentDiffResponse": {
+        "type": "object",
+        "required": ["request_id", "result"],
+        "additionalProperties": false,
+        "properties": {
+          "request_id": {"type": "string"},
+          "result": {"$ref": "#/components/schemas/AgentDiffResult"}
+        }
+      },
       "AgentPermissionReply": {
         "type": "object",
         "required": ["conversation_id", "request_id", "reply"],
@@ -188,7 +207,7 @@
     "/api/v1/agent/status": {"get": {"summary": "Return browser-safe workspace and OpenCode Runtime status", "parameters": [{"$ref": "#/components/parameters/HostSessionId"}], "responses": {"200": {"description": "Runtime status without paths, passwords, or API keys"}}}},
     "/api/v1/agent/permissions": {"post": {"summary": "Return pending OpenCode permissions for one conversation", "parameters": [{"$ref": "#/components/parameters/HostSessionId"}], "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AgentConversationRequest"}}}}, "responses": {"200": {"description": "Browser-safe pending permission requests"}, "400": {"$ref": "#/components/responses/BadRequest"}}}},
     "/api/v1/agent/activity": {"post": {"summary": "Return browser-safe OpenCode tool activity for one conversation", "parameters": [{"$ref": "#/components/parameters/HostSessionId"}], "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AgentConversationRequest"}}}}, "responses": {"200": {"description": "Recent tool activity without absolute workspace paths"}, "400": {"$ref": "#/components/responses/BadRequest"}}}},
-    "/api/v1/agent/diff": {"post": {"summary": "Return the latest OpenCode turn file diff", "parameters": [{"$ref": "#/components/parameters/HostSessionId"}], "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AgentConversationRequest"}}}}, "responses": {"200": {"description": "Bounded file diff with relative paths only"}, "400": {"$ref": "#/components/responses/BadRequest"}}}},
+    "/api/v1/agent/diff": {"post": {"summary": "Return the latest OpenCode turn file diff", "parameters": [{"$ref": "#/components/parameters/HostSessionId"}], "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AgentConversationRequest"}}}}, "responses": {"200": {"description": "Bounded file diff and native revert availability with relative paths only", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AgentDiffResponse"}}}}, "400": {"$ref": "#/components/responses/BadRequest"}}}},
     "/api/v1/agent/revert": {"post": {"summary": "Revert the latest OpenCode turn", "parameters": [{"$ref": "#/components/parameters/HostSessionId"}], "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AgentConversationRequest"}}}}, "responses": {"200": {"description": "Latest turn revert result"}, "400": {"$ref": "#/components/responses/BadRequest"}}}},
     "/api/v1/agent/permissions/reply": {"post": {"summary": "Allow one OpenCode tool call or reject it", "parameters": [{"$ref": "#/components/parameters/HostSessionId"}], "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AgentPermissionReply"}}}}, "responses": {"200": {"description": "Permission reply accepted"}, "400": {"$ref": "#/components/responses/BadRequest"}}}},
     "/api/v1/agent/abort": {"post": {"summary": "Abort the active OpenCode turn for one conversation", "parameters": [{"$ref": "#/components/parameters/HostSessionId"}], "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AgentConversationRequest"}}}}, "responses": {"200": {"description": "Abort request accepted"}, "400": {"$ref": "#/components/responses/BadRequest"}}}},

@@ -508,10 +508,14 @@ class OpenCodeRuntime:
             return {"type": "error", "message": self._public_text(str(message), 500)}
         return None
 
-    def diff(self, host_session_id: str) -> list[dict[str, Any]]:
+    def diff(self, host_session_id: str) -> dict[str, Any]:
         session_id, message_id = self._session_and_message_id(host_session_id)
         if session_id is None or message_id is None:
-            return []
+            return {
+                "files": [],
+                "revert_available": False,
+                "revert_reason": "no_turn",
+            }
         directory = quote(str(self._workspace or ""), safe="")
         result = self._request_value(
             "GET",
@@ -545,9 +549,53 @@ class OpenCodeRuntime:
                     "truncated": len(raw_patch) > limit,
                 }
             )
-        return files
+        if files:
+            return {
+                "files": files,
+                "revert_available": True,
+                "revert_reason": None,
+            }
+        reason = (
+            "workspace_has_no_git_baseline"
+            if self._turn_has_completed_write(session_id, message_id, directory)
+            else "no_file_changes"
+        )
+        return {
+            "files": [],
+            "revert_available": False,
+            "revert_reason": reason,
+        }
+
+    def _turn_has_completed_write(
+        self, session_id: str, message_id: str, directory: str
+    ) -> bool:
+        result = self._request_value(
+            "GET",
+            f"/session/{quote(session_id, safe='')}/message?directory={directory}",
+        )
+        if not isinstance(result, list):
+            raise RuntimeError("OpenCode returned invalid activity data")
+        for message in result:
+            if not isinstance(message, dict):
+                continue
+            info = message.get("info")
+            if not isinstance(info, dict) or info.get("parentID") != message_id:
+                continue
+            for part in message.get("parts", []):
+                if not isinstance(part, dict) or part.get("type") != "tool":
+                    continue
+                state = part.get("state")
+                if (
+                    part.get("tool") in {"edit", "write", "apply_patch"}
+                    and isinstance(state, dict)
+                    and state.get("status") == "completed"
+                ):
+                    return True
+        return False
 
     def revert(self, host_session_id: str) -> bool:
+        if not self.diff(host_session_id)["revert_available"]:
+            return False
         session_id, message_id = self._session_and_message_id(host_session_id)
         if session_id is None or message_id is None:
             return False

@@ -22,6 +22,7 @@ import {
   Add20Regular,
   ArrowDownload20Regular,
   ArrowSync20Regular,
+  ArrowUndo20Regular,
   CheckmarkCircle20Regular,
   Code20Regular,
   ChevronRight16Regular,
@@ -30,11 +31,12 @@ import {
   DocumentData20Regular,
   History20Regular,
   ShieldLock20Regular,
+  Warning16Regular,
 } from "@fluentui/react-icons";
 import { GatewayRequestError, gatewayClient, hostSessionId } from "./gatewayClient";
 import type {
   AgentActivity,
-  AgentFileDiff,
+  AgentDiffResult,
   AgentPermission,
   CopilotArtifact,
   CopilotAttachment,
@@ -64,6 +66,12 @@ interface RequestDiagnostic {
   detail: string;
   requestId?: string;
 }
+
+const emptyDiffResult: AgentDiffResult = {
+  files: [],
+  revert_available: false,
+  revert_reason: "no_turn",
+};
 
 const parentOrigin = resolveParentOrigin();
 const MarkdownText = makeMarkdownText();
@@ -225,7 +233,7 @@ export default function App() {
   const [permission, setPermission] = useState<AgentPermission | null>(null);
   const [permissionReplying, setPermissionReplying] = useState(false);
   const [activity, setActivity] = useState<AgentActivity[]>([]);
-  const [fileDiffs, setFileDiffs] = useState<AgentFileDiff[]>([]);
+  const [diffResult, setDiffResult] = useState<AgentDiffResult>(emptyDiffResult);
   const [reverting, setReverting] = useState(false);
   const activeConversationIdRef = useRef(activeConversationId);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -237,6 +245,7 @@ export default function App() {
   const hasCurrentData = Boolean(context.selection_kind && context.snapshot_revision);
   const hasSelectedFile = context.selection_kind === "file" && hasCurrentData;
   const dataLabel = currentDataLabel(context);
+  const fileDiffs = diffResult.files;
 
   useEffect(() => {
     activeConversationIdRef.current = activeConversationId;
@@ -389,7 +398,7 @@ export default function App() {
       abortControllerRef.current = controller;
       appendMessage(conversationId, message);
       setActivity([]);
-      setFileDiffs([]);
+      setDiffResult(emptyDiffResult);
       setDiagnostic(null);
       setSaveNotice(null);
       setIsRunning(true);
@@ -450,7 +459,7 @@ export default function App() {
             signal,
           );
           if (!answer.trim()) throw new Error("OpenCode returned an empty response");
-          setFileDiffs(await gatewayClient.diff(conversationId).catch(() => []));
+          setDiffResult(await gatewayClient.diff(conversationId).catch(() => emptyDiffResult));
           return null;
         }
         const payload = await gatewayClient.queryCopilot(
@@ -468,7 +477,7 @@ export default function App() {
               : conversation
           ));
         }
-        setFileDiffs(await gatewayClient.diff(conversationId).catch(() => []));
+        setDiffResult(await gatewayClient.diff(conversationId).catch(() => emptyDiffResult));
         return formatCopilotResponse(payload);
       }),
     [appendMessage, run, updateMessage],
@@ -534,7 +543,7 @@ export default function App() {
     composerConversationRef.current = activeConversationId;
     setComposerAttachmentCount(0);
     setActivity([]);
-    setFileDiffs([]);
+    setDiffResult(emptyDiffResult);
     void runtime.thread.composer.reset();
   }, [activeConversationId, runtime]);
 
@@ -574,20 +583,20 @@ export default function App() {
   }, [permission, permissionReplying, reportError]);
 
   const revertLatestTurn = useCallback(async () => {
-    if (reverting || !fileDiffs.length) return;
+    if (reverting || !diffResult.revert_available) return;
     if (!window.confirm("确认撤销本轮智能体产生的全部文件修改？")) return;
     setReverting(true);
     try {
       const reverted = await gatewayClient.revert(activeConversationIdRef.current);
       if (!reverted) throw new Error("当前没有可撤销的智能体修改。");
-      setFileDiffs([]);
+      setDiffResult(emptyDiffResult);
       setSaveNotice("已撤销本轮智能体修改");
     } catch (error) {
       reportError(error);
     } finally {
       setReverting(false);
     }
-  }, [fileDiffs.length, reportError, reverting]);
+  }, [diffResult.revert_available, reportError, reverting]);
 
   const startNewConversation = useCallback(async () => {
     if (isRunning) return;
@@ -873,36 +882,51 @@ export default function App() {
           </section>
         )}
 
-        {fileDiffs.length > 0 && (
+        {(fileDiffs.length > 0 || diffResult.revert_reason === "workspace_has_no_git_baseline") && (
           <section className="diff-panel" aria-label="本轮文件变更">
             <div className="diff-heading">
               <div>
                 <strong>文件变更</strong>
-                <span>{fileDiffs.length} 个文件 · 仅本轮智能体修改</span>
+                <span>
+                  {fileDiffs.length > 0
+                    ? `${fileDiffs.length} 个文件 · 仅本轮智能体修改`
+                    : "本轮修改未生成可用 Diff"}
+                </span>
               </div>
-              <Button
-                size="small"
-                appearance="subtle"
-                onClick={() => void revertLatestTurn()}
-                disabled={reverting || isRunning}
-              >
-                {reverting ? "撤销中…" : "撤销本轮"}
-              </Button>
+              {diffResult.revert_available && (
+                <Button
+                  size="small"
+                  appearance="subtle"
+                  icon={<ArrowUndo20Regular />}
+                  onClick={() => void revertLatestTurn()}
+                  disabled={reverting || isRunning}
+                >
+                  {reverting ? "撤销中…" : "撤销本轮"}
+                </Button>
+              )}
             </div>
-            <div className="diff-files">
-              {fileDiffs.map((file) => (
-                <details key={file.path}>
-                  <summary>
-                    <ChevronRight16Regular className="diff-chevron" aria-hidden="true" />
-                    <code title={file.path}>{file.path}</code>
-                    <span className="diff-additions">+{file.additions}</span>
-                    <span className="diff-deletions">−{file.deletions}</span>
-                  </summary>
-                  <pre>{file.patch || "未返回文本补丁"}</pre>
-                  {file.truncated && <small>补丁过长，已截断显示</small>}
-                </details>
-              ))}
-            </div>
+            {diffResult.revert_reason === "workspace_has_no_git_baseline" && (
+              <div className="diff-warning" role="note">
+                <Warning16Regular aria-hidden="true" />
+                <span>当前工程没有 Git 基线，本轮修改无法自动撤销。</span>
+              </div>
+            )}
+            {fileDiffs.length > 0 && (
+              <div className="diff-files">
+                {fileDiffs.map((file) => (
+                  <details key={file.path}>
+                    <summary>
+                      <ChevronRight16Regular className="diff-chevron" aria-hidden="true" />
+                      <code title={file.path}>{file.path}</code>
+                      <span className="diff-additions">+{file.additions}</span>
+                      <span className="diff-deletions">−{file.deletions}</span>
+                    </summary>
+                    <pre>{file.patch || "未返回文本补丁"}</pre>
+                    {file.truncated && <small>补丁过长，已截断显示</small>}
+                  </details>
+                ))}
+              </div>
+            )}
           </section>
         )}
 

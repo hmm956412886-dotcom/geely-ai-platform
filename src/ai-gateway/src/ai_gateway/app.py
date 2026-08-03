@@ -159,12 +159,10 @@ def _handle_request(
         payload = _read_json(body)
         _require_fields(payload, {"conversation_id"})
         try:
-            files = get_opencode_runtime().diff(
+            result = get_opencode_runtime().diff(
                 _agent_session_key(payload, host_session_id)
             )
-            return json_response(
-                {"request_id": _request_id(), "result": {"files": files}}
-            )
+            return json_response({"request_id": _request_id(), "result": result})
         except RuntimeError as exc:
             return error_response("agent_unavailable", str(exc), status=502)
     if method == "POST" and path == "/api/v1/agent/revert":

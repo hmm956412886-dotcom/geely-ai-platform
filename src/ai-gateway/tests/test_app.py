@@ -625,16 +625,20 @@ class AppTests(unittest.TestCase):
                 "output": "1 passed",
             }
         ]
-        runtime.diffs = [
-            {
-                "path": "src/sample.py",
-                "status": "modified",
-                "additions": 1,
-                "deletions": 0,
-                "patch": "+print('ok')",
-                "truncated": False,
-            }
-        ]
+        runtime.diffs = {
+            "files": [
+                {
+                    "path": "src/sample.py",
+                    "status": "modified",
+                    "additions": 1,
+                    "deletions": 0,
+                    "patch": "+print('ok')",
+                    "truncated": False,
+                }
+            ],
+            "revert_available": True,
+            "revert_reason": None,
+        }
         with patch("ai_gateway.app.get_opencode_runtime", return_value=runtime):
             pending = handle_request(
                 "POST",
@@ -679,7 +683,7 @@ class AppTests(unittest.TestCase):
         self.assertEqual(
             json.loads(activity.body)["result"]["activity"], runtime.activities
         )
-        self.assertEqual(json.loads(diff.body)["result"]["files"], runtime.diffs)
+        self.assertEqual(json.loads(diff.body)["result"], runtime.diffs)
         self.assertEqual(runtime.reverted_sessions, ["agent-chat:conversation-1"])
         self.assertEqual(
             runtime.permission_replies,

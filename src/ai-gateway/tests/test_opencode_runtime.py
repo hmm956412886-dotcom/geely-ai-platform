@@ -366,13 +366,22 @@ class OpenCodeRuntimeTests(unittest.TestCase):
             self.assertEqual(activity[0]["title"], ".\\sample.py")
             self.assertNotIn(str(Path(directory).resolve()), json.dumps(activity))
             diff = runtime.diff("host-a")
-            self.assertEqual(len(diff), 1)
-            self.assertEqual(diff[0]["path"], "src/sample.py")
-            self.assertEqual(diff[0]["additions"], 1)
+            self.assertTrue(diff["revert_available"])
+            self.assertIsNone(diff["revert_reason"])
+            self.assertEqual(len(diff["files"]), 1)
+            self.assertEqual(diff["files"][0]["path"], "src/sample.py")
+            self.assertEqual(diff["files"][0]["additions"], 1)
             self.assertNotIn(str(Path(directory).resolve()), json.dumps(diff))
             self.assertNotIn("D:\\private", json.dumps(diff))
             self.assertTrue(runtime.revert("host-a"))
-            self.assertEqual(runtime.diff("host-a"), [])
+            self.assertEqual(
+                runtime.diff("host-a"),
+                {
+                    "files": [],
+                    "revert_available": False,
+                    "revert_reason": "no_turn",
+                },
+            )
             self.assertEqual(
                 runtime.prompt(
                     "host-a",
@@ -414,6 +423,88 @@ class OpenCodeRuntimeTests(unittest.TestCase):
         self.assertFalse(prompt_body["tools"]["apply_patch"])
         self.assertFalse(prompt_body["tools"]["write"])
         self.assertTrue(prompt_body["tools"]["read"])
+
+    def test_non_git_edit_is_reported_as_not_revertible(self) -> None:
+        process = FakeProcess()
+        requests = []
+        write_completed = False
+
+        def api(request, **_kwargs):
+            requests.append(request)
+            if request.full_url.endswith("/global/health"):
+                return FakeResponse(b'{"healthy":true,"version":"1.18.10"}')
+            if request.full_url.endswith("/auth/coretest"):
+                return FakeResponse(b"true")
+            if request.full_url.endswith("/session"):
+                return FakeResponse(b'{"id":"session-1"}')
+            if request.full_url.endswith("/session/session-1/message"):
+                return FakeResponse(
+                    b'{"info":{"parentID":"message-1"},'
+                    b'"parts":[{"type":"text","text":"updated"}]}'
+                )
+            if "/session/session-1/diff?directory=" in request.full_url:
+                return FakeResponse(b"[]")
+            if "/session/session-1/message?directory=" in request.full_url:
+                tool = "edit" if write_completed else "read"
+                return FakeResponse(
+                    json.dumps(
+                        [
+                            {
+                                "info": {"parentID": "message-1"},
+                                "parts": [
+                                    {
+                                        "id": "tool-1",
+                                        "type": "tool",
+                                        "tool": tool,
+                                        "state": {
+                                            "status": "completed",
+                                            "title": "sample.py",
+                                        },
+                                    }
+                                ],
+                            }
+                        ]
+                    ).encode("utf-8")
+                )
+            if request.get_method() == "DELETE":
+                return FakeResponse(b"true")
+            raise AssertionError(request.full_url)
+
+        with TemporaryDirectory() as directory:
+            runtime = OpenCodeRuntime(
+                model_config=ModelConfig(
+                    "https://api.example.com/v1", "secret", "demo-model"
+                ),
+                process_factory=lambda *_args, **_kwargs: process,
+                command_resolver=lambda _command: "C:/tools/opencode.exe",
+                urlopen=api,
+            )
+            runtime.start(directory)
+            runtime.prompt("host-a", "update sample.py", system="", history=[])
+
+            self.assertEqual(
+                runtime.diff("host-a"),
+                {
+                    "files": [],
+                    "revert_available": False,
+                    "revert_reason": "no_file_changes",
+                },
+            )
+            write_completed = True
+            self.assertEqual(
+                runtime.diff("host-a"),
+                {
+                    "files": [],
+                    "revert_available": False,
+                    "revert_reason": "workspace_has_no_git_baseline",
+                },
+            )
+            self.assertFalse(runtime.revert("host-a"))
+
+        self.assertFalse(
+            any("/revert?" in request.full_url for request in requests),
+            "unavailable revert must not call OpenCode",
+        )
 
     def test_stream_prompt_subscribes_before_async_prompt_and_sanitizes_events(self) -> None:
         process = FakeProcess()
