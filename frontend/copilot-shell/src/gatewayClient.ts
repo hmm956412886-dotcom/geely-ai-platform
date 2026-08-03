@@ -5,6 +5,7 @@ import type {
   CopilotAttachment,
   CopilotHistoryMessage,
   CopilotResponse,
+  CopilotStreamEvent,
   CompareResponse,
   GatewayErrorBody,
   HostContext,
@@ -56,6 +57,45 @@ function postJson<T>(path: string, body: unknown, signal?: AbortSignal): Promise
   });
 }
 
+async function postEventStream(
+  path: string,
+  body: unknown,
+  onEvent: (event: CopilotStreamEvent) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const headers = new Headers({ "Content-Type": "application/json", Accept: "text/event-stream" });
+  if (accessToken) headers.set("Authorization", `Bearer ${accessToken}`);
+  const response = await fetch(path, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body),
+    signal,
+  });
+  if (!response.ok || !response.body) {
+    const payload = (await response.json().catch(() => ({}))) as GatewayErrorBody;
+    throw new GatewayRequestError(
+      payload.error?.message ?? `Gateway stream failed (${response.status})`,
+      payload.request_id,
+      payload.error?.code,
+    );
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  while (true) {
+    const { done, value } = await reader.read();
+    buffer += decoder.decode(value, { stream: !done });
+    while (buffer.includes("\n\n")) {
+      const boundary = buffer.indexOf("\n\n");
+      const block = buffer.slice(0, boundary);
+      buffer = buffer.slice(boundary + 2);
+      const data = block.split("\n").find((line) => line.startsWith("data:"))?.slice(5).trim();
+      if (data) onEvent(JSON.parse(data) as CopilotStreamEvent);
+    }
+    if (done) break;
+  }
+}
+
 export const gatewayClient = {
   async getHostContext(): Promise<HostContext> {
     const payload = await requestJson<{ result: HostContext }>(sessionPath("/api/v1/host/context"));
@@ -86,6 +126,23 @@ export const gatewayClient = {
       history,
       attachments: attachments.map(({ name, content }) => ({ name, content })),
     }, signal);
+  },
+
+  streamCopilot(
+    question: string,
+    conversationId: string,
+    attachments: CopilotAttachment[],
+    history: CopilotHistoryMessage[],
+    onEvent: (event: CopilotStreamEvent) => void,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    return postEventStream(sessionPath("/api/v1/copilot/stream"), {
+      question,
+      conversation_id: conversationId,
+      task: "chat",
+      history,
+      attachments: attachments.map(({ name, content }) => ({ name, content })),
+    }, onEvent, signal);
   },
 
   async pendingPermissions(conversationId: string): Promise<AgentPermission[]> {

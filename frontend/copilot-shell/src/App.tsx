@@ -281,6 +281,20 @@ export default function App() {
     appendMessage(conversationId, assistantMessage(content));
   }, [appendMessage]);
 
+  const updateMessage = useCallback((conversationId: string, messageId: string, content: string) => {
+    setConversations((current) => current.map((conversation) =>
+      conversation.id === conversationId
+        ? {
+            ...conversation,
+            messages: conversation.messages.map((message) =>
+              message.id === messageId ? { ...message, content } : message
+            ),
+            updatedAt: Date.now(),
+          }
+        : conversation
+    ));
+  }, []);
+
   const reportError = useCallback(
     (error: unknown, conversationId = activeConversationIdRef.current) => {
       const requestId = error instanceof GatewayRequestError ? error.requestId : undefined;
@@ -367,7 +381,7 @@ export default function App() {
   const run = useCallback(
     async (
       message: ChatMessage,
-      action: (conversationId: string, signal: AbortSignal) => Promise<string>,
+      action: (conversationId: string, signal: AbortSignal) => Promise<string | null>,
     ) => {
       if (isRunning) return;
       const conversationId = activeConversationIdRef.current;
@@ -380,7 +394,8 @@ export default function App() {
       setSaveNotice(null);
       setIsRunning(true);
       try {
-        appendAssistant(conversationId, await action(conversationId, controller.signal));
+        const content = await action(conversationId, controller.signal);
+        if (content) appendAssistant(conversationId, content);
       } catch (error) {
         if (error instanceof Error && error.name === "AbortError") {
           appendAssistant(conversationId, "已停止本次请求。");
@@ -404,6 +419,40 @@ export default function App() {
       displayAttachments?: readonly CompleteAttachment[],
     ) =>
       run(userMessage(question, displayAttachments), async (conversationId, signal) => {
+        if (task === "chat") {
+          const response = assistantMessage("");
+          let answer = "";
+          let added = false;
+          await gatewayClient.streamCopilot(
+            question,
+            conversationId,
+            attachments,
+            history,
+            (event) => {
+              if (event.type === "text_delta") {
+                answer += event.delta;
+                if (!added) {
+                  appendMessage(conversationId, response);
+                  added = true;
+                }
+                updateMessage(conversationId, response.id, `### AI 说明\n\n${answer}`);
+              } else if (event.type === "tool") {
+                setActivity((current) => [
+                  ...current.filter((item) => item.id !== event.id),
+                  event,
+                ].slice(-20));
+              } else if (event.type === "permission") {
+                setPermission(event.permission);
+              } else if (event.type === "error") {
+                throw new GatewayRequestError(event.message, undefined, "model_unavailable");
+              }
+            },
+            signal,
+          );
+          if (!answer.trim()) throw new Error("OpenCode returned an empty response");
+          setFileDiffs(await gatewayClient.diff(conversationId).catch(() => []));
+          return null;
+        }
         const payload = await gatewayClient.queryCopilot(
           question,
           conversationId,
@@ -422,7 +471,7 @@ export default function App() {
         setFileDiffs(await gatewayClient.diff(conversationId).catch(() => []));
         return formatCopilotResponse(payload);
       }),
-    [run],
+    [appendMessage, run, updateMessage],
   );
 
   const suggestions = useMemo(() => {

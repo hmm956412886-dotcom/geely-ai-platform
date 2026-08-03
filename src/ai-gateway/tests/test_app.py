@@ -569,6 +569,44 @@ class AppTests(unittest.TestCase):
         self.assertEqual(history, [])
         self.assertTrue(new_session)
 
+    def test_copilot_stream_returns_sse_events(self) -> None:
+        runtime = _FakeOpenCodeRuntime()
+        with TemporaryDirectory() as directory, patch(
+            "ai_gateway.app.get_opencode_runtime", return_value=runtime
+        ):
+            handle_request(
+                "POST",
+                "/api/v1/host/workspace?host_session_id=agent-stream",
+                json.dumps({"project_root": directory}),
+            )
+            response = handle_request(
+                "POST",
+                "/api/v1/copilot/stream?host_session_id=agent-stream",
+                json.dumps(
+                    {
+                        "question": "inspect the project",
+                        "conversation_id": "conversation-1",
+                        "task": "chat",
+                        "attachments": [],
+                        "history": [],
+                    }
+                ),
+            )
+            chunks = b"".join(response.stream or ()).decode("utf-8")
+            invalid = handle_request(
+                "POST",
+                "/api/v1/copilot/stream?host_session_id=agent-stream",
+                json.dumps({"question": "inspect", "unsupported": True}),
+            )
+
+        self.assertEqual(response.status, 200)
+        self.assertEqual(response.content_type, "text/event-stream; charset=utf-8")
+        self.assertEqual(invalid.status, 400)
+        self.assertIn('"type": "text_delta"', chunks)
+        self.assertIn('"type": "completed"', chunks)
+        self.assertEqual(runtime.started_with, get_workspace_path("agent-stream"))
+        self.assertEqual(runtime.streamed_sessions, ["agent-stream:conversation-1"])
+
     def test_copilot_permission_and_abort_routes_are_conversation_scoped(self) -> None:
         runtime = _FakeOpenCodeRuntime()
         runtime.permissions = [
@@ -822,6 +860,7 @@ class AppTests(unittest.TestCase):
             "host",
         )
         self.assertIn("/api/v1/copilot/query", payload["paths"])
+        self.assertIn("/api/v1/copilot/stream", payload["paths"])
         self.assertIn("/api/v1/agent/permissions", payload["paths"])
         self.assertIn("/api/v1/agent/activity", payload["paths"])
         self.assertIn("/api/v1/agent/diff", payload["paths"])
@@ -832,6 +871,10 @@ class AppTests(unittest.TestCase):
         self.assertEqual(
             copilot["requestBody"]["content"]["application/json"]["schema"]["$ref"],
             "#/components/schemas/CopilotQueryRequest",
+        )
+        self.assertIn(
+            "text/event-stream",
+            payload["paths"]["/api/v1/copilot/stream"]["post"]["responses"]["200"]["content"],
         )
         self.assertEqual(
             payload["components"]["schemas"]["CopilotQueryRequest"]["properties"]
@@ -942,6 +985,7 @@ class _FakeOpenCodeRuntime:
         self.permission_replies = []
         self.aborted_sessions = []
         self.reverted_sessions = []
+        self.streamed_sessions = []
 
     def start(self, workspace):
         self.started_with = workspace
@@ -970,6 +1014,14 @@ class _FakeOpenCodeRuntime:
 
     def release_session(self, host_session_id):
         self.released_sessions.append(host_session_id)
+
+    def stream_prompt(
+        self, host_session_id, question, *, system, history, new_session=False
+    ):
+        self.streamed_sessions.append(host_session_id)
+        yield {"type": "started"}
+        yield {"type": "text_delta", "delta": "streamed answer"}
+        yield {"type": "completed", "answer": "streamed answer"}
 
     def release_sessions(self, host_session_id):
         self.released_session_groups.append(host_session_id)

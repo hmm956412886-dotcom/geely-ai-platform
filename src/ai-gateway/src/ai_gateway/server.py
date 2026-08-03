@@ -28,6 +28,26 @@ class GatewayHandler(BaseHTTPRequestHandler):
         return
 
     def _send(self, response: Response) -> None:
+        if response.stream is not None:
+            self.send_response(response.status)
+            self.send_header("Content-Type", response.content_type)
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Connection", "close")
+            for name, value in (response.headers or {}).items():
+                self.send_header(name, value)
+            self.end_headers()
+            try:
+                for chunk in response.stream:
+                    self.wfile.write(chunk)
+                    self.wfile.flush()
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+            finally:
+                close = getattr(response.stream, "close", None)
+                if close is not None:
+                    close()
+                self.close_connection = True
+            return
         encoded = response.body.encode("utf-8") if isinstance(response.body, str) else response.body
         self.send_response(response.status)
         self.send_header("Content-Type", response.content_type)

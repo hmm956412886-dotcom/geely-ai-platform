@@ -6,7 +6,7 @@ import ast
 import json
 from pathlib import Path
 import re
-from typing import Any, Callable
+from typing import Any, Callable, Iterator
 
 
 MAX_ATTACHMENTS = 5
@@ -19,6 +19,7 @@ SUPPORTED_SUFFIXES = {
     ".toml", ".ini", ".cfg", ".csv", ".log", ".asc",
 }
 WorkspaceAgent = Callable[[str, str, list[dict[str, str]], bool], str]
+WorkspaceStreamAgent = Callable[[str, str, list[dict[str, str]], bool], Iterator[dict[str, Any]]]
 
 
 def run_copilot(
@@ -28,28 +29,7 @@ def run_copilot(
     host_context: dict[str, Any] | None = None,
     host_snapshot: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    unknown = set(payload) - {
-        "question", "task", "attachments", "history", "conversation_id"
-    }
-    if unknown:
-        raise ValueError(f"unsupported copilot fields: {', '.join(sorted(unknown))}")
-    question = str(payload.get("question") or "").strip()
-    if not question:
-        raise ValueError("question is required")
-    if len(question) > 4000:
-        raise ValueError("question must be at most 4000 characters")
-    conversation_id = payload.get("conversation_id")
-    if conversation_id is not None and (
-        not isinstance(conversation_id, str)
-        or re.fullmatch(r"[A-Za-z0-9_-]{1,100}", conversation_id) is None
-    ):
-        raise ValueError("conversation_id must be a short identifier")
-    task = str(payload.get("task") or "chat").strip()
-    if task not in {"chat", "generate_test"}:
-        raise ValueError("task must be chat or generate_test")
-
-    attachments = _attachments(payload.get("attachments"))
-    history = _history(payload.get("history"))
+    question, task, attachments, history = _request_inputs(payload)
     snapshot_file = _snapshot_file(host_snapshot)
     content = workspace_agent(
         _prompt(question, task, attachments, host_context, host_snapshot),
@@ -79,6 +59,53 @@ def run_copilot(
     else:
         answer = content
     return {"answer": answer, "artifacts": artifacts, "citations": [], "warnings": []}
+
+
+def stream_copilot(
+    payload: dict[str, Any],
+    *,
+    workspace_agent: WorkspaceStreamAgent,
+    host_context: dict[str, Any] | None = None,
+    host_snapshot: dict[str, Any] | None = None,
+) -> Iterator[dict[str, Any]]:
+    """Validate one request, then forward OpenCode events as product events."""
+    question, task, attachments, history = _request_inputs(payload)
+    return workspace_agent(
+        _prompt(question, task, attachments, host_context, host_snapshot),
+        _system_prompt(task),
+        history,
+        not history,
+    )
+
+
+def _request_inputs(
+    payload: dict[str, Any],
+) -> tuple[str, str, list[dict[str, str]], list[dict[str, str]]]:
+    unknown = set(payload) - {
+        "question", "task", "attachments", "history", "conversation_id"
+    }
+    if unknown:
+        raise ValueError(f"unsupported copilot fields: {', '.join(sorted(unknown))}")
+    question = str(payload.get("question") or "").strip()
+    if not question:
+        raise ValueError("question is required")
+    if len(question) > 4000:
+        raise ValueError("question must be at most 4000 characters")
+    conversation_id = payload.get("conversation_id")
+    if conversation_id is not None and (
+        not isinstance(conversation_id, str)
+        or re.fullmatch(r"[A-Za-z0-9_-]{1,100}", conversation_id) is None
+    ):
+        raise ValueError("conversation_id must be a short identifier")
+    task = str(payload.get("task") or "chat").strip()
+    if task not in {"chat", "generate_test"}:
+        raise ValueError("task must be chat or generate_test")
+    return (
+        question,
+        task,
+        _attachments(payload.get("attachments")),
+        _history(payload.get("history")),
+    )
 
 
 def _system_prompt(task: str) -> str:

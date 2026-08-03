@@ -8,13 +8,13 @@ import os
 from pathlib import Path
 import re
 import sys
-from typing import Any, Mapping
+from typing import Any, Iterator, Mapping
 from urllib.parse import parse_qs, unquote, urlsplit
 from uuid import uuid4
 
 from .audit_log import append_audit_event, list_audit_events
 from .access_control import access_control_enabled, is_authorized, is_host_authorized
-from .copilot_service import run_copilot
+from .copilot_service import run_copilot, stream_copilot
 from .host_assets import register_host_asset, release_host_assets, resolve_host_asset
 from .host_context import (
     get_host_context,
@@ -46,6 +46,7 @@ class Response:
     body: str | bytes
     content_type: str = "application/json; charset=utf-8"
     headers: Mapping[str, str] | None = None
+    stream: Iterator[bytes] | None = None
 
 
 def handle_request(
@@ -291,6 +292,14 @@ def _handle_request(
             return json_response({"request_id": _request_id(), **result})
         except RuntimeError as exc:
             return error_response("model_unavailable", str(exc), status=502)
+    if method == "POST" and path == "/api/v1/copilot/stream":
+        try:
+            payload = _read_json(body)
+            if str(payload.get("task") or "chat") != "chat":
+                raise ValueError("streaming is currently available for chat tasks only")
+            return _workspace_copilot_stream(payload, host_session_id)
+        except RuntimeError as exc:
+            return error_response("model_unavailable", str(exc), status=502)
     if method == "POST" and path == "/api/v1/host/snapshot/analyze":
         try:
             payload = _read_json(body)
@@ -383,8 +392,11 @@ def _append_request_audit(
 ) -> None:
     if not path.startswith("/api/v1/") or path == "/api/v1/audit/events":
         return
-    assert isinstance(response.body, str)
-    payload = json.loads(response.body)
+    if response.stream is not None:
+        payload = {"request_id": (response.headers or {}).get("X-Request-ID")}
+    else:
+        assert isinstance(response.body, str)
+        payload = json.loads(response.body)
     append_audit_event(
         method=method,
         path=path,
@@ -526,6 +538,54 @@ def _workspace_copilot(
             history=history,
             new_session=new_session,
         ),
+    )
+
+
+def _workspace_copilot_stream(
+    payload: dict[str, Any], host_session_id: str | None
+) -> Response:
+    workspace = get_workspace_path(host_session_id)
+    if workspace is None:
+        raise RuntimeError("OpenCode workspace is not registered")
+    runtime = get_opencode_runtime()
+    runtime.start(workspace)
+    session_id = normalize_host_session_id(host_session_id)
+    conversation_id = payload.get("conversation_id") or "default"
+    request_id = _request_id()
+    agent_events = stream_copilot(
+        payload,
+        host_context=get_host_context(session_id),
+        host_snapshot=get_host_snapshot(session_id),
+        workspace_agent=lambda question, system, history, new_session: runtime.stream_prompt(
+            f"{session_id}:{conversation_id}",
+            question,
+            system=system,
+            history=history,
+            new_session=new_session,
+        ),
+    )
+
+    def events() -> Iterator[bytes]:
+        try:
+            for event in agent_events:
+                yield (f"data: {json.dumps(event, ensure_ascii=False)}\n\n").encode("utf-8")
+        except (RuntimeError, ValueError) as exc:
+            yield (
+                "data: "
+                + json.dumps({"type": "error", "message": str(exc)}, ensure_ascii=False)
+                + "\n\n"
+            ).encode("utf-8")
+
+    return Response(
+        200,
+        b"",
+        "text/event-stream; charset=utf-8",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "X-Request-ID": request_id,
+        },
+        stream=events(),
     )
 
 

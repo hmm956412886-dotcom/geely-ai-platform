@@ -15,7 +15,7 @@ import subprocess
 import sys
 from tempfile import TemporaryDirectory
 from threading import Lock
-from typing import Any, Callable, Mapping
+from typing import Any, Callable, Iterator, Mapping
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 from zipfile import ZipFile
@@ -290,6 +290,87 @@ class OpenCodeRuntime:
             self._rejected_sessions.discard(host_session_id)
         return "\n\n".join(text_parts)
 
+    def stream_prompt(
+        self,
+        host_session_id: str,
+        question: str,
+        *,
+        system: str,
+        history: list[dict[str, str]],
+        new_session: bool = False,
+    ) -> Iterator[dict[str, Any]]:
+        """Send an async OpenCode prompt and yield sanitized SSE events."""
+        if not self.health()["healthy"]:
+            raise RuntimeError(self._error or "OpenCode Runtime is unavailable")
+        if new_session:
+            self.release_session(host_session_id)
+        session_id, created = self._ensure_session(host_session_id)
+        prompt = question
+        if created and history:
+            prompt = (
+                "--- PREVIOUS CONVERSATION ---\n"
+                + "\n".join(
+                    f"{item['role'].upper()}: {item['content']}" for item in history
+                )
+                + "\n--- END PREVIOUS CONVERSATION ---\n\n"
+                + question
+            )
+        directory = quote(str(self._workspace or ""), safe="")
+        response = self._open_event_stream()
+        try:
+            self._request_value(
+                "POST",
+                f"/session/{quote(session_id, safe='')}/prompt_async?directory={directory}",
+                {
+                    "system": system,
+                    "parts": [{"type": "text", "text": prompt}],
+                    "tools": {
+                        "read": True,
+                        "glob": True,
+                        "grep": True,
+                        "lsp": True,
+                        "apply_patch": False,
+                        "write": False,
+                        "webfetch": False,
+                        "websearch": False,
+                        "task": False,
+                    },
+                },
+            )
+        except RuntimeError:
+            response.close()
+            if self._take_rejection(host_session_id):
+                yield {"type": "error", "message": "本次操作已拒绝，OpenCode 未执行该工具。"}
+                return
+            raise
+        yield {"type": "started"}
+        text_parts: list[str] = []
+        for event in self._read_events(response, session_id):
+            if event.get("type") == "text_delta":
+                text_parts.append(str(event.get("delta") or ""))
+            yield event
+            if event.get("type") == "error":
+                return
+        answer = "".join(text_parts).strip()
+        if answer:
+            yield {"type": "completed", "answer": answer}
+
+    def _ensure_session(self, host_session_id: str) -> tuple[str, bool]:
+        with self._session_lock:
+            session_id = self._sessions.get(host_session_id)
+            if session_id is not None:
+                return session_id, False
+            session = self._request_json(
+                "POST",
+                "/session",
+                {"title": f"CoreTest {host_session_id}", "permission": _session_permissions()},
+            )
+            session_id = str(session.get("id") or "")
+            if not session_id:
+                raise RuntimeError("OpenCode did not create a session")
+            self._sessions[host_session_id] = session_id
+            return session_id, True
+
     def pending_permissions(self, host_session_id: str) -> list[dict[str, Any]]:
         session_id = self._session_id(host_session_id)
         if session_id is None:
@@ -338,6 +419,94 @@ class OpenCodeRuntime:
                     }
                 )
         return steps[-20:]
+
+    def _open_event_stream(self) -> Any:
+        directory = quote(str(self._workspace or ""), safe="")
+        request = Request(
+            f"{self.config.base_url}/event?directory={directory}",
+            headers={
+                **self._authorization_headers(),
+                "Accept": "text/event-stream",
+            },
+        )
+        try:
+            return self._urlopen(request, timeout=None)
+        except OSError as exc:
+            raise RuntimeError("OpenCode event stream failed") from exc
+
+    def _read_events(
+        self, response: Any, session_id: str
+    ) -> Iterator[dict[str, Any]]:
+        try:
+            while True:
+                raw_line = response.readline()
+                if not raw_line:
+                    break
+                line = raw_line.decode("utf-8", errors="replace").strip()
+                if not line.startswith("data:"):
+                    continue
+                try:
+                    event = json.loads(line[5:].strip())
+                except json.JSONDecodeError:
+                    continue
+                public = self._public_event(event, session_id)
+                if public is not None:
+                    yield public
+                if public and public.get("type") in {"idle", "error"}:
+                    return
+        finally:
+            response.close()
+
+    def _public_event(
+        self, event: dict[str, Any], session_id: str
+    ) -> dict[str, Any] | None:
+        properties = event.get("properties")
+        if not isinstance(properties, dict) or properties.get("sessionID") != session_id:
+            return None
+        event_type = str(event.get("type") or "")
+        if event_type == "message.updated":
+            info = properties.get("info")
+            if isinstance(info, dict) and info.get("role") == "assistant" and info.get("parentID"):
+                with self._session_lock:
+                    for host_session_id, candidate in self._sessions.items():
+                        if candidate == session_id:
+                            self._last_user_messages[host_session_id] = str(info["parentID"])
+                            break
+            return None
+        if event_type == "message.part.delta":
+            if properties.get("field") not in {None, "text"}:
+                return None
+            delta = str(properties.get("delta") or "")
+            return {"type": "text_delta", "delta": delta} if delta else None
+        if event_type == "message.part.updated":
+            part = properties.get("part")
+            if not isinstance(part, dict) or part.get("type") != "tool":
+                return None
+            state = part.get("state") if isinstance(part.get("state"), dict) else {}
+            return {
+                "type": "tool",
+                "id": str(part.get("id") or part.get("callID") or ""),
+                "tool": str(part.get("tool") or "tool"),
+                "status": str(state.get("status") or "pending"),
+                "title": self._public_text(str(state.get("title") or part.get("tool") or "tool"), 300),
+                "output": self._public_text(str(state.get("output") or ""), 1000),
+            }
+        if event_type in {"permission.asked", "permission.asked.v2"}:
+            return {"type": "permission", "permission": self._public_permission(properties)}
+        if event_type == "session.idle":
+            return {"type": "idle"}
+        if event_type == "session.error":
+            error = properties.get("error")
+            if isinstance(error, dict):
+                data = error.get("data")
+                message = error.get("message") or (
+                    data.get("message") if isinstance(data, dict) else None
+                )
+            else:
+                message = str(error or "")
+            message = message or "OpenCode session failed"
+            return {"type": "error", "message": self._public_text(str(message), 500)}
+        return None
 
     def diff(self, host_session_id: str) -> list[dict[str, Any]]:
         session_id, message_id = self._session_and_message_id(host_session_id)

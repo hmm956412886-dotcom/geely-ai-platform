@@ -29,8 +29,8 @@
 
 ## 当前交付目标
 
-当前已完成 OpenCode Runtime、按需启动、可信工作区注册、模型配置映射、工具活动、权限审批及 Diff/revert；
-下一步接入 SSE 实时回答和命令输出。具体边界和验收标准以
+当前已完成 OpenCode Runtime、按需启动、可信工作区注册、模型配置映射、SSE 实时回答、工具活动、权限审批及 Diff/revert；
+下一步继续打磨侧栏工具、Diff、审批和窄屏呈现。具体边界和验收标准以
 [产品开发计划](docs/13-reusable-ai-plugin-development-plan.md) 为准。
 
 ## 配置模型

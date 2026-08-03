@@ -218,6 +218,19 @@
         }
       }
     },
+    "/api/v1/copilot/stream": {
+      "post": {
+        "summary": "Stream OpenCode chat text, tool activity, permissions, and completion events",
+        "parameters": [{"$ref": "#/components/parameters/HostSessionId"}],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/CopilotQueryRequest"}}}},
+        "responses": {
+          "200": {"description": "Server-sent OpenCode events", "content": {"text/event-stream": {"schema": {"type": "string"}}}},
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "502": {"$ref": "#/components/responses/ModelUnavailable"}
+        }
+      }
+    },
     "/api/v1/host/session": {"delete": {"summary": "Release host session", "x-required-token": "host", "security": [{"hostBearerAuth": []}], "parameters": [{"$ref": "#/components/parameters/HostSessionId"}], "responses": {"200": {"description": "Session released"}, "401": {"$ref": "#/components/responses/Unauthorized"}}}},
     "/api/v1/audit/events": {"get": {"summary": "Return recent audit events", "responses": {"200": {"description": "Recent events"}}}},
     "/api/v1/analyze": {"post": {"summary": "Parse test data and analyze it with OpenCode", "parameters": [{"$ref": "#/components/parameters/HostSessionId"}], "responses": {"200": {"description": "OpenCode analysis with parsed test facts"}, "400": {"$ref": "#/components/responses/BadRequest"}, "502": {"$ref": "#/components/responses/ModelUnavailable"}}}},

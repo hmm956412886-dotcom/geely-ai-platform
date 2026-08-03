@@ -62,6 +62,15 @@ export interface CopilotResponse extends AnalysisResponse {
   artifacts: CopilotArtifact[];
 }
 
+export type CopilotStreamEvent =
+  | { type: "started" }
+  | { type: "text_delta"; delta: string }
+  | { type: "tool"; id: string; tool: string; status: string; title: string; output: string }
+  | { type: "permission"; permission: AgentPermission }
+  | { type: "completed"; answer: string }
+  | { type: "idle" }
+  | { type: "error"; message: string };
+
 export interface AgentPermission {
   id: string;
   permission: string;

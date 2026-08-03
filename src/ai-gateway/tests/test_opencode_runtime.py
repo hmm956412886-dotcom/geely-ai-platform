@@ -36,6 +36,7 @@ class FakeProcess:
 class FakeResponse:
     def __init__(self, body: bytes) -> None:
         self.body = body
+        self.closed = False
 
     def __enter__(self):
         return self
@@ -46,11 +47,23 @@ class FakeResponse:
     def read(self) -> bytes:
         return self.body
 
+    def close(self) -> None:
+        self.closed = True
+
 
 class StreamingResponse(FakeResponse):
     def read(self, size=-1) -> bytes:
         chunk, self.body = self.body[:size], self.body[size:]
         return chunk
+
+    def readline(self) -> bytes:
+        if not self.body:
+            return b""
+        boundary = self.body.find(b"\n") + 1
+        if boundary == 0:
+            boundary = len(self.body)
+        line, self.body = self.body[:boundary], self.body[boundary:]
+        return line
 
 
 class FakeOpenCodeApi:
@@ -401,6 +414,99 @@ class OpenCodeRuntimeTests(unittest.TestCase):
         self.assertFalse(prompt_body["tools"]["apply_patch"])
         self.assertFalse(prompt_body["tools"]["write"])
         self.assertTrue(prompt_body["tools"]["read"])
+
+    def test_stream_prompt_subscribes_before_async_prompt_and_sanitizes_events(self) -> None:
+        process = FakeProcess()
+        requests = []
+
+        with TemporaryDirectory() as directory:
+            events = [
+                {"type": "server.connected", "properties": {}},
+                {
+                    "type": "message.updated",
+                    "properties": {
+                        "sessionID": "session-1",
+                        "info": {"role": "assistant", "parentID": "message-1"},
+                    },
+                },
+                {
+                    "type": "message.part.delta",
+                    "properties": {"sessionID": "session-1", "delta": "hello"},
+                },
+                {
+                    "type": "message.part.updated",
+                    "properties": {
+                        "sessionID": "session-1",
+                        "part": {
+                            "id": "part-1",
+                            "type": "tool",
+                            "tool": "read",
+                            "state": {
+                                "status": "completed",
+                                "title": str(Path(directory) / "sample.py"),
+                                "output": "loaded",
+                            },
+                        },
+                    },
+                },
+                {
+                    "type": "permission.asked",
+                    "properties": {
+                        "id": "per-1",
+                        "sessionID": "session-1",
+                        "permission": "bash",
+                        "patterns": ["python -m pytest"],
+                    },
+                },
+                {"type": "session.idle", "properties": {"sessionID": "session-1"}},
+            ]
+            event_body = "".join(
+                f"data: {json.dumps(event)}\n\n" for event in events
+            ).encode("utf-8")
+
+            def api(request, **_kwargs):
+                requests.append(request)
+                if request.full_url.endswith("/global/health"):
+                    return FakeResponse(b'{"healthy":true,"version":"1.18.10"}')
+                if request.full_url.endswith("/auth/coretest"):
+                    return FakeResponse(b"true")
+                if request.full_url.endswith("/session"):
+                    return FakeResponse(b'{"id":"session-1"}')
+                if "/event?directory=" in request.full_url:
+                    return StreamingResponse(event_body)
+                if "/prompt_async?directory=" in request.full_url:
+                    return FakeResponse(b"")
+                raise AssertionError(request.full_url)
+
+            runtime = OpenCodeRuntime(
+                model_config=ModelConfig(
+                    "https://api.example.com/v1", "secret", "demo-model"
+                ),
+                process_factory=lambda *_args, **_kwargs: process,
+                command_resolver=lambda _command: "C:/tools/opencode.exe",
+                urlopen=api,
+            )
+            runtime.start(directory)
+
+            streamed = list(
+                runtime.stream_prompt(
+                    "host-a", "inspect", system="read only", history=[]
+                )
+            )
+
+            self.assertEqual(streamed[0], {"type": "started"})
+            self.assertIn({"type": "text_delta", "delta": "hello"}, streamed)
+            tool = next(event for event in streamed if event["type"] == "tool")
+            self.assertEqual(tool["title"], ".\\sample.py")
+            self.assertNotIn(str(Path(directory).resolve()), json.dumps(streamed))
+            permission = next(event for event in streamed if event["type"] == "permission")
+            self.assertEqual(permission["permission"]["id"], "per-1")
+            self.assertEqual(streamed[-1], {"type": "completed", "answer": "hello"})
+
+        urls = [request.full_url for request in requests]
+        event_index = next(index for index, url in enumerate(urls) if "/event?" in url)
+        prompt_index = next(index for index, url in enumerate(urls) if "/prompt_async?" in url)
+        self.assertLess(event_index, prompt_index)
 
 
 if __name__ == "__main__":
