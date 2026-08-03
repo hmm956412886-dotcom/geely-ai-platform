@@ -28,6 +28,8 @@ OpenCode 的 MIT License 允许商业使用、修改和再分发，不要求 Gee
 - 已锁定 OpenCode `v1.18.10`、Commit 和根 MIT License。
 - Gateway 工作区和 Runtime 生命周期骨架已经实现。
 - OpenCode 尚未进入客户 ZIP；当前交付脚本会明确排除它。
+- Windows 源码联调在首次 AI 请求时下载锁定产物并缓存；正式离线包完成许可证审计后改为随包内置，
+  客户运行时不再联网下载。
 - 第三方 Notices/SBOM 尚未生成，因此当前只允许开发联调，不允许正式交付 Agent Runtime。
 
 这份合规门禁不阻塞 Agent 功能开发；在把 OpenCode 加入客户 ZIP 前完成即可。

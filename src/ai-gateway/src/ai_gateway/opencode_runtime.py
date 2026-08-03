@@ -72,14 +72,18 @@ class OpenCodeRuntime:
         config: OpenCodeConfig | None = None,
         model_config: ModelConfig | None = None,
         process_factory: Callable[..., Any] = subprocess.Popen,
-        command_resolver: Callable[[str], str | None] = lambda command: resolve_opencode_command(command),
+        command_resolver: Callable[[str], str | None] | None = None,
+        command_probe: Callable[[str], str | None] | None = None,
         urlopen: Callable[..., Any] = urlopen,
         password_factory: Callable[[], str] = lambda: secrets.token_urlsafe(24),
     ) -> None:
         self.config = config or load_opencode_config()
         self.model_config = model_config or load_model_config()
         self._process_factory = process_factory
-        self._command_resolver = command_resolver
+        self._command_resolver = command_resolver or resolve_opencode_command
+        self._command_probe = command_probe or (
+            command_resolver if command_resolver is not None else find_opencode_command
+        )
         self._urlopen = urlopen
         self._password = password_factory()
         self._process: Any | None = None
@@ -174,7 +178,7 @@ class OpenCodeRuntime:
     def status(self, *, check_health: bool = False) -> dict[str, Any]:
         health = self.health() if check_health else {"healthy": False, "version": None}
         return {
-            "installed": bool(self._command_resolver(self.config.command)),
+            "installed": bool(self._command_probe(self.config.command)),
             "running": self.running,
             "healthy": health["healthy"],
             "version": health["version"],
@@ -607,7 +611,7 @@ def _workspace_path(value: str | Path) -> Path:
     return workspace
 
 
-def resolve_opencode_command(command: str) -> str | None:
+def find_opencode_command(command: str) -> str | None:
     if command.lower() != "auto":
         candidate = Path(command).expanduser()
         if candidate.is_file():
@@ -626,7 +630,21 @@ def resolve_opencode_command(command: str) -> str | None:
         return installed
     if os.name != "nt":
         return None
+    local_app_data = os.getenv("LOCALAPPDATA")
+    cache_root = (
+        Path(local_app_data) / "HK-CoreTest" / "OpenCode"
+        if local_app_data
+        else Path.home() / ".cache" / "hk-coretest" / "opencode"
+    )
+    target = cache_root / OPENCODE_VERSION / "opencode.exe"
+    return str(target.resolve()) if target.is_file() else None
 
+
+def resolve_opencode_command(command: str) -> str | None:
+    if installed := find_opencode_command(command):
+        return installed
+    if command.lower() != "auto" or os.name != "nt":
+        return None
     local_app_data = os.getenv("LOCALAPPDATA")
     cache_root = (
         Path(local_app_data) / "HK-CoreTest" / "OpenCode"

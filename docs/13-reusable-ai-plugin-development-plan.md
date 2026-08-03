@@ -126,6 +126,7 @@ Host Snapshot 继续传递有上限的运行期事实：
 - 已增加 OpenCode Runtime 配置、进程启动、停止和健康检查模块。
 - 已增加可信 Host 工作区注册契约；校验目录真实存在并保存于服务端，不回传绝对路径。
 - OpenCode 仅绑定 `127.0.0.1`，由 Gateway 管理认证信息和生命周期。
+- 工程注册不启动 OpenCode；第一次 AI 请求按需启动一个进程，后续会话复用，退出 CoreTest 时关闭。
 - 已把现有 OpenAI-compatible 模型配置映射为 OpenCode Provider 配置。
 - Gateway 健康状态能区分“Gateway 可用”和“Agent Runtime 未安装/未启动/健康”。
 - 普通问答、附件、Snapshot、测试数据分析和 pytest 生成已切换为 OpenCode 单一路径。

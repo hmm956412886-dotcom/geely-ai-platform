@@ -234,7 +234,7 @@ def _handle_request(
             if previous_workspace is not None and previous_workspace != workspace_path:
                 runtime.release_sessions(normalize_host_session_id(host_session_id))
                 runtime.stop()
-            runtime_status = runtime.start(workspace_path)
+            runtime_status = runtime.status()
         except (OSError, RuntimeError, ValueError) as exc:
             runtime_status = runtime.status()
             runtime_status["error"] = str(exc)
@@ -508,9 +508,11 @@ def _mask_asset_source(result: dict[str, Any], asset_id: str | None) -> None:
 def _workspace_copilot(
     payload: dict[str, Any], host_session_id: str | None
 ) -> dict[str, Any]:
-    if get_workspace_path(host_session_id) is None:
+    workspace = get_workspace_path(host_session_id)
+    if workspace is None:
         raise RuntimeError("OpenCode workspace is not registered")
     runtime = get_opencode_runtime()
+    runtime.start(workspace)
     session_id = normalize_host_session_id(host_session_id)
     conversation_id = payload.get("conversation_id") or "default"
     return run_copilot(

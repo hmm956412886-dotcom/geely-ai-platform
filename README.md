@@ -20,13 +20,17 @@
 - AI Gateway Sidecar 生命周期、分级 Bearer Token、OpenAPI、Plugin Manifest 和审计 `request_id`。
 - OpenCode 使用客户配置的 OpenAI-compatible Provider 调用模型。
 
-当前权限模型为：工作区内读取允许；写文件和 Shell 命令暂时禁用，待侧栏权限审批 UI 完成后开放逐次审批；
-工作区外访问和 CAN、UDS、刷写、设备控制始终禁止。
+当前权限模型为：工作区内读取允许；写文件和 Shell 命令逐次审批；工作区外访问和 CAN、UDS、刷写、
+设备控制始终禁止。
+
+用户只需启动一次 CoreTest。CoreTest 内部常驻一个隐藏 Gateway；OpenCode 在第一次真正使用 AI 时按需启动，
+同一工程的后续对话复用该进程，退出 CoreTest 时先关闭 OpenCode 再关闭 Gateway。Windows 源码运行首次使用
+会下载并校验锁定版本，之后复用本机缓存；正式客户包应内置审核通过的同一二进制。
 
 ## 当前交付目标
 
-当前已完成 OpenCode Runtime、本地健康检查、可信工作区注册、模型配置映射和消息链路切换；下一步把工具调用、
-Diff、命令输出和权限请求接入现有右侧面板。具体边界和验收标准以
+当前已完成 OpenCode Runtime、按需启动、可信工作区注册、模型配置映射、工具活动、权限审批及 Diff/revert；
+下一步接入 SSE 实时回答和命令输出。具体边界和验收标准以
 [产品开发计划](docs/13-reusable-ai-plugin-development-plan.md) 为准。
 
 ## 配置模型

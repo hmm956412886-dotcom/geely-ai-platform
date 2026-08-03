@@ -478,7 +478,7 @@ class AppTests(unittest.TestCase):
         self.assertEqual(response.status, 403)
         self.assertEqual(json.loads(response.body)["error"]["code"], "host_forbidden")
 
-    def test_host_registers_private_workspace_and_starts_agent_runtime(self) -> None:
+    def test_host_registers_private_workspace_without_starting_agent_runtime(self) -> None:
         runtime = _FakeOpenCodeRuntime()
         with TemporaryDirectory() as directory, patch.dict(
             "os.environ",
@@ -508,7 +508,7 @@ class AppTests(unittest.TestCase):
         self.assertEqual(forbidden.status, 403)
         self.assertEqual(registered.status, 200)
         self.assertEqual(status.status, 200)
-        self.assertEqual(runtime.started_with, get_workspace_path("workspace-session"))
+        self.assertIsNone(runtime.started_with)
         self.assertNotIn(directory, registered.body)
         self.assertNotIn(directory, status.body)
         self.assertNotIn("runtime-secret", status.body)
@@ -559,6 +559,7 @@ class AppTests(unittest.TestCase):
 
         payload = json.loads(response.body)
         self.assertEqual(response.status, 200)
+        self.assertEqual(runtime.started_with, get_workspace_path("agent-chat"))
         self.assertEqual(payload["answer"], "来自工作区 Agent 的回答")
         self.assertEqual(len(runtime.prompts), 1)
         session_id, question, system, history, new_session = runtime.prompts[0]

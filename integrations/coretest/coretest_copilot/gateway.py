@@ -10,7 +10,7 @@ from typing import Any, Callable
 from urllib.parse import urlsplit
 from uuid import uuid4
 
-from PySide6.QtCore import QByteArray, QProcess, QProcessEnvironment, QTimer, QUrl
+from PySide6.QtCore import QByteArray, QEventLoop, QProcess, QProcessEnvironment, QTimer, QUrl
 from PySide6.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
 
 
@@ -115,11 +115,17 @@ class GatewayBridge:
 
     def release(self) -> None:
         if self.ready:
-            self.request("DELETE", "/api/v1/host/session", privileged=True)
+            reply = self.request("DELETE", "/api/v1/host/session", privileged=True)
+            if reply is not None and not reply.isFinished():
+                loop = QEventLoop()
+                reply.finished.connect(loop.quit)
+                QTimer.singleShot(1500, loop.quit)
+                loop.exec()
         self.stop_process()
 
     def stop_process(self) -> None:
         self._poll.stop()
+        self.ready = False
         if self.process.state() != QProcess.ProcessState.NotRunning:
             self.process.terminate()
             if not self.process.waitForFinished(1500):
@@ -133,7 +139,7 @@ class GatewayBridge:
         *,
         privileged: bool = False,
         success: Callable[[dict[str, Any]], None] | None = None,
-    ) -> None:
+    ) -> QNetworkReply:
         separator = "&" if "?" in path else "?"
         request = QNetworkRequest(QUrl(f"{self.base_url}{path}{separator}host_session_id={self.session_id}"))
         request.setHeader(QNetworkRequest.KnownHeaders.ContentTypeHeader, "application/json")
@@ -148,6 +154,7 @@ class GatewayBridge:
         else:
             reply = self.network.post(request, body)
         reply.finished.connect(lambda: self._finished(reply, success))
+        return reply
 
     def _check_health(self) -> None:
         self._attempts += 1

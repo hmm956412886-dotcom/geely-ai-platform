@@ -154,6 +154,21 @@ class GatewayConfigTests(unittest.TestCase):
         self.assertEqual(errors, ["snapshot exceeds size limit"])
         reply.deleteLater.assert_called_once_with()
 
+    def test_release_requests_runtime_cleanup_before_stopping_gateway(self) -> None:
+        bridge = GatewayBridge.__new__(GatewayBridge)
+        bridge.ready = True
+        reply = unittest.mock.Mock()
+        reply.isFinished.return_value = True
+        bridge.request = unittest.mock.Mock(return_value=reply)
+        bridge.stop_process = unittest.mock.Mock()
+
+        bridge.release()
+
+        bridge.request.assert_called_once_with(
+            "DELETE", "/api/v1/host/session", privileged=True
+        )
+        bridge.stop_process.assert_called_once_with()
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -12,6 +12,7 @@ from ai_gateway.opencode_runtime import (
     OpenCodeConfig,
     OpenCodeRuntime,
     _install_opencode,
+    find_opencode_command,
     load_opencode_config,
 )
 
@@ -101,6 +102,19 @@ class OpenCodeRuntimeTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "127.0.0.1"):
             load_opencode_config({"OPENCODE_HOST": "0.0.0.0"})
 
+    def test_command_probe_does_not_install_missing_auto_runtime(self) -> None:
+        with TemporaryDirectory() as directory, patch(
+            "ai_gateway.opencode_runtime.os.name", "nt"
+        ), patch(
+            "ai_gateway.opencode_runtime.sys.executable",
+            str(Path(directory) / "python.exe"),
+        ), patch(
+            "ai_gateway.opencode_runtime.shutil.which", return_value=None
+        ), patch.dict(
+            "os.environ", {"LOCALAPPDATA": directory}, clear=False
+        ):
+            self.assertIsNone(find_opencode_command("auto"))
+
     def test_start_uses_workspace_and_secret_free_provider_file(self) -> None:
         calls = []
         process = FakeProcess()
@@ -131,6 +145,8 @@ class OpenCodeRuntimeTests(unittest.TestCase):
                 clear=False,
             ):
                 status = runtime.start(Path(directory))
+            runtime.start(Path(directory))
+            self.assertEqual(len(calls), 1)
             args, kwargs = calls[0]
             config_path = Path(kwargs["env"]["OPENCODE_CONFIG"])
             config_text = config_path.read_text(encoding="utf-8")
