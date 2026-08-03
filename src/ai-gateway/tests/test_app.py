@@ -114,6 +114,31 @@ class AppTests(unittest.TestCase):
         self.assertIn("configured", payload["result"])
         self.assertNotIn("api_key", payload["result"])
 
+    def test_model_config_can_be_saved_and_reloads_runtime(self) -> None:
+        with TemporaryDirectory() as directory, patch.dict(
+            "os.environ",
+            {"AI_MODEL_CONFIG_FILE": str(Path(directory) / "ai-model.env")},
+            clear=True,
+        ), patch("ai_gateway.app.reset_opencode_runtime") as reset_runtime:
+            response = handle_request(
+                "POST",
+                "/api/v1/model/config",
+                json.dumps(
+                    {
+                        "base_url": "https://api.example.com/v1",
+                        "api_key": "secret",
+                        "model": "tool-model",
+                    }
+                ),
+            )
+
+        payload = json.loads(response.body)
+        self.assertEqual(response.status, 200)
+        self.assertEqual(payload["result"]["model"], "tool-model")
+        self.assertTrue(payload["result"]["api_key_configured"])
+        self.assertNotIn("secret", response.body)
+        reset_runtime.assert_called_once_with()
+
     def test_api_access_token_is_optional_and_protects_api_routes(self) -> None:
         with patch.dict("os.environ", {"AI_GATEWAY_ACCESS_TOKEN": "host-secret"}):
             missing = handle_request("GET", "/api/v1/model/config")
@@ -152,7 +177,7 @@ class AppTests(unittest.TestCase):
 
         self.assertEqual(response.status, 200)
         self.assertEqual(response.content_type, "text/html; charset=utf-8")
-        self.assertIn("Geely AI Copilot Shell", response.body)
+        self.assertIn("CoreTest Agent", response.body)
         self.assertNotIn("GEELY_TEST", response.body)
         self.assertNotIn("D:\\geely-ai-platform", response.body)
 
@@ -162,7 +187,7 @@ class AppTests(unittest.TestCase):
             assets = root / "frontend" / "copilot-shell" / "dist" / "assets"
             assets.mkdir(parents=True)
             (assets.parent / "index.html").write_text(
-                '<title>Geely AI Copilot Shell</title>'
+                '<title>CoreTest Agent</title>'
                 '<script src="/copilot-shell/assets/index-test.js"></script>'
                 '<link href="/copilot-shell/assets/index-test.css" rel="stylesheet">',
                 encoding="utf-8",
@@ -176,7 +201,7 @@ class AppTests(unittest.TestCase):
                 self.assertEqual(page.status, 200)
                 self.assertEqual(page.content_type, "text/html; charset=utf-8")
                 self.assertIsInstance(page.body, str)
-                self.assertIn("Geely AI Copilot Shell", page.body)
+                self.assertIn("CoreTest Agent", page.body)
                 script_path = re.search(r'src="(/copilot-shell/assets/[^"]+\.js)"', page.body)
                 style_path = re.search(r'href="(/copilot-shell/assets/[^"]+\.css)"', page.body)
                 self.assertIsNotNone(script_path)
@@ -201,7 +226,7 @@ class AppTests(unittest.TestCase):
         self.assertEqual(response.status, 200)
         self.assertEqual(response.content_type, "text/html; charset=utf-8")
         self.assertIn("Geely Test AI Workbench", response.body)
-        self.assertIn("Reusable Geely AI Copilot", response.body)
+        self.assertIn("CoreTest Agent", response.body)
         self.assertNotIn('src="/copilot-shell/', response.body)
         self.assertIn("function loadCopilot()", response.body)
         self.assertIn('window.addEventListener("hashchange", loadCopilot)', response.body)

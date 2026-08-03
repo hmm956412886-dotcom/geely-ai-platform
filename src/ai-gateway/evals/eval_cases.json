@@ -4,14 +4,14 @@
     "method": "GET",
     "path": "/copilot",
     "expect_status": 200,
-    "body_contains": "Geely AI Copilot"
+    "body_contains": "CoreTest Agent"
   },
   {
     "name": "copilot_shell_page",
     "method": "GET",
     "path": "/copilot-shell/",
     "expect_status": 200,
-    "body_contains": "Geely AI Copilot Shell"
+    "body_contains": "CoreTest Agent"
   },
   {
     "name": "showcase_page",

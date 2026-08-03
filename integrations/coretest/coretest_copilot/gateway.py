@@ -51,7 +51,7 @@ class GatewayBridge:
         gateway_src = _gateway_src()
         if gateway_executable is None and gateway_src is None:
             self._fail(
-                "当前源码不包含内置 AI Gateway，请重新拉取完整的 CoreTest Copilot 分支。"
+                "当前源码不包含内置 AI Gateway，请重新拉取完整的 CoreTest Agent 分支。"
             )
             return
         environment = QProcessEnvironment.systemEnvironment()
@@ -59,6 +59,7 @@ class GatewayBridge:
         for name, value in _load_env_values(env_path).items():
             if value and not environment.contains(name):
                 environment.insert(name, value)
+        environment.insert("AI_MODEL_CONFIG_FILE", str(env_path))
         self._access_token = environment.value("AI_GATEWAY_ACCESS_TOKEN").strip()
         self._host_token = environment.value("AI_GATEWAY_HOST_TOKEN").strip()
         environment.insert("PYTHONUNBUFFERED", "1")
@@ -255,6 +256,12 @@ def _load_env_values(path: Path) -> dict[str, str]:
 def _configuration_file(
     gateway_executable: Path | None, gateway_src: Path | None
 ) -> Path:
+    configured = os.getenv("AI_MODEL_CONFIG_FILE", "").strip()
+    if configured:
+        target = Path(configured).expanduser().resolve()
+        target.parent.mkdir(parents=True, exist_ok=True)
+        return target
+
     candidates = [Path.cwd() / "ai-model.env"]
     candidates.extend(parent / "ai-model.env" for parent in Path(__file__).resolve().parents)
     if gateway_executable is not None:
@@ -263,4 +270,12 @@ def _configuration_file(
     if gateway_src is not None:
         candidates.append(gateway_src.parent / "ai-model.env")
     candidates.extend(parent / ".env" for parent in Path(__file__).resolve().parents)
-    return next((path for path in candidates if path.is_file()), candidates[0])
+    existing = next((path for path in candidates if path.is_file()), None)
+    if existing is not None:
+        return existing
+
+    local_app_data = os.getenv("LOCALAPPDATA", "").strip()
+    config_root = Path(local_app_data) if local_app_data else Path.home() / ".hk-coretest"
+    target = config_root / "HK-CoreTest" / "ai-model.env"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    return target

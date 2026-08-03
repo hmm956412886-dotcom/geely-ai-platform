@@ -77,8 +77,9 @@ Notices；完整依赖许可证审计通过前不得把 OpenCode 放入交付 ZI
 | 能力 | 默认策略 |
 | --- | --- |
 | 工作区内搜索和读取 | `allow` |
-| 工作区内创建、编辑、应用补丁 | 当前 `deny`；权限 UI 完成后改为 `ask` |
-| Shell 命令 | 当前 `deny`；权限 UI 完成后改为 `ask` |
+| 工作区内修改（OpenCode 原生 `edit/apply_patch`） | `ask`，每次操作由侧栏确认 |
+| 直接 `write` | `deny`，防止绕过审批 |
+| Shell 命令 | `ask`，每次操作由侧栏确认 |
 | 工作区外文件访问 | `deny` |
 | 网络访问 | `ask` 或由客户部署策略关闭 |
 | CAN 发送、UDS、刷写、设备控制 | `deny`，不向 Agent 暴露 |
@@ -130,13 +131,18 @@ Host Snapshot 继续传递有上限的运行期事实：
 - 已把现有 OpenAI-compatible 模型配置映射为 OpenCode Provider 配置。
 - Gateway 健康状态能区分“Gateway 可用”和“Agent Runtime 未安装/未启动/健康”。
 - 普通问答、附件、Snapshot、测试数据分析和 pytest 生成已切换为 OpenCode 单一路径。
+- UI 中的测试请求走普通 Agent 会话：先理解工程，再请求批准写入测试并运行最小相关测试；旧 `generate_test` API 仅保留兼容。
+- 工程任务信息不足时，系统指令要求先读取 `AGENTS.md`、README 和项目清单，并优先复用已有 SDK、CLI、脚本和测试命令。
 - `glob/grep/read/LSP` 可直接使用；`edit` 和 Shell 每次操作都需要用户批准。
-- 已禁用会绕过审批的 `apply_patch/write`，工作区外访问和硬件控制保持拒绝。
+- 已禁用会绕过审批的直接 `write`；OpenCode 会按模型选择原生 `edit` 或 `apply_patch`，两者统一触发 `edit` 审批。工作区外访问和硬件控制保持拒绝。
 - 侧栏会显示真实工具活动，以及最近一轮 Agent 产生的文件 Diff。
+- 侧栏底部固定提供模型切换、历史会话和模型/API 配置入口；历史按宿主会话保存在本机，API Key 不回显，配置更新后由 Gateway 重置 OpenCode Runtime。
 - 最近一轮修改可通过 OpenCode 原生 message revert 撤销，不使用工作区级 Git reset。
 - 已订阅 OpenCode SSE 事件；回答文本、工具状态和权限请求实时进入侧栏，阻塞查询接口继续保留给非聊天分析入口。
 - OpenCode `1.18.10` 的原生 Diff/revert 只在有 Git 基线的工作区产生快照；非 Git
   工作区仍可执行获批编辑，侧栏会明确提示该轮无法自动撤销。
+- 已用真实模型在隔离验收工作区完成闭环：读取 `AGENTS.md/README`、调用现有 CLI、原生编辑审批、Shell 审批、创建测试并运行通过；
+  同时验证拒绝编辑后不会产生文件。
 
 验收标准：
 
@@ -149,11 +155,11 @@ Host Snapshot 继续传递有上限的运行期事实：
 
 ## 8. 后续交付顺序
 
-1. **侧栏呈现**：继续打磨工具调用、文件 Diff、权限确认和窄屏布局。
-2. **宿主上下文**：把当前选择和 Snapshot 作为会话上下文注入，不触发重复模型回答。
-3. **项目说明**：为 CoreTest 工作区提供最小 `AGENTS.md`，记录安全边界、测试命令和现成 SDK/CLI。
-4. **真实验收**：完成“分析任意工程文件”“生成并运行获批测试”“调用项目已有 SDK/CLI”三个闭环。
-5. **交付打包**：固定 OpenCode 版本，纳入 Windows 交付包，验证端口冲突、退出、升级和离线配置。
+1. **侧栏呈现（已完成）**：工具调用、文件 Diff、权限确认、模型/API、历史和窄屏布局已接入。
+2. **宿主上下文（已完成）**：当前选择和 Snapshot 作为会话参考数据同步，不触发重复模型回答。
+3. **项目说明（进行中）**：Agent 已优先查找工作区 `AGENTS.md`、README、SDK/CLI 和测试命令；真实 CoreTest 工程仍需提供项目特定说明。
+4. **通用 Agent 闭环（已完成）**：真实模型已完成“发现并调用项目 CLI、审批生成测试、审批运行测试、拒绝不写入”的隔离验收；后续只需在真实客户工程复验项目特定说明和 SDK。
+5. **交付打包（已完成基础闭环）**：固定 OpenCode 版本和 ZIP/EXE 哈希，生成 SBOM/Notices 并纳入 Windows 源码与交付包；仍需在干净客户机复验升级和离线配置。
 6. **交付验收**：验证所有 AI 入口均只走 OpenCode，确定性汽车数据代码只提供事实。
 
 多 Agent、RAG、飞书知识、企业 SSO、GUI 点击模拟和硬件自动控制不进入当前开发顺序。

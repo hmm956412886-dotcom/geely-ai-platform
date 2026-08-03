@@ -147,6 +147,31 @@
           "conversation_id": {"type": "string", "minLength": 1, "maxLength": 100, "pattern": "^[A-Za-z0-9_-]+$"}
         }
       },
+      "ModelConfig": {
+        "type": "object",
+        "required": ["provider", "configured", "base_url", "model", "available_models", "api_key_configured", "timeout_seconds"],
+        "additionalProperties": false,
+        "properties": {
+          "provider": {"type": "string"},
+          "configured": {"type": "boolean"},
+          "base_url": {"type": "string", "nullable": true},
+          "model": {"type": "string", "nullable": true},
+          "available_models": {"type": "array", "maxItems": 20, "items": {"type": "string"}},
+          "api_key_configured": {"type": "boolean"},
+          "timeout_seconds": {"type": "number", "minimum": 1}
+        }
+      },
+      "ModelConfigUpdate": {
+        "type": "object",
+        "minProperties": 1,
+        "maxProperties": 3,
+        "additionalProperties": false,
+        "properties": {
+          "base_url": {"type": "string", "maxLength": 2048},
+          "api_key": {"type": "string", "maxLength": 4096, "writeOnly": true},
+          "model": {"type": "string", "maxLength": 200}
+        }
+      },
       "AgentFileDiff": {
         "type": "object",
         "required": ["path", "status", "additions", "deletions", "patch", "truncated"],
@@ -203,7 +228,7 @@
     "/copilot": {"get": {"summary": "Embeddable Copilot side panel", "security": [], "responses": {"200": {"description": "Copilot HTML"}}}},
     "/copilot-shell/": {"get": {"summary": "Embeddable Copilot frontend", "security": [], "responses": {"200": {"description": "Copilot HTML"}}}},
     "/plugin-manifest.json": {"get": {"summary": "Host integration manifest", "security": [], "responses": {"200": {"description": "Plugin manifest"}}}},
-    "/api/v1/model/config": {"get": {"summary": "Return public model runtime config", "responses": {"200": {"description": "Model config without API key"}}}},
+    "/api/v1/model/config": {"get": {"summary": "Return public model runtime config", "responses": {"200": {"description": "Model config without API key", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ModelConfig"}}}}}}, "post": {"summary": "Update local model runtime config without returning the API key", "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ModelConfigUpdate"}}}}, "responses": {"200": {"description": "Updated public model config", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ModelConfig"}}}}, "400": {"$ref": "#/components/responses/BadRequest"}}}},
     "/api/v1/agent/status": {"get": {"summary": "Return browser-safe workspace and OpenCode Runtime status", "parameters": [{"$ref": "#/components/parameters/HostSessionId"}], "responses": {"200": {"description": "Runtime status without paths, passwords, or API keys"}}}},
     "/api/v1/agent/permissions": {"post": {"summary": "Return pending OpenCode permissions for one conversation", "parameters": [{"$ref": "#/components/parameters/HostSessionId"}], "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AgentConversationRequest"}}}}, "responses": {"200": {"description": "Browser-safe pending permission requests"}, "400": {"$ref": "#/components/responses/BadRequest"}}}},
     "/api/v1/agent/activity": {"post": {"summary": "Return browser-safe OpenCode tool activity for one conversation", "parameters": [{"$ref": "#/components/parameters/HostSessionId"}], "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AgentConversationRequest"}}}}, "responses": {"200": {"description": "Recent tool activity without absolute workspace paths"}, "400": {"$ref": "#/components/responses/BadRequest"}}}},

@@ -1,7 +1,7 @@
 {
   "id": "geely-ai-gateway",
   "version": "0.1.0",
-  "display_name": "Geely AI Assistant",
+  "display_name": "CoreTest Agent",
   "integration_modes": ["webview", "http-api", "cli-launch"],
   "webview": {
     "entry": "/copilot-shell/",
@@ -28,6 +28,8 @@
     "operations": [
       {"operation_id": "query_copilot", "method": "POST", "path": "/api/v1/copilot/query", "side_effect": "read_only", "requires_confirmation": false},
       {"operation_id": "stream_copilot", "method": "POST", "path": "/api/v1/copilot/stream", "side_effect": "read_only", "requires_confirmation": false},
+      {"operation_id": "get_model_config", "method": "GET", "path": "/api/v1/model/config", "side_effect": "read_only", "requires_confirmation": false},
+      {"operation_id": "update_model_config", "method": "POST", "path": "/api/v1/model/config", "side_effect": "local_secret_config", "requires_confirmation": true},
       {"operation_id": "get_host_context", "method": "GET", "path": "/api/v1/host/context", "side_effect": "read_only", "requires_confirmation": false},
       {"operation_id": "update_host_context", "method": "POST", "path": "/api/v1/host/context", "side_effect": "local_state", "requires_confirmation": false},
       {"operation_id": "register_host_asset", "method": "POST", "path": "/api/v1/host/assets", "side_effect": "local_state", "requires_confirmation": false},

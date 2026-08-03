@@ -12,8 +12,10 @@ from ai_gateway.opencode_runtime import (
     OpenCodeConfig,
     OpenCodeRuntime,
     _install_opencode,
+    _verify_bundled_opencode,
     find_opencode_command,
     load_opencode_config,
+    resolve_opencode_command,
 )
 
 
@@ -128,6 +130,24 @@ class OpenCodeRuntimeTests(unittest.TestCase):
         ):
             self.assertIsNone(find_opencode_command("auto"))
 
+    def test_missing_runtime_does_not_download_without_developer_opt_in(self) -> None:
+        with patch(
+            "ai_gateway.opencode_runtime.find_opencode_command", return_value=None
+        ), patch(
+            "ai_gateway.opencode_runtime._install_opencode"
+        ) as install, patch.dict(
+            "os.environ", {"OPENCODE_ALLOW_DOWNLOAD": ""}, clear=False
+        ):
+            self.assertIsNone(resolve_opencode_command("auto"))
+        install.assert_not_called()
+
+    def test_bundled_runtime_rejects_an_unlocked_executable(self) -> None:
+        with TemporaryDirectory() as directory:
+            executable = Path(directory) / "opencode.exe"
+            executable.write_bytes(b"tampered")
+            with self.assertRaisesRegex(RuntimeError, "SHA-256"):
+                _verify_bundled_opencode(executable)
+
     def test_start_uses_workspace_and_secret_free_provider_file(self) -> None:
         calls = []
         process = FakeProcess()
@@ -191,7 +211,7 @@ class OpenCodeRuntimeTests(unittest.TestCase):
             self.assertNotIn("apiKey", provider["provider"]["coretest"]["options"])
             self.assertEqual(provider["model"], "coretest/demo-model")
             self.assertEqual(provider["permission"]["edit"], "ask")
-            self.assertEqual(provider["permission"]["apply_patch"], "deny")
+            self.assertEqual(provider["permission"]["apply_patch"], "allow")
             self.assertEqual(provider["permission"]["write"], "deny")
             self.assertEqual(provider["permission"]["external_directory"], "deny")
             self.assertTrue(status["running"])
@@ -248,10 +268,15 @@ class OpenCodeRuntimeTests(unittest.TestCase):
     def test_prompt_creates_and_reuses_read_only_session(self) -> None:
         process = FakeProcess()
         requests = []
+        health_attempts = 0
 
         def api(request, **_kwargs):
+            nonlocal health_attempts
             requests.append(request)
             if request.full_url.endswith("/global/health"):
+                health_attempts += 1
+                if health_attempts == 1:
+                    raise OSError("OpenCode is still starting")
                 return FakeResponse(b'{"healthy":true,"version":"1.18.10"}')
             if request.full_url.endswith("/auth/coretest"):
                 return FakeResponse(b"true")
@@ -274,7 +299,10 @@ class OpenCodeRuntimeTests(unittest.TestCase):
                                         "tool": "read",
                                         "state": {
                                             "status": "completed",
-                                            "title": str(Path(directory) / "sample.py"),
+                                            "title": (
+                                                Path(directory).resolve().as_posix().split(":/", 1)[-1]
+                                                + "/sample.py"
+                                            ),
                                             "output": "loaded",
                                         },
                                     }
@@ -284,10 +312,16 @@ class OpenCodeRuntimeTests(unittest.TestCase):
                     ).encode("utf-8")
                 )
             if "/permission?directory=" in request.full_url:
-                return FakeResponse(
-                    b'[{"id":"per-1","sessionID":"session-1",'
-                    b'"permission":"bash","patterns":["python -m pytest"]}]'
-                )
+                return FakeResponse(json.dumps([{
+                    "id": "per-1",
+                    "sessionID": "session-1",
+                    "permission": "bash",
+                    "patterns": [
+                        f"{Path(directory).resolve().as_posix()}/tests/test_sample.py",
+                        "../outside.txt",
+                        "python -m pytest",
+                    ],
+                }]).encode("utf-8"))
             if "/permission/per-1/reply?directory=" in request.full_url:
                 return FakeResponse(b"true")
             if "/session/session-1/abort?directory=" in request.full_url:
@@ -355,7 +389,11 @@ class OpenCodeRuntimeTests(unittest.TestCase):
                     {
                         "id": "per-1",
                         "permission": "bash",
-                        "resources": ["python -m pytest"],
+                        "resources": [
+                            "tests/test_sample.py",
+                            "[工作区外路径已隐藏]",
+                            "python -m pytest",
+                        ],
                     }
                 ],
             )
@@ -363,7 +401,7 @@ class OpenCodeRuntimeTests(unittest.TestCase):
             self.assertTrue(runtime.abort("host-a"))
             activity = runtime.activity("host-a")
             self.assertEqual(activity[0]["tool"], "read")
-            self.assertEqual(activity[0]["title"], ".\\sample.py")
+            self.assertEqual(activity[0]["title"], "./sample.py")
             self.assertNotIn(str(Path(directory).resolve()), json.dumps(activity))
             diff = runtime.diff("host-a")
             self.assertTrue(diff["revert_available"])
@@ -394,6 +432,8 @@ class OpenCodeRuntimeTests(unittest.TestCase):
             )
             runtime.release_session("host-a")
 
+        self.assertGreaterEqual(health_attempts, 2)
+
         session_creates = [
             request
             for request in requests
@@ -406,8 +446,11 @@ class OpenCodeRuntimeTests(unittest.TestCase):
             for item in session_body["permission"]
         }
         self.assertEqual(permissions["read"], "allow")
+        self.assertEqual(permissions["apply_patch"], "allow")
         self.assertEqual(permissions["edit"], "ask")
         self.assertEqual(permissions["bash"], "ask")
+        self.assertEqual(permissions["write"], "deny")
+        self.assertEqual(permissions["task"], "deny")
         self.assertEqual(permissions["external_directory"], "deny")
         prompts = [
             request
@@ -418,11 +461,7 @@ class OpenCodeRuntimeTests(unittest.TestCase):
         prompt_body = json.loads(prompts[0].data.decode("utf-8"))
         self.assertEqual(prompt_body["system"], "read only")
         self.assertEqual(prompt_body["parts"], [{"type": "text", "text": "inspect the project"}])
-        self.assertNotIn("bash", prompt_body["tools"])
-        self.assertNotIn("edit", prompt_body["tools"])
-        self.assertFalse(prompt_body["tools"]["apply_patch"])
-        self.assertFalse(prompt_body["tools"]["write"])
-        self.assertTrue(prompt_body["tools"]["read"])
+        self.assertNotIn("tools", prompt_body)
 
     def test_non_git_edit_is_reported_as_not_revertible(self) -> None:
         process = FakeProcess()
@@ -567,6 +606,10 @@ class OpenCodeRuntimeTests(unittest.TestCase):
                     return StreamingResponse(event_body)
                 if "/prompt_async?directory=" in request.full_url:
                     return FakeResponse(b"")
+                if "/permission?directory=" in request.full_url:
+                    raise OSError("OpenCode cannot list an edit permission")
+                if "/permission/per-1/reply?directory=" in request.full_url:
+                    return FakeResponse(b"true")
                 raise AssertionError(request.full_url)
 
             runtime = OpenCodeRuntime(
@@ -588,11 +631,14 @@ class OpenCodeRuntimeTests(unittest.TestCase):
             self.assertEqual(streamed[0], {"type": "started"})
             self.assertIn({"type": "text_delta", "delta": "hello"}, streamed)
             tool = next(event for event in streamed if event["type"] == "tool")
-            self.assertEqual(tool["title"], ".\\sample.py")
+            self.assertEqual(tool["title"], "./sample.py")
             self.assertNotIn(str(Path(directory).resolve()), json.dumps(streamed))
             permission = next(event for event in streamed if event["type"] == "permission")
             self.assertEqual(permission["permission"]["id"], "per-1")
             self.assertEqual(streamed[-1], {"type": "completed", "answer": "hello"})
+            self.assertEqual(runtime.pending_permissions("host-a"), [permission["permission"]])
+            runtime.reply_permission("host-a", "per-1", "once")
+            self.assertEqual(runtime.pending_permissions("host-a"), [])
 
         urls = [request.full_url for request in requests]
         event_index = next(index for index, url in enumerate(urls) if "/event?" in url)

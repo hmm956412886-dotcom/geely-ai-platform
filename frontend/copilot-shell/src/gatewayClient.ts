@@ -10,6 +10,7 @@ import type {
   GatewayErrorBody,
   HostContext,
   InsightsResponse,
+  ModelConfig,
 } from "./types";
 
 const querySessionId = new URLSearchParams(window.location.search).get("host_session_id");
@@ -97,6 +98,25 @@ async function postEventStream(
 }
 
 export const gatewayClient = {
+  async getModelConfig(): Promise<ModelConfig> {
+    const payload = await requestJson<{ result: ModelConfig }>(
+      sessionPath("/api/v1/model/config"),
+    );
+    return payload.result;
+  },
+
+  async updateModelConfig(update: {
+    base_url?: string;
+    api_key?: string;
+    model?: string;
+  }): Promise<ModelConfig> {
+    const payload = await postJson<{ result: ModelConfig }>(
+      sessionPath("/api/v1/model/config"),
+      update,
+    );
+    return payload.result;
+  },
+
   async getHostContext(): Promise<HostContext> {
     const payload = await requestJson<{ result: HostContext }>(sessionPath("/api/v1/host/context"));
     return payload.result;

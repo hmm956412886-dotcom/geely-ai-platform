@@ -47,6 +47,16 @@ export interface CopilotAttachment {
   size: number;
 }
 
+export interface ModelConfig {
+  provider: string;
+  configured: boolean;
+  base_url: string | null;
+  model: string | null;
+  available_models: string[];
+  api_key_configured: boolean;
+  timeout_seconds: number;
+}
+
 export interface CopilotHistoryMessage {
   role: "user" | "assistant";
   content: string;

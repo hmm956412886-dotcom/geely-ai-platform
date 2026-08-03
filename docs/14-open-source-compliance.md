@@ -26,10 +26,10 @@ OpenCode 的 MIT License 允许商业使用、修改和再分发，不要求 Gee
 ## 当前状态
 
 - 已锁定 OpenCode `v1.18.10`、Commit 和根 MIT License。
-- Gateway 工作区和 Runtime 生命周期骨架已经实现。
-- OpenCode 尚未进入客户 ZIP；当前交付脚本会明确排除它。
-- Windows 源码联调在首次 AI 请求时下载锁定产物并缓存；正式离线包完成许可证审计后改为随包内置，
-  客户运行时不再联网下载。
-- 第三方 Notices/SBOM 尚未生成，因此当前只允许开发联调，不允许正式交付 Agent Runtime。
+- 已锁定官方 ZIP 和解压后 `opencode.exe` 的大小与 SHA-256。
+- 已按固定 Commit 的 `packages/opencode` 生产依赖闭包生成 CycloneDX 1.6 SBOM，并保留 npm 元数据缺失项的许可证证据。
+- 已生成 OpenCode MIT License 和第三方 Notices；自动门禁拒绝 `UNKNOWN`、GPL、AGPL、SSPL 和 BUSL。
+- 极狐完整 CoreTest 仓库使用 Git LFS 携带校验后的官方 EXE；客户运行时不联网下载 Runtime。
+- Gateway 工作区、Runtime 生命周期和 CoreTest 后台自动启动已经实现。
 
-这份合规门禁不阻塞 Agent 功能开发；在把 OpenCode 加入客户 ZIP 前完成即可。
+SBOM 与 Notices 是工程交付门禁，不替代客户或法务部门的最终许可证审批。OpenCode 版本升级时必须重新生成并审查全部材料。

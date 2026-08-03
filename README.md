@@ -10,8 +10,8 @@
 
 ## 当前产品能力
 
-- CoreTest 原生右侧 Copilot，可停靠、显示、隐藏和调整宽度。
-- 普通问答、附件分析、当前对象分析和 pytest 生成统一由 OpenCode 完成。
+- CoreTest 原生右侧 Agent，可显示、隐藏、移动停靠位置和调整宽度。
+- 普通问答、附件分析、当前对象分析和测试工作统一由 OpenCode 完成。
 - OpenCode Sidecar 可在唯一注册工作区内自行搜索和读取工程，无需逐个上传文件。
 - 当前项目、页面、DBC 节点/帧、Trace 帧和诊断 ECU 自动同步到独立宿主会话。
 - 在工程树选中 PDX 后，使用开源 `odxtools` 解析 ECU、诊断层、服务和 CAN 通信参数并直接分析。
@@ -24,13 +24,16 @@
 设备控制始终禁止。
 
 用户只需启动一次 CoreTest。CoreTest 内部常驻一个隐藏 Gateway；OpenCode 在第一次真正使用 AI 时按需启动，
-同一工程的后续对话复用该进程，退出 CoreTest 时先关闭 OpenCode 再关闭 Gateway。Windows 源码运行首次使用
-会下载并校验锁定版本，之后复用本机缓存；正式客户包应内置审核通过的同一二进制。
+同一工程的后续对话复用该进程，退出 CoreTest 时先关闭 OpenCode 再关闭 Gateway。极狐完整 CoreTest 仓库和正式客户包
+内置经过 SHA-256 校验的锁定版 OpenCode，运行时不会再下载；用户只需在侧栏配置模型 API。
 
 ## 当前交付目标
 
-当前已完成 OpenCode Runtime、按需启动、可信工作区注册、模型配置映射、SSE 实时回答、工具活动、权限审批及 Diff/revert；
-侧栏会根据 OpenCode 的真实快照能力启用撤销，并明确提示非 Git 工程的修改无法自动撤销。下一步继续打磨窄屏呈现和真实工程闭环。具体边界和验收标准以
+当前已完成 OpenCode Runtime、离线内置、按需启动、可信工作区注册、模型配置映射、SSE 实时回答、工具活动、权限审批及 Diff/revert；
+侧栏会根据 OpenCode 的真实快照能力启用撤销，并明确提示非 Git 工程的修改无法自动撤销。测试请求已改为
+Agent 在审批后写入工作区并运行最小相关测试，不再只是返回代码供下载。真实模型验收已验证 Agent 能读取项目说明、调用现有 CLI、
+通过原生编辑审批创建测试并在 Shell 审批后运行测试。正式交付已锁定 OpenCode 版本、ZIP/EXE 哈希并生成 CycloneDX SBOM、
+MIT License 和第三方 Notices；下一步是补齐真实客户工程说明和客户侧验收。具体边界和验收标准以
 [产品开发计划](docs/13-reusable-ai-plugin-development-plan.md) 为准。
 
 ## 配置模型
@@ -54,7 +57,7 @@ AI 接口返回明确的 Agent Runtime 错误；测试数据摘要、比较等�
 powershell -NoProfile -ExecutionPolicy Bypass -File .\integrations\coretest\install.ps1
 ```
 
-随后从客户仓库启动 CoreTest，连接器会自动启动本地 Gateway 并显示右侧 Copilot。只看 Web 产品：
+随后从客户仓库启动 CoreTest，连接器会自动启动本地 Gateway 并显示右侧 CoreTest Agent。只看 Web 产品：
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-ai-gateway.ps1

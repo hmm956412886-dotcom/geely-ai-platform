@@ -1,7 +1,8 @@
 param(
     [string]$CoreTestRoot = "$PSScriptRoot\..\customer-data\hk-coretest-ai",
     [string]$Python = "python",
-    [string]$Pnpm = "pnpm"
+    [string]$Pnpm = "pnpm",
+    [string]$OpenCodeExecutable = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -12,11 +13,6 @@ $sidecarRoot = Join-Path $repoRoot "dist\geely-ai-gateway"
 $envExample = Join-Path $repoRoot "config\runtime.env.example"
 $coreTestScripts = Join-Path $coreTestRoot "resource\scripts"
 
-Write-Warning (
-    "OpenCode Agent Runtime is intentionally excluded. " +
-    "Do not add it until docs/14-open-source-compliance.md is satisfied."
-)
-
 Push-Location $frontendRoot
 try {
     & $Pnpm build
@@ -26,8 +22,13 @@ finally {
     Pop-Location
 }
 
-& (Join-Path $repoRoot "integrations\coretest\install.ps1") -CoreTestRoot $coreTestRoot
-& (Join-Path $PSScriptRoot "build-ai-gateway.ps1") -Python $Python
+& (Join-Path $repoRoot "integrations\coretest\install.ps1") `
+    -CoreTestRoot $coreTestRoot `
+    -OpenCodeExecutable $OpenCodeExecutable
+$embeddedOpenCode = Join-Path $coreTestRoot "app\coretest_copilot\runtime\src\ai_gateway\bin\opencode.exe"
+& (Join-Path $PSScriptRoot "build-ai-gateway.ps1") `
+    -Python $Python `
+    -OpenCodeExecutable $embeddedOpenCode
 
 if (-not (Test-Path -LiteralPath $coreTestScripts)) {
     New-Item -ItemType Directory -Path $coreTestScripts | Out-Null
@@ -82,4 +83,4 @@ finally {
     $archive.Dispose()
 }
 
-Write-Output "CoreTest Copilot delivery built: $($deliveryZip.FullName)"
+Write-Output "CoreTest Agent delivery built: $($deliveryZip.FullName)"

@@ -7,32 +7,25 @@ import {
   type CompleteAttachment,
   type ThreadMessageLike,
 } from "@assistant-ui/react";
-import { makeMarkdownText, Thread } from "@assistant-ui/react-ui";
 import {
   Button,
+  Combobox,
   DrawerBody,
   DrawerHeader,
   DrawerHeaderTitle,
+  Field,
   FluentProvider,
+  Input,
+  Option,
   OverlayDrawer,
-  Spinner,
   webLightTheme,
 } from "@fluentui/react-components";
 import {
   Add20Regular,
-  ArrowDownload20Regular,
-  ArrowSync20Regular,
-  ArrowUndo20Regular,
   CheckmarkCircle20Regular,
-  Code20Regular,
-  ChevronRight16Regular,
-  Copy20Regular,
   Dismiss24Regular,
-  DocumentData20Regular,
-  History20Regular,
-  ShieldLock20Regular,
-  Warning16Regular,
 } from "@fluentui/react-icons";
+import { AgentThread } from "./AgentThread";
 import { GatewayRequestError, gatewayClient, hostSessionId } from "./gatewayClient";
 import type {
   AgentActivity,
@@ -44,6 +37,7 @@ import type {
   CopilotResponse,
   HostContext,
   HostContextMessage,
+  ModelConfig,
 } from "./types";
 
 interface ChatMessage {
@@ -74,7 +68,6 @@ const emptyDiffResult: AgentDiffResult = {
 };
 
 const parentOrigin = resolveParentOrigin();
-const MarkdownText = makeMarkdownText();
 const attachmentAccept = [
   ".py", ".json", ".yaml", ".yml", ".xml", ".txt", ".dbc", ".md",
   ".toml", ".ini", ".cfg", ".csv", ".log", ".asc",
@@ -82,6 +75,18 @@ const attachmentAccept = [
 const maxAttachments = 5;
 const maxFileBytes = 256 * 1024;
 const maxTotalBytes = 512 * 1024;
+const agentLightTheme = {
+  ...webLightTheme,
+  colorBrandBackground: "#0b6f65",
+  colorBrandBackgroundHover: "#085b53",
+  colorBrandBackgroundPressed: "#064a44",
+  colorBrandForeground1: "#0b6f65",
+  colorBrandForegroundLink: "#096b9e",
+  colorBrandStroke1: "#0b6f65",
+  colorCompoundBrandForeground1: "#0b6f65",
+  colorCompoundBrandStroke: "#0b6f65",
+  colorNeutralStrokeFocus2: "#0b6f65",
+};
 
 const emptyContext: HostContext = {
   host_session_id: hostSessionId,
@@ -111,6 +116,29 @@ function createConversation(projectKey: string): Conversation {
     artifacts: [],
     updatedAt: Date.now(),
   };
+}
+
+function loadConversations(): Conversation[] {
+  try {
+    const raw = window.localStorage.getItem(`geely-ai.history.${hostSessionId}`);
+    const parsed = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((item): item is Conversation => Boolean(
+        item && typeof item.id === "string" && typeof item.projectKey === "string"
+        && typeof item.title === "string" && Array.isArray(item.messages)
+        && Array.isArray(item.artifacts) && typeof item.updatedAt === "number",
+      ))
+      .map((conversation) => ({
+        ...conversation,
+        messages: conversation.messages.map((message) => message.role === "assistant"
+          ? { ...message, content: message.content.replace(/^### AI 说明\s*/, "") }
+          : message),
+      }))
+      .slice(-30);
+  } catch {
+    return [];
+  }
 }
 
 function projectKey(context: HostContext): string {
@@ -189,7 +217,7 @@ function formatCopilotResponse(payload: CopilotResponse): string {
   const generated = payload.artifacts
     .map((artifact) => `\n\n### ${artifact.name}\n\n\`\`\`${artifact.language}\n${artifact.content}\`\`\``)
     .join("");
-  return `### AI 说明\n\n${payload.answer}${generated}${formatReferences(payload)}`;
+  return `${payload.answer}${generated}${formatReferences(payload)}`;
 }
 
 function currentDataLabel(context: HostContext): string {
@@ -217,16 +245,13 @@ function localizedError(error: unknown): string {
 
 export default function App() {
   const [context, setContext] = useState<HostContext>(emptyContext);
-  const [conversations, setConversations] = useState<Conversation[]>(() => [
-    createConversation(projectKey(emptyContext)),
-  ]);
-  const [activeConversationId, setActiveConversationId] = useState(() =>
-    conversations[0].id
-  );
+  const [conversations, setConversations] = useState<Conversation[]>(() => {
+    const saved = loadConversations();
+    return saved.length ? saved : [createConversation(projectKey(emptyContext))];
+  });
+  const [activeConversationId, setActiveConversationId] = useState(() => conversations[0]?.id ?? "");
   const [historyOpen, setHistoryOpen] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
-  const [contextLoading, setContextLoading] = useState(true);
-  const [contextExpanded, setContextExpanded] = useState(false);
   const [composerAttachmentCount, setComposerAttachmentCount] = useState(0);
   const [diagnostic, setDiagnostic] = useState<RequestDiagnostic | null>(null);
   const [saveNotice, setSaveNotice] = useState<string | null>(null);
@@ -235,6 +260,12 @@ export default function App() {
   const [activity, setActivity] = useState<AgentActivity[]>([]);
   const [diffResult, setDiffResult] = useState<AgentDiffResult>(emptyDiffResult);
   const [reverting, setReverting] = useState(false);
+  const [modelConfig, setModelConfig] = useState<ModelConfig | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [modelDraft, setModelDraft] = useState("");
+  const [baseUrlDraft, setBaseUrlDraft] = useState("");
+  const [apiKeyDraft, setApiKeyDraft] = useState("");
+  const [modelSaving, setModelSaving] = useState(false);
   const activeConversationIdRef = useRef(activeConversationId);
   const abortControllerRef = useRef<AbortController | null>(null);
   const currentProjectKey = projectKey(context);
@@ -245,7 +276,20 @@ export default function App() {
   const hasCurrentData = Boolean(context.selection_kind && context.snapshot_revision);
   const hasSelectedFile = context.selection_kind === "file" && hasCurrentData;
   const dataLabel = currentDataLabel(context);
-  const fileDiffs = diffResult.files;
+  const latestAssistantId = [...messages].reverse()
+    .find((message) => message.role === "assistant")?.id;
+  const lastMessageRole = messages[messages.length - 1]?.role;
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        `geely-ai.history.${hostSessionId}`,
+        JSON.stringify(conversations.slice(-30)),
+      );
+    } catch {
+      // Local history is best-effort and must not block the Agent.
+    }
+  }, [conversations]);
 
   useEffect(() => {
     activeConversationIdRef.current = activeConversationId;
@@ -311,22 +355,73 @@ export default function App() {
       setDiagnostic({ detail, requestId });
       appendAssistant(
         conversationId,
-        `### 请求未完成\n\n${localizedError(error)}`,
+        `**请求未完成**\n\n${localizedError(error)}`,
       );
     },
     [appendAssistant],
   );
 
   const refreshContext = useCallback(async () => {
-    setContextLoading(true);
     try {
       setContext(await gatewayClient.getHostContext());
     } catch (error) {
       reportError(error);
-    } finally {
-      setContextLoading(false);
     }
   }, [reportError]);
+
+  const refreshModelConfig = useCallback(async () => {
+    try {
+      setModelConfig(await gatewayClient.getModelConfig());
+    } catch {
+      setModelConfig(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshModelConfig();
+  }, [refreshModelConfig]);
+
+  const openSettings = useCallback(() => {
+    setModelDraft(modelConfig?.model ?? "");
+    setBaseUrlDraft(modelConfig?.base_url ?? "");
+    setApiKeyDraft("");
+    setSettingsOpen(true);
+  }, [modelConfig]);
+
+  const saveModelSettings = useCallback(async () => {
+    if (modelSaving) return;
+    setModelSaving(true);
+    try {
+      const update: { base_url?: string; api_key?: string; model?: string } = {
+        base_url: baseUrlDraft.trim(),
+        model: modelDraft.trim(),
+      };
+      if (apiKeyDraft.trim()) update.api_key = apiKeyDraft.trim();
+      const next = await gatewayClient.updateModelConfig(update);
+      setModelConfig(next);
+      setApiKeyDraft("");
+      setSettingsOpen(false);
+      setSaveNotice("模型配置已保存，下一次请求将使用新配置");
+    } catch (error) {
+      reportError(error);
+    } finally {
+      setModelSaving(false);
+    }
+  }, [apiKeyDraft, baseUrlDraft, modelDraft, modelSaving, reportError]);
+
+  const selectModel = useCallback(async (model: string) => {
+    if (!model || model === modelConfig?.model || modelSaving) return;
+    setModelSaving(true);
+    try {
+      const next = await gatewayClient.updateModelConfig({ model });
+      setModelConfig(next);
+      setSaveNotice(`已切换模型：${model}`);
+    } catch (error) {
+      reportError(error);
+    } finally {
+      setModelSaving(false);
+    }
+  }, [modelConfig?.model, modelSaving, reportError]);
 
   useEffect(() => {
     void refreshContext();
@@ -444,8 +539,12 @@ export default function App() {
                   appendMessage(conversationId, response);
                   added = true;
                 }
-                updateMessage(conversationId, response.id, `### AI 说明\n\n${answer}`);
+                updateMessage(conversationId, response.id, answer);
               } else if (event.type === "tool") {
+                if (!added) {
+                  appendMessage(conversationId, response);
+                  added = true;
+                }
                 setActivity((current) => [
                   ...current.filter((item) => item.id !== event.id),
                   event,
@@ -550,17 +649,21 @@ export default function App() {
   const generateTests = useCallback(() => {
     const composer = runtime.thread.composer;
     if (composer.getState().attachments.length) {
-      composer.setText("基于已添加文件生成可运行的 pytest 测试代码。");
-      composer.setRunConfig({ custom: { task: "generate_test" } });
+      composer.setText(
+        "先理解当前工程和已添加文件，在工程合适的测试目录创建或修改 pytest 测试，"
+        + "然后运行最小相关测试并根据结果修正。写文件和运行命令前分别请求我的批准。",
+      );
+      composer.setRunConfig({ custom: { task: "chat" } });
       composer.send();
       return;
     }
     if (hasSelectedFile) {
       void askCopilot(
-        "基于当前选中的工程文件生成可运行的 pytest 测试代码。",
+        "先理解当前工程和选中的文件，在工程合适的测试目录创建或修改 pytest 测试，"
+          + "然后运行最小相关测试并根据结果修正。写文件和运行命令前分别请求我的批准。",
         [],
         conversationHistory(messages),
-        "generate_test",
+        "chat",
       );
     }
   }, [askCopilot, hasSelectedFile, messages, runtime]);
@@ -651,51 +754,10 @@ export default function App() {
   }, [reportError]);
 
   const contextLabel = context.selection_label || context.current_view || "等待选择";
-  const projectLabel = context.project_label || (hostConnected ? "未打开工程" : "未连接 CoreTest");
-  const connectionLabel = contextLoading ? "同步中" : hostConnected ? "已连接" : "未连接";
 
   return (
-    <FluentProvider theme={webLightTheme} className="app-provider">
+    <FluentProvider theme={agentLightTheme} className="app-provider">
       <main className="copilot-shell">
-        <header className="shell-header">
-          <div className="title-block">
-            <h1>CoreTest Copilot</h1>
-            <p>{projectLabel}</p>
-            <div className="header-status" aria-label="Copilot 状态">
-              <span><ShieldLock20Regular aria-hidden="true" />操作需审批</span>
-              <span className={hostConnected ? "is-connected" : "is-disconnected"}>
-                {connectionLabel}
-              </span>
-            </div>
-          </div>
-          <div className="header-actions">
-            <Button
-              appearance="subtle"
-              icon={<History20Regular />}
-              aria-label="历史对话"
-              title="历史对话"
-              onClick={() => setHistoryOpen(true)}
-              disabled={isRunning}
-            />
-            <Button
-              appearance="subtle"
-              icon={contextLoading ? <Spinner size="tiny" /> : <ArrowSync20Regular />}
-              aria-label="刷新上下文"
-              title="刷新上下文"
-              onClick={() => void refreshContext()}
-              disabled={contextLoading}
-            />
-            <Button
-              appearance="subtle"
-              icon={<Add20Regular />}
-              aria-label="新建对话"
-              title="新建对话"
-              onClick={() => void startNewConversation()}
-              disabled={isRunning}
-            />
-          </div>
-        </header>
-
         <OverlayDrawer
           className="history-drawer"
           open={historyOpen}
@@ -744,305 +806,115 @@ export default function App() {
                 </button>
               ))}
             </div>
-            <p className="history-note">历史仅保留在本次 CoreTest 运行期间</p>
+            <p className="history-note">历史仅保存在本机当前用户配置中</p>
           </DrawerBody>
         </OverlayDrawer>
 
-        <button
-          type="button"
-          className="context-bar"
-          aria-expanded={contextExpanded}
-          onClick={() => setContextExpanded((current) => !current)}
-          disabled={!hasCurrentData}
-          title={contextLabel}
+        <OverlayDrawer
+          className="settings-drawer"
+          open={settingsOpen}
+          position="end"
+          onOpenChange={(_, data) => setSettingsOpen(data.open)}
         >
-          <DocumentData20Regular aria-hidden="true" />
-          <span><strong>{dataLabel}</strong>{contextLabel}</span>
-          {hasCurrentData && (
-            <ChevronRight16Regular className={contextExpanded ? "is-expanded" : ""} aria-hidden="true" />
-          )}
-        </button>
-
-        {contextExpanded && hasCurrentData && (
-          <section className="context-details" aria-label="当前上下文详情">
-            <dl>
-              <div><dt>来源</dt><dd>{dataLabel}</dd></div>
-              <div><dt>对象</dt><dd title={contextLabel}>{contextLabel}</dd></div>
-              <div><dt>版本</dt><dd>{context.snapshot_revision}</dd></div>
-            </dl>
-            <div className="context-actions">
-              <Button
-                size="small"
-                appearance="subtle"
-                onClick={() => void askCopilot(
-                  `概括当前 ${dataLabel} 的关键信息。`, [], conversationHistory(messages), "chat"
-                )}
-                disabled={isRunning}
-              >
-                概括
-              </Button>
-              <Button
-                size="small"
-                appearance="subtle"
-                onClick={() => void askCopilot(
-                  `检查当前 ${dataLabel} 的异常和风险。`, [], conversationHistory(messages), "chat"
-                )}
-                disabled={isRunning}
-              >
-                查异常
-              </Button>
-              {hasSelectedFile && (
+          <DrawerHeader>
+            <DrawerHeaderTitle
+              action={
                 <Button
-                  size="small"
                   appearance="subtle"
-                  icon={<Code20Regular />}
-                  onClick={generateTests}
-                  disabled={isRunning}
-                >
-                  生成 pytest
-                </Button>
-              )}
-            </div>
-          </section>
-        )}
-
-        {composerAttachmentCount > 0 && (
-          <div className="attachment-actions">
-            <span>已添加 {composerAttachmentCount} 个文件</span>
-            <Button
-              appearance="subtle"
-              icon={<Code20Regular />}
-              onClick={generateTests}
-              disabled={isRunning}
+                  icon={<Dismiss24Regular />}
+                  aria-label="关闭模型设置"
+                  title="关闭"
+                  onClick={() => setSettingsOpen(false)}
+                />
+              }
             >
-              生成 pytest
-            </Button>
-          </div>
-        )}
+              模型与 API
+            </DrawerHeaderTitle>
+          </DrawerHeader>
+          <DrawerBody>
+            <div className="settings-form">
+              <Field label="模型名称" hint="可输入任意已支持工具调用的模型">
+                <Combobox
+                  freeform
+                  value={modelDraft}
+                  onChange={(event) => setModelDraft(event.target.value)}
+                  onOptionSelect={(_, data) => setModelDraft(data.optionValue ?? data.selectedOptions[0] ?? "")}
+                  placeholder="例如 gpt-5.5"
+                >
+                  {(modelConfig?.available_models ?? []).map((model) => (
+                    <Option key={model} value={model}>{model}</Option>
+                  ))}
+                </Combobox>
+              </Field>
+              <Field label="API Base URL">
+                <Input
+                  value={baseUrlDraft}
+                  onChange={(_, data) => setBaseUrlDraft(data.value)}
+                  placeholder="https://api.example.com/v1"
+                />
+              </Field>
+              <Field
+                label="API Key"
+                hint={modelConfig?.api_key_configured ? "已配置，不会回显；留空表示保持不变" : "首次配置必须填写"}
+              >
+                <Input
+                  type="password"
+                  value={apiKeyDraft}
+                  onChange={(_, data) => setApiKeyDraft(data.value)}
+                  placeholder={modelConfig?.api_key_configured ? "留空保持现有 Key" : "输入 API Key"}
+                />
+              </Field>
+              <Button
+                appearance="primary"
+                icon={<CheckmarkCircle20Regular />}
+                onClick={() => void saveModelSettings()}
+                disabled={isRunning || modelSaving || !modelDraft.trim() || !baseUrlDraft.trim()}
+              >
+                {modelSaving ? "保存中…" : "保存配置"}
+              </Button>
+              <p className="settings-note">
+                当前状态：{modelConfig?.configured ? "已配置" : "未配置"}
+              </p>
+            </div>
+          </DrawerBody>
+        </OverlayDrawer>
 
-        <section className="chat-region" aria-label="Copilot 对话">
+        <section className="chat-region" aria-label="CoreTest Agent 对话">
           <AssistantRuntimeProvider runtime={runtime}>
-            <Thread
-              welcome={{
-                message: hasCurrentData
-                  ? `已同步：${contextLabel}`
-                  : hostConnected ? "请选择工程对象，或直接提问" : "等待 CoreTest 连接",
-                suggestions,
-              }}
-              assistantAvatar={{ fallback: "AI" }}
-              userMessage={{ allowEdit: false }}
-              assistantMessage={{
-                allowReload: false,
-                allowCopy: true,
-                allowSpeak: false,
-                allowFeedbackPositive: false,
-                allowFeedbackNegative: false,
-                components: { Text: MarkdownText },
-              }}
-              composer={{ allowAttachments: true }}
-              strings={{
-                thread: { scrollToBottom: { tooltip: "滚动到底部" } },
-                composer: {
-                  input: {
-                    placeholder: hostConnected
-                      ? "询问当前内容..."
-                      : "输入问题...",
-                  },
-                  addAttachment: { tooltip: "添加参考文件" },
-                  send: { tooltip: "发送" },
-                  cancel: { tooltip: "停止" },
-                  removeAttachment: { tooltip: "移除附件" },
-                },
-                assistantMessage: { copy: { tooltip: "复制" } },
-              }}
+            <AgentThread
+              hostConnected={hostConnected}
+              contextLabel={contextLabel}
+              dataLabel={dataLabel}
+              suggestions={suggestions}
+              isRunning={isRunning}
+              lastMessageRole={lastMessageRole}
+              latestAssistantId={latestAssistantId}
+              activity={activity}
+              permission={permission}
+              permissionReplying={permissionReplying}
+              onReplyPermission={(reply) => void replyPermission(reply)}
+              diffResult={diffResult}
+              reverting={reverting}
+              onRevert={() => void revertLatestTurn()}
+              artifacts={artifacts}
+              onCopyArtifact={(artifact) => void copyArtifact(artifact)}
+              onDownloadArtifact={downloadArtifact}
+              diagnostic={diagnostic}
+              saveNotice={saveNotice}
+              composerAttachmentCount={composerAttachmentCount}
+              onGenerateTests={generateTests}
+              modelConfig={modelConfig}
+              modelSaving={modelSaving}
+              onSelectModel={(model) => void selectModel(model)}
+              historyCount={projectConversations.length}
+              onOpenHistory={() => setHistoryOpen(true)}
+              onOpenSettings={openSettings}
             />
           </AssistantRuntimeProvider>
         </section>
-
-        {activity.length > 0 && (
-          <section className="activity-panel" aria-label="智能体执行步骤">
-            <div className="activity-title">
-              <Code20Regular aria-hidden="true" />
-              <strong>执行步骤</strong>
-              <span>{activity.length}</span>
-            </div>
-            <div className="activity-list">
-              {activity.map((step) => (
-                <div className="activity-item" key={step.id}>
-                  {step.status === "running" || step.status === "pending"
-                    ? <Spinner size="extra-tiny" />
-                    : <CheckmarkCircle20Regular aria-hidden="true" />}
-                  <div>
-                    <strong>{toolLabel(step.tool)}</strong>
-                    <code title={step.title}>{step.title}</code>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {(fileDiffs.length > 0 || diffResult.revert_reason === "workspace_has_no_git_baseline") && (
-          <section className="diff-panel" aria-label="本轮文件变更">
-            <div className="diff-heading">
-              <div>
-                <strong>文件变更</strong>
-                <span>
-                  {fileDiffs.length > 0
-                    ? `${fileDiffs.length} 个文件 · 仅本轮智能体修改`
-                    : "本轮修改未生成可用 Diff"}
-                </span>
-              </div>
-              {diffResult.revert_available && (
-                <Button
-                  size="small"
-                  appearance="subtle"
-                  icon={<ArrowUndo20Regular />}
-                  onClick={() => void revertLatestTurn()}
-                  disabled={reverting || isRunning}
-                >
-                  {reverting ? "撤销中…" : "撤销本轮"}
-                </Button>
-              )}
-            </div>
-            {diffResult.revert_reason === "workspace_has_no_git_baseline" && (
-              <div className="diff-warning" role="note">
-                <Warning16Regular aria-hidden="true" />
-                <span>当前工程没有 Git 基线，本轮修改无法自动撤销。</span>
-              </div>
-            )}
-            {fileDiffs.length > 0 && (
-              <div className="diff-files">
-                {fileDiffs.map((file) => (
-                  <details key={file.path}>
-                    <summary>
-                      <ChevronRight16Regular className="diff-chevron" aria-hidden="true" />
-                      <code title={file.path}>{file.path}</code>
-                      <span className="diff-additions">+{file.additions}</span>
-                      <span className="diff-deletions">−{file.deletions}</span>
-                    </summary>
-                    <pre>{file.patch || "未返回文本补丁"}</pre>
-                    {file.truncated && <small>补丁过长，已截断显示</small>}
-                  </details>
-                ))}
-              </div>
-            )}
-          </section>
-        )}
-
-        {permission && (
-          <section className="permission-panel" role="alert" aria-label="智能体操作审批">
-            <div className="permission-heading">
-              <ShieldLock20Regular aria-hidden="true" />
-              <div>
-                <strong>{permissionLabel(permission.permission)}</strong>
-                <span>OpenCode 请求执行以下操作</span>
-              </div>
-            </div>
-            {permission.resources.length > 0 && (
-              <div className="permission-resources">
-                {permission.resources.map((resource) => <code key={resource}>{resource}</code>)}
-              </div>
-            )}
-            <div className="permission-actions">
-              <Button
-                appearance="secondary"
-                onClick={() => void replyPermission("reject")}
-                disabled={permissionReplying}
-              >
-                拒绝
-              </Button>
-              <Button
-                appearance="primary"
-                onClick={() => void replyPermission("once")}
-                disabled={permissionReplying}
-              >
-                允许一次
-              </Button>
-            </div>
-          </section>
-        )}
-
-        {(diagnostic || saveNotice) && (
-          <div className="status-strip" role="status">
-            {saveNotice && (
-              <span className="save-notice">
-                <CheckmarkCircle20Regular aria-hidden="true" />
-                <span>{saveNotice}</span>
-              </span>
-            )}
-            {diagnostic && (
-              <details className="diagnostic-details">
-                <summary>诊断详情</summary>
-                <p>{diagnostic.detail}</p>
-                {diagnostic.requestId && (
-                  <div className="request-id-row">
-                    <code title={diagnostic.requestId}>{diagnostic.requestId}</code>
-                    <Button
-                      size="small"
-                      appearance="subtle"
-                      icon={<Copy20Regular />}
-                      aria-label="复制 request ID"
-                      title="复制 request ID"
-                      onClick={() => void navigator.clipboard.writeText(diagnostic.requestId || "")}
-                    />
-                  </div>
-                )}
-              </details>
-            )}
-          </div>
-        )}
-
-        {artifacts.length > 0 && (
-          <div className="artifact-actions" aria-label="生成结果">
-            {artifacts.map((artifact) => (
-              <div className="artifact-item" key={artifact.name}>
-                <span><Code20Regular aria-hidden="true" />{artifact.name}</span>
-                <div>
-                  <Button
-                    appearance="subtle"
-                    icon={<Copy20Regular />}
-                    aria-label={`复制 ${artifact.name}`}
-                    title="复制代码"
-                    onClick={() => void copyArtifact(artifact)}
-                  />
-                  <Button
-                    appearance="primary"
-                    icon={<ArrowDownload20Regular />}
-                    aria-label={`保存 ${artifact.name}`}
-                    title="保存到 generated_tests"
-                    onClick={() => downloadArtifact(artifact)}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
       </main>
     </FluentProvider>
   );
-}
-
-function permissionLabel(permission: string): string {
-  const labels: Record<string, string> = {
-    bash: "运行命令",
-    edit: "修改工作区文件",
-    write: "写入工作区文件",
-    apply_patch: "应用代码修改",
-  };
-  return labels[permission] ?? "执行工具操作";
-}
-
-function toolLabel(tool: string): string {
-  const labels: Record<string, string> = {
-    glob: "搜索文件",
-    grep: "搜索代码",
-    read: "读取文件",
-    lsp: "分析代码",
-    edit: "修改文件",
-    bash: "运行命令",
-  };
-  return labels[tool] ?? tool;
 }
 
 function resolveParentOrigin(): string {

@@ -1,4 +1,4 @@
-"""Headless product smoke test for the installed CoreTest Copilot Dock."""
+"""Headless product smoke test for the installed CoreTest Agent Dock."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ import sys
 from urllib.request import urlopen
 
 from PySide6.QtCore import QTimer
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QDockWidget
 
 
 def main() -> int:
@@ -31,6 +31,15 @@ def main() -> int:
     def verify_dom(text: object) -> None:
         try:
             assert window.copilot.dock.objectName() == "coretest-copilot-dock"
+            assert window.copilot.dock.windowTitle() == "CoreTest Agent"
+            assert window.copilot.title_label.text() == "CoreTest Agent"
+            assert window.copilot.open_action.text() == "CoreTest Agent"
+            assert not (
+                window.copilot.dock.features()
+                & QDockWidget.DockWidgetFeature.DockWidgetFloatable
+            )
+            assert not hasattr(window.copilot, "collapse_button")
+            assert not hasattr(window.copilot, "float_button")
             assert window.copilot.bridge.ready
             assert window.copilot.web.url().path() == "/copilot-shell/"
             assert window.copilot.open_action.isChecked()
@@ -40,16 +49,8 @@ def main() -> int:
             window.copilot.open_action.trigger()
             QApplication.processEvents()
             assert window.copilot.dock.isVisible()
-            window.copilot.collapse_button.click()
-            QApplication.processEvents()
-            assert window.copilot._collapsed
-            assert window.copilot.dock.maximumWidth() == 48
-            window.copilot.collapse_button.click()
-            QApplication.processEvents()
-            assert not window.copilot._collapsed
-            assert window.copilot.dock.minimumWidth() == 360
             page_text = str(text)
-            for label in ("Copilot", "需要分析什么？"):
+            for label in ("从当前工程开始", "历史", "API"):
                 assert label in page_text, f"missing WebEngine content: {label}"
             base = window.copilot.bridge.base_url
             session = window.copilot.bridge.session_id
@@ -62,7 +63,7 @@ def main() -> int:
             assert snapshot["kind"] == "project"
             screenshot = Path(os.getenv("TEMP", ".")) / "coretest-copilot-smoke.png"
             assert window.grab().save(str(screenshot))
-            print(f"PASS CoreTest Copilot headless smoke: {screenshot}")
+            print(f"PASS CoreTest Agent headless smoke: {screenshot}")
         except Exception as exc:
             failures.append(str(exc) or type(exc).__name__)
         finally:
@@ -91,7 +92,7 @@ def main() -> int:
     QTimer.singleShot(12000, timeout)
     app.exec()
     if failures:
-        print(f"FAIL CoreTest Copilot headless smoke: {failures[0]}", file=sys.stderr)
+        print(f"FAIL CoreTest Agent headless smoke: {failures[0]}", file=sys.stderr)
         return 1
     return 0
 

@@ -33,6 +33,10 @@ function Import-EnvFile {
 
 Import-EnvFile -Path $EnvFile
 
+if (-not [string]::IsNullOrWhiteSpace($EnvFile)) {
+    $env:AI_MODEL_CONFIG_FILE = [System.IO.Path]::GetFullPath($EnvFile)
+}
+
 if (-not $PSBoundParameters.ContainsKey("HostName") -and $env:AI_GATEWAY_HOST) {
     $HostName = $env:AI_GATEWAY_HOST
 }

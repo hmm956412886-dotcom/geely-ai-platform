@@ -108,6 +108,33 @@ class GatewayConfigTests(unittest.TestCase):
 
         self.assertEqual(resolved, legacy)
 
+    def test_configuration_file_honors_explicit_path(self) -> None:
+        with TemporaryDirectory() as directory:
+            configured = Path(directory) / "settings" / "model.env"
+            with patch.dict(
+                "os.environ", {"AI_MODEL_CONFIG_FILE": str(configured)}, clear=False
+            ):
+                resolved = _configuration_file(None, None)
+
+            self.assertEqual(resolved, configured.resolve())
+            self.assertTrue(configured.parent.is_dir())
+
+    def test_configuration_file_defaults_to_local_app_data(self) -> None:
+        with TemporaryDirectory() as directory:
+            fake_module = Path(directory) / "app" / "coretest_copilot" / "gateway.py"
+            with patch.dict(
+                "os.environ",
+                {"LOCALAPPDATA": directory, "AI_MODEL_CONFIG_FILE": ""},
+                clear=False,
+            ), patch(
+                "coretest_copilot.gateway.Path.cwd", return_value=Path(directory) / "work"
+            ), patch(
+                "coretest_copilot.gateway.Path.resolve", return_value=fake_module
+            ):
+                resolved = _configuration_file(None, None)
+
+        self.assertEqual(resolved, Path(directory) / "HK-CoreTest" / "ai-model.env")
+
     def test_gateway_executable_uses_configured_sidecar(self) -> None:
         with TemporaryDirectory() as directory:
             executable = Path(directory) / "geely-ai-gateway.exe"

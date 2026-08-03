@@ -11,7 +11,15 @@
     "name": "opencode-windows-x64.zip",
     "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.10/opencode-windows-x64.zip",
     "size": 59459283,
-    "sha256": "b1d85ce5211bfefbc2b4940a19e1639fc75cb87ff82eb79806ffb84b01dd1482"
+    "sha256": "b1d85ce5211bfefbc2b4940a19e1639fc75cb87ff82eb79806ffb84b01dd1482",
+    "executable_size": 174172552,
+    "executable_sha256": "8cc6228ced60be31b2b3408b5711f6922bc6654fba9ce63fed29264f2a4a01dd"
+  },
+  "compliance": {
+    "sbom_format": "CycloneDX 1.6",
+    "dependency_source": "bun.lock production closure for packages/opencode",
+    "registry_snapshot_date": "2026-08-03",
+    "license_text_source": "spdx-license-list@6.12.0"
   },
   "delivery_policy": "verified-upstream-runtime"
 }

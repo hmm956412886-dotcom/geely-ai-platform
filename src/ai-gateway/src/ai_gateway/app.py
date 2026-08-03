@@ -28,8 +28,8 @@ from .host_snapshot import (
     release_host_snapshot,
     update_host_snapshot,
 )
-from .model_client import load_model_config
-from .opencode_runtime import get_opencode_runtime
+from .model_client import load_model_config, update_model_config
+from .opencode_runtime import get_opencode_runtime, reset_opencode_runtime
 from .test_data_adapter import compare_test_runs, load_test_data_insights, load_test_run_summary
 from .workspace import (
     get_workspace_path,
@@ -121,6 +121,10 @@ def _handle_request(
         return json_response(_contract_json("host-plugin.manifest.json"))
     if method == "GET" and path == "/api/v1/model/config":
         return json_response({"request_id": _request_id(), "result": load_model_config().public_dict()})
+    if method == "POST" and path == "/api/v1/model/config":
+        config = update_model_config(_read_json(body))
+        reset_opencode_runtime()
+        return json_response({"request_id": _request_id(), "result": config.public_dict()})
     if method == "GET" and path == "/api/v1/agent/status":
         return json_response(
             {
@@ -723,7 +727,7 @@ def _showcase_html() -> str:
       </div>
     </main>
     <aside>
-      <iframe class="copilot-frame" id="copilotFrame" title="Reusable Geely AI Copilot"></iframe>
+      <iframe class="copilot-frame" id="copilotFrame" title="CoreTest Agent"></iframe>
     </aside>
   </div>
   <script>

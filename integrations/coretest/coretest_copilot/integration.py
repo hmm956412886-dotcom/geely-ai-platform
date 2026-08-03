@@ -16,7 +16,6 @@ from PySide6.QtWidgets import (
     QLabel,
     QPushButton,
     QStyle,
-    QToolBar,
     QToolButton,
     QVBoxLayout,
     QWidget,
@@ -53,16 +52,14 @@ class CoreTestCopilot:
         self.bridge.start()
 
     def _build_dock(self) -> None:
-        self.dock = QDockWidget("CoreTest Copilot", self.window)
+        self.dock = QDockWidget("CoreTest Agent", self.window)
         self.dock.setObjectName("coretest-copilot-dock")
         self.dock.setAllowedAreas(Qt.DockWidgetArea.LeftDockWidgetArea | Qt.DockWidgetArea.RightDockWidgetArea)
         self.dock.setMinimumWidth(360)
         self.dock.setFeatures(
             QDockWidget.DockWidgetFeature.DockWidgetClosable
             | QDockWidget.DockWidgetFeature.DockWidgetMovable
-            | QDockWidget.DockWidgetFeature.DockWidgetFloatable
         )
-        self._collapsed = False
         self._build_title_bar()
         self.web = QWebEngineView(self.dock)
         self.web.page().profile().downloadRequested.connect(self._save_generated_file)
@@ -89,26 +86,16 @@ class CoreTestCopilot:
         layout.setContentsMargins(12, 6, 6, 6)
         layout.setSpacing(4)
 
-        self.title_label = QLabel("AI Copilot", title_bar)
+        self.title_label = QLabel("CoreTest Agent", title_bar)
         self.title_label.setObjectName("copilot-title")
         layout.addWidget(self.title_label)
         layout.addStretch(1)
 
-        self.collapse_button = self._title_button(
-            QStyle.StandardPixmap.SP_TitleBarMinButton, "收起 Copilot", self._toggle_collapsed
-        )
-        self.float_button = self._title_button(
-            QStyle.StandardPixmap.SP_TitleBarMaxButton, "在独立窗口中打开", self._toggle_floating
-        )
         self.close_button = self._title_button(
             QStyle.StandardPixmap.SP_TitleBarCloseButton, "关闭 Copilot", self.dock.hide
         )
-        layout.addWidget(self.collapse_button)
-        layout.addWidget(self.float_button)
         layout.addWidget(self.close_button)
         self.dock.setTitleBarWidget(title_bar)
-        self.dock.topLevelChanged.connect(self._update_float_button)
-        self.dock.visibilityChanged.connect(self._dock_visibility_changed)
 
         title_bar.setStyleSheet(
             """
@@ -143,68 +130,24 @@ class CoreTestCopilot:
 
     def _add_open_entry(self) -> None:
         self.open_action = self.dock.toggleViewAction()
-        self.open_action.setText("AI Copilot")
-        self.open_action.setToolTip("显示或隐藏 AI Copilot")
+        self.open_action.setText("CoreTest Agent")
+        self.open_action.setToolTip("显示或隐藏 CoreTest Agent")
         self.open_action.setIcon(
             self.window.style().standardIcon(QStyle.StandardPixmap.SP_ComputerIcon)
         )
-        self.window.menuBar().addMenu("视图").addAction(self.open_action)
-
-        toolbar = QToolBar("AI Copilot", self.window)
-        toolbar.setObjectName("copilot-toolbar")
-        toolbar.setMovable(False)
-        toolbar.setFloatable(False)
-        toolbar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
-        toolbar.addAction(self.open_action)
-        self.window.addToolBar(Qt.ToolBarArea.TopToolBarArea, toolbar)
-        self.toolbar = toolbar
-
-    def _toggle_collapsed(self) -> None:
-        if self._collapsed:
-            self._collapsed = False
-            self.dock.setMinimumWidth(360)
-            self.dock.setMaximumWidth(524287)
-            self.title_label.show()
-            self.float_button.show()
-            self.close_button.show()
-            self.dock.widget().show()
-            self.window.resizeDocks([self.dock], [440], Qt.Orientation.Horizontal)
-            self.collapse_button.setIcon(
-                self.window.style().standardIcon(QStyle.StandardPixmap.SP_TitleBarMinButton)
-            )
-            self.collapse_button.setToolTip("收起 Copilot")
-            return
-
-        self._collapsed = True
-        self.dock.widget().hide()
-        self.title_label.hide()
-        self.float_button.hide()
-        self.close_button.hide()
-        self.dock.setMinimumWidth(48)
-        self.dock.setMaximumWidth(48)
-        self.collapse_button.setIcon(
-            self.window.style().standardIcon(QStyle.StandardPixmap.SP_ArrowLeft)
+        button = QToolButton(self.window.main_tabs)
+        button.setObjectName("copilot-menu-button")
+        button.setDefaultAction(self.open_action)
+        button.setAutoRaise(True)
+        button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        button.setMinimumWidth(132)
+        button.setStyleSheet(
+            "QToolButton { border: 0; padding: 8px 14px; color: #374151; "
+            "font-size: 14px; font-weight: 600; }"
+            "QToolButton:hover { color: #0078E5; background: rgba(0, 120, 229, 0.05); }"
         )
-        self.collapse_button.setToolTip("展开 Copilot")
-
-    def _toggle_floating(self) -> None:
-        self.dock.setFloating(not self.dock.isFloating())
-        if self.dock.isFloating():
-            self.dock.resize(520, max(640, self.window.height() - 120))
-            self.dock.show()
-
-    def _update_float_button(self, floating: bool) -> None:
-        icon = (
-            QStyle.StandardPixmap.SP_TitleBarNormalButton
-            if floating
-            else QStyle.StandardPixmap.SP_TitleBarMaxButton
-        )
-        self.float_button.setIcon(self.window.style().standardIcon(icon))
-        self.float_button.setToolTip("停靠到主窗口" if floating else "在独立窗口中打开")
-
-    def _dock_visibility_changed(self, visible: bool) -> None:
-        if visible and self._collapsed:
-            self._toggle_collapsed()
+        self.window.main_tabs.setCornerWidget(button, Qt.Corner.TopRightCorner)
+        self.menu_button = button
 
     def _bind_signals(self) -> None:
         from app.service import can_channel_service, diag_runtime_session_service, project_runtime_service
@@ -239,7 +182,7 @@ class CoreTestCopilot:
         self.publish_project()
 
     def _show_error(self, message: str) -> None:
-        self.status_text.setText(f"AI Copilot 暂不可用\n\n{message}")
+        self.status_text.setText(f"CoreTest Agent 暂不可用\n\n{message}")
         self.dock.setWidget(self.status)
 
     def publish_current_view(self, _index: int = 0) -> None:

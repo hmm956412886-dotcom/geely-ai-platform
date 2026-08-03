@@ -15,6 +15,7 @@ import subprocess
 import sys
 from tempfile import TemporaryDirectory
 from threading import Lock
+from time import monotonic, sleep
 from typing import Any, Callable, Iterator, Mapping
 from urllib.parse import quote
 from urllib.request import Request, urlopen
@@ -29,6 +30,7 @@ OPENCODE_WINDOWS_URL = (
     f"v{OPENCODE_VERSION}/opencode-windows-x64.zip"
 )
 OPENCODE_WINDOWS_SHA256 = "b1d85ce5211bfefbc2b4940a19e1639fc75cb87ff82eb79806ffb84b01dd1482"
+OPENCODE_WINDOWS_EXE_SHA256 = "8cc6228ced60be31b2b3408b5711f6922bc6654fba9ce63fed29264f2a4a01dd"
 
 
 @dataclass(frozen=True)
@@ -93,6 +95,7 @@ class OpenCodeRuntime:
         self._auth_configured = False
         self._sessions: dict[str, str] = {}
         self._last_user_messages: dict[str, str] = {}
+        self._pending_permissions: dict[str, dict[str, dict[str, Any]]] = {}
         self._rejected_sessions: set[str] = set()
         self._session_lock = Lock()
 
@@ -213,8 +216,7 @@ class OpenCodeRuntime:
         history: list[dict[str, str]],
         new_session: bool = False,
     ) -> str:
-        if not self.health()["healthy"]:
-            raise RuntimeError(self._error or "OpenCode Runtime is unavailable")
+        self._require_healthy()
         if new_session:
             self.release_session(host_session_id)
         with self._session_lock:
@@ -252,17 +254,6 @@ class OpenCodeRuntime:
                 {
                     "system": system,
                     "parts": [{"type": "text", "text": prompt}],
-                    "tools": {
-                        "read": True,
-                        "glob": True,
-                        "grep": True,
-                        "lsp": True,
-                        "apply_patch": False,
-                        "write": False,
-                        "webfetch": False,
-                        "websearch": False,
-                        "task": False,
-                    },
                 },
                 timeout=max(self.model_config.timeout_seconds + 30, 600),
             )
@@ -300,8 +291,7 @@ class OpenCodeRuntime:
         new_session: bool = False,
     ) -> Iterator[dict[str, Any]]:
         """Send an async OpenCode prompt and yield sanitized SSE events."""
-        if not self.health()["healthy"]:
-            raise RuntimeError(self._error or "OpenCode Runtime is unavailable")
+        self._require_healthy()
         if new_session:
             self.release_session(host_session_id)
         session_id, created = self._ensure_session(host_session_id)
@@ -324,17 +314,6 @@ class OpenCodeRuntime:
                 {
                     "system": system,
                     "parts": [{"type": "text", "text": prompt}],
-                    "tools": {
-                        "read": True,
-                        "glob": True,
-                        "grep": True,
-                        "lsp": True,
-                        "apply_patch": False,
-                        "write": False,
-                        "webfetch": False,
-                        "websearch": False,
-                        "task": False,
-                    },
                 },
             )
         except RuntimeError:
@@ -348,6 +327,14 @@ class OpenCodeRuntime:
         for event in self._read_events(response, session_id):
             if event.get("type") == "text_delta":
                 text_parts.append(str(event.get("delta") or ""))
+            if event.get("type") == "permission" and isinstance(event.get("permission"), dict):
+                permission = event["permission"]
+                permission_id = str(permission.get("id") or "")
+                if permission_id:
+                    with self._session_lock:
+                        self._pending_permissions.setdefault(host_session_id, {})[
+                            permission_id
+                        ] = permission
             yield event
             if event.get("type") == "error":
                 return
@@ -376,14 +363,23 @@ class OpenCodeRuntime:
         if session_id is None:
             return []
         directory = quote(str(self._workspace or ""), safe="")
-        result = self._request_value("GET", f"/permission?directory={directory}")
+        try:
+            result = self._request_value("GET", f"/permission?directory={directory}")
+        except RuntimeError:
+            with self._session_lock:
+                return list(self._pending_permissions.get(host_session_id, {}).values())
         if not isinstance(result, list):
             raise RuntimeError("OpenCode returned invalid permission data")
-        return [
+        permissions = [
             self._public_permission(item)
             for item in result
             if isinstance(item, dict) and item.get("sessionID") == session_id
         ]
+        with self._session_lock:
+            self._pending_permissions[host_session_id] = {
+                item["id"]: item for item in permissions if item["id"]
+            }
+        return permissions
 
     def activity(self, host_session_id: str) -> list[dict[str, str]]:
         session_id = self._session_id(host_session_id)
@@ -614,9 +610,10 @@ class OpenCodeRuntime:
     ) -> None:
         if reply not in {"once", "reject"}:
             raise ValueError("permission reply must be once or reject")
-        pending = {
-            item["id"] for item in self.pending_permissions(host_session_id)
-        }
+        with self._session_lock:
+            pending = set(self._pending_permissions.get(host_session_id, {}))
+        if request_id not in pending:
+            pending = {item["id"] for item in self.pending_permissions(host_session_id)}
         if request_id not in pending:
             raise ValueError("permission request is not pending for this conversation")
         if reply == "reject":
@@ -627,6 +624,8 @@ class OpenCodeRuntime:
             f"/permission/{quote(request_id, safe='')}/reply?directory={quote(str(self._workspace or ''), safe='')}",
             {"reply": reply},
         )
+        with self._session_lock:
+            self._pending_permissions.get(host_session_id, {}).pop(request_id, None)
 
     def abort(self, host_session_id: str) -> bool:
         session_id = self._session_id(host_session_id)
@@ -674,7 +673,9 @@ class OpenCodeRuntime:
 
     def _public_resource(self, value: str) -> str:
         resource = self._public_text(value, 500)
-        if resource.startswith("."):
+        if resource == ".":
+            return resource
+        if resource.startswith(("./", ".\\")):
             relative = resource[1:].lstrip("/\\")
             return relative or "."
         return resource
@@ -694,14 +695,7 @@ class OpenCodeRuntime:
         return relative.as_posix()
 
     def _public_patch(self, value: str) -> str:
-        patch = value
-        if self._workspace is not None:
-            patch = re.sub(
-                re.escape(str(self._workspace)),
-                ".",
-                patch,
-                flags=re.IGNORECASE,
-            )
+        patch = self._replace_workspace_path(value)
         return re.sub(
             r"(?i)[A-Z]:[\\/][^\s\r\n]+",
             "[工作区外路径已隐藏]",
@@ -709,20 +703,33 @@ class OpenCodeRuntime:
         )
 
     def _public_text(self, value: str, limit: int) -> str:
-        resource = value.strip()[:limit]
-        if self._workspace is not None:
-            workspace = str(self._workspace)
-            position = resource.lower().find(workspace.lower())
-            if position >= 0:
-                resource = resource[:position] + "." + resource[position + len(workspace):]
+        resource = self._replace_workspace_path(value.strip()[:limit])
+        if resource == ".." or resource.startswith(("../", "..\\")):
+            return "[工作区外路径已隐藏]"
         if Path(resource).is_absolute() or re.search(r"[A-Za-z]:[\\/]", resource):
             return "[工作区外路径已隐藏]"
         return resource
+
+    def _replace_workspace_path(self, value: str) -> str:
+        normalized = value.replace("\\", "/")
+        if self._workspace is None:
+            return normalized
+        workspace = str(self._workspace).replace("\\", "/")
+        candidates = [workspace]
+        if re.match(r"^[A-Za-z]:/", workspace):
+            without_drive = workspace[3:]
+            candidates.extend([f"/{without_drive}", without_drive])
+        for candidate in candidates:
+            position = normalized.lower().find(candidate.lower())
+            if position >= 0:
+                return normalized[:position] + "." + normalized[position + len(candidate):]
+        return normalized
 
     def release_session(self, host_session_id: str) -> None:
         with self._session_lock:
             session_id = self._sessions.pop(host_session_id, None)
             self._last_user_messages.pop(host_session_id, None)
+            self._pending_permissions.pop(host_session_id, None)
             self._rejected_sessions.discard(host_session_id)
         if session_id is None or not self.running:
             return
@@ -764,6 +771,18 @@ class OpenCodeRuntime:
             return False
         self._auth_configured = True
         return True
+
+    def _require_healthy(self) -> None:
+        deadline = monotonic() + max(5.0, self.config.health_timeout_seconds * 3)
+        while True:
+            if self.health()["healthy"]:
+                return
+            if not self.running or self._error == "OpenCode model authentication failed":
+                break
+            if monotonic() >= deadline:
+                break
+            sleep(0.1)
+        raise RuntimeError(self._error or "OpenCode Runtime is unavailable")
 
     def _request_json(
         self,
@@ -837,9 +856,9 @@ def find_opencode_command(command: str) -> str | None:
 
     executable = "opencode.exe" if os.name == "nt" else "opencode"
     for candidate in (
+        Path(__file__).resolve().parent / "bin" / executable,
         Path(sys.executable).resolve().parent / executable,
         Path(sys.executable).resolve().parent / "opencode" / executable,
-        Path(__file__).resolve().parent / "bin" / executable,
     ):
         if candidate.is_file():
             return str(candidate.resolve())
@@ -859,8 +878,16 @@ def find_opencode_command(command: str) -> str | None:
 
 def resolve_opencode_command(command: str) -> str | None:
     if installed := find_opencode_command(command):
+        bundled = Path(__file__).resolve().parent / "bin" / "opencode.exe"
+        if Path(installed).resolve() == bundled.resolve():
+            _verify_bundled_opencode(Path(installed))
         return installed
-    if command.lower() != "auto" or os.name != "nt":
+    allow_download = os.getenv("OPENCODE_ALLOW_DOWNLOAD", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+    if command.lower() != "auto" or os.name != "nt" or not allow_download:
         return None
     local_app_data = os.getenv("LOCALAPPDATA")
     cache_root = (
@@ -874,6 +901,15 @@ def resolve_opencode_command(command: str) -> str | None:
             if not target.is_file():
                 _install_opencode(target)
     return str(target.resolve())
+
+
+def _verify_bundled_opencode(path: Path) -> None:
+    digest = sha256()
+    with path.open("rb") as source:
+        while chunk := source.read(1024 * 1024):
+            digest.update(chunk)
+    if digest.hexdigest().lower() != OPENCODE_WINDOWS_EXE_SHA256:
+        raise RuntimeError("Bundled OpenCode executable failed SHA-256 verification")
 
 
 def _install_opencode(
@@ -920,7 +956,7 @@ def _opencode_provider_config(model: ModelConfig) -> dict[str, Any]:
             "grep": "allow",
             "edit": "ask",
             "write": "deny",
-            "apply_patch": "deny",
+            "apply_patch": "allow",
             "bash": "ask",
             "webfetch": "ask",
             "websearch": "ask",
@@ -953,11 +989,13 @@ def _opencode_provider_config(model: ModelConfig) -> dict[str, Any]:
 def _session_permissions() -> list[dict[str, str]]:
     return [
         {"permission": name, "pattern": "*", "action": "allow"}
-        for name in ("read", "glob", "grep", "list", "lsp")
+        for name in ("read", "glob", "grep", "list", "lsp", "apply_patch")
     ] + [
         {"permission": name, "pattern": "*", "action": "ask"}
-        for name in ("edit", "bash")
+        for name in ("edit", "bash", "webfetch", "websearch")
     ] + [
+        {"permission": "write", "pattern": "*", "action": "deny"},
+        {"permission": "task", "pattern": "*", "action": "deny"},
         {"permission": "external_directory", "pattern": "*", "action": "deny"}
     ]
 
