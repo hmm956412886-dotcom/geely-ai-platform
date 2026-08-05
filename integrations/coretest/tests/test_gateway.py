@@ -5,14 +5,16 @@ from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import patch
 
-from PySide6.QtCore import QByteArray, QUrl
+from PySide6.QtCore import QByteArray, QProcessEnvironment, QUrl
 from PySide6.QtNetwork import QNetworkReply
 
 from coretest_copilot.gateway import (
     GatewayBridge,
     _configuration_file,
+    _gateway_asset_root,
     _gateway_executable,
     _load_env_values,
+    _protect_packaged_runtime,
     _server_arguments,
 )
 
@@ -28,6 +30,13 @@ class GatewayConfigTests(unittest.TestCase):
             bridge.copilot_url,
             QUrl(
                 "http://127.0.0.1:8765/copilot-shell/?host_session_id=coretest-session"
+                "#access_token=token%20with%20spaces"
+            ),
+        )
+        self.assertEqual(
+            bridge.native_agent_url,
+            QUrl(
+                "http://127.0.0.1:8765/agent-native/?host_session_id=coretest-session"
                 "#access_token=token%20with%20spaces"
             ),
         )
@@ -62,6 +71,7 @@ class GatewayConfigTests(unittest.TestCase):
             {"selection_kind": "project"},
             {"kind": "project", "revision": "1"},
             workspace_root="D:/projects/demo",
+            host_bridge={"url": "http://127.0.0.1:43123", "token": "secret"},
         )
 
         self.assertEqual(
@@ -72,8 +82,35 @@ class GatewayConfigTests(unittest.TestCase):
                 "/api/v1/host/context",
             ],
         )
-        self.assertEqual(calls[0][2], {"project_root": "D:/projects/demo"})
+        self.assertEqual(
+            calls[0][2],
+            {
+                "project_root": "D:/projects/demo",
+                "host_bridge": {
+                    "url": "http://127.0.0.1:43123",
+                    "token": "secret",
+                },
+            },
+        )
         self.assertTrue(calls[0][3])
+
+    def test_publish_completes_only_after_context_succeeds(self) -> None:
+        bridge = GatewayBridge.__new__(GatewayBridge)
+        completed = []
+
+        def request(method, path, payload=None, *, privileged=False, success=None):
+            if success:
+                success({"result": payload})
+
+        bridge.request = request
+        bridge.publish(
+            {"selection_kind": "project"},
+            {"kind": "project", "revision": "1"},
+            workspace_root="D:/projects/demo",
+            complete=lambda: completed.append(True),
+        )
+
+        self.assertEqual(completed, [True])
 
     def test_load_env_values_reads_only_assignments(self) -> None:
         with TemporaryDirectory() as directory:
@@ -91,6 +128,16 @@ class GatewayConfigTests(unittest.TestCase):
 
     def test_load_env_values_ignores_missing_file(self) -> None:
         self.assertEqual(_load_env_values(Path("missing.env")), {})
+
+    def test_packaged_gateway_ignores_external_runtime_command(self) -> None:
+        environment = QProcessEnvironment()
+        environment.insert("OPENCODE_COMMAND", "D:/temporary/opencode.exe")
+        environment.insert("OPENCODE_ALLOW_DOWNLOAD", "true")
+
+        _protect_packaged_runtime(environment)
+
+        self.assertFalse(environment.contains("OPENCODE_COMMAND"))
+        self.assertEqual(environment.value("OPENCODE_ALLOW_DOWNLOAD"), "false")
 
     def test_configuration_file_accepts_legacy_env_file(self) -> None:
         with TemporaryDirectory() as directory:
@@ -158,6 +205,13 @@ class GatewayConfigTests(unittest.TestCase):
                 resolved = _gateway_executable()
 
         self.assertEqual(resolved, executable.resolve())
+
+    def test_packaged_gateway_uses_only_its_bundled_assets(self) -> None:
+        executable = Path("D:/CoreTest/ai-gateway/geely-ai-gateway.exe")
+        source = Path("D:/CoreTest/app/coretest_copilot/runtime/src")
+
+        self.assertIsNone(_gateway_asset_root(executable, source))
+        self.assertEqual(_gateway_asset_root(None, source), source.parent)
 
     def test_server_arguments_follow_bridge_base_url(self) -> None:
         self.assertEqual(

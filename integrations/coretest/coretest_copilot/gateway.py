@@ -38,6 +38,14 @@ class GatewayBridge:
             url += f"#access_token={encoded}"
         return QUrl(url)
 
+    @property
+    def native_agent_url(self) -> QUrl:
+        url = f"{self.base_url}/agent-native/?host_session_id={self.session_id}"
+        if self._access_token:
+            encoded = QUrl.toPercentEncoding(self._access_token).data().decode()
+            url += f"#access_token={encoded}"
+        return QUrl(url)
+
     def on_ready(self, callback: Callable[[], None]) -> None:
         self._ready_callbacks.append(callback)
 
@@ -59,12 +67,17 @@ class GatewayBridge:
         for name, value in _load_env_values(env_path).items():
             if value and not environment.contains(name):
                 environment.insert(name, value)
+        if gateway_executable is not None:
+            _protect_packaged_runtime(environment)
         environment.insert("AI_MODEL_CONFIG_FILE", str(env_path))
         self._access_token = environment.value("AI_GATEWAY_ACCESS_TOKEN").strip()
         self._host_token = environment.value("AI_GATEWAY_HOST_TOKEN").strip()
         environment.insert("PYTHONUNBUFFERED", "1")
-        if gateway_src is not None:
-            environment.insert("AI_GATEWAY_ASSET_ROOT", str(gateway_src.parent))
+        asset_root = _gateway_asset_root(gateway_executable, gateway_src)
+        if asset_root is None:
+            environment.remove("AI_GATEWAY_ASSET_ROOT")
+        else:
+            environment.insert("AI_GATEWAY_ASSET_ROOT", str(asset_root))
         self.process.setProcessEnvironment(environment)
         server_args = _server_arguments(self.base_url)
         if gateway_executable is not None:
@@ -91,23 +104,34 @@ class GatewayBridge:
         snapshot: dict[str, Any],
         *,
         workspace_root: str | None = None,
+        host_bridge: dict[str, str] | None = None,
+        complete: Callable[[], None] | None = None,
     ) -> None:
+        def publish_context(_result: dict[str, Any] | None = None) -> None:
+            self.request(
+                "POST",
+                "/api/v1/host/context",
+                context,
+                success=(lambda _response: complete()) if complete else None,
+            )
+
         def publish_snapshot(_result: dict[str, Any] | None = None) -> None:
             self.request(
                 "POST",
                 "/api/v1/host/snapshot",
                 snapshot,
                 privileged=True,
-                success=lambda _response: self.request(
-                    "POST", "/api/v1/host/context", context
-                ),
+                success=publish_context,
             )
 
         if workspace_root:
+            workspace_payload: dict[str, Any] = {"project_root": workspace_root}
+            if host_bridge:
+                workspace_payload["host_bridge"] = host_bridge
             self.request(
                 "POST",
                 "/api/v1/host/workspace",
-                {"project_root": workspace_root},
+                workspace_payload,
                 privileged=True,
                 success=publish_snapshot,
             )
@@ -231,6 +255,14 @@ def _gateway_executable() -> Path | None:
     return None
 
 
+def _gateway_asset_root(
+    gateway_executable: Path | None, gateway_src: Path | None
+) -> Path | None:
+    if gateway_executable is not None or gateway_src is None:
+        return None
+    return gateway_src.parent
+
+
 def _server_arguments(base_url: str) -> list[str]:
     parsed = urlsplit(base_url)
     host = parsed.hostname or "127.0.0.1"
@@ -251,6 +283,11 @@ def _load_env_values(path: Path) -> dict[str, str]:
         if name:
             values[name] = value.strip()
     return values
+
+
+def _protect_packaged_runtime(environment: QProcessEnvironment) -> None:
+    environment.remove("OPENCODE_COMMAND")
+    environment.insert("OPENCODE_ALLOW_DOWNLOAD", "false")
 
 
 def _configuration_file(

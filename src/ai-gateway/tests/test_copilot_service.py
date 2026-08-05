@@ -44,17 +44,19 @@ class CopilotServiceTests(unittest.TestCase):
         self.assertIn("最小相关测试或构建", system)
         self.assertIn("未验证时不得声称已经完成", system)
 
-    def test_workspace_prompt_uses_native_permission_flow_for_mutations(self) -> None:
+    def test_workspace_prompt_allows_user_project_work_but_protects_product(self) -> None:
         agent = FakeAgent()
 
         run_copilot({"question": "创建测试并运行"}, workspace_agent=agent)
 
         system = agent.calls[0][1]
-        self.assertIn("直接调用对应工具", system)
-        self.assertIn("不要先用聊天文字重复索要批准", system)
-        self.assertIn("OpenCode 原生编辑工具", system)
-        self.assertIn("GPT 模型使用 apply_patch", system)
-        self.assertIn("禁止通过 Shell、重定向或脚本写入文件", system)
+        self.assertIn("当前用户工程", system)
+        self.assertIn("不要请求用户逐步批准", system)
+        self.assertIn("CoreTest 和 CoreTest Agent 自身源码", system)
+        self.assertIn("合法 Markdown", system)
+        self.assertIn("表格的每一行必须单独换行", system)
+        self.assertIn("禁止访问工作区外目录", system)
+        self.assertIn("禁止控制 CAN、UDS、刷写或测试设备", system)
 
     def test_coretest_snapshot_and_history_go_to_opencode(self) -> None:
         agent = FakeAgent()

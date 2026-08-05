@@ -9,7 +9,9 @@ from typing import Any, Iterable
 
 MAX_TEXT_FILE_BYTES = 256 * 1024
 SUPPORTED_TEXT_SUFFIXES = {
-    ".py", ".json", ".yaml", ".yml", ".xml", ".txt", ".dbc", ".md",
+    ".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".hxx",
+    ".py", ".js", ".jsx", ".ts", ".tsx", ".java", ".cs", ".go", ".rs",
+    ".json", ".yaml", ".yml", ".xml", ".txt", ".dbc", ".md",
     ".toml", ".ini", ".cfg", ".csv", ".log", ".asc",
 }
 

@@ -1,4 +1,5 @@
 import json
+from base64 import b64encode
 from pathlib import Path
 import re
 from tempfile import TemporaryDirectory
@@ -8,9 +9,10 @@ from unittest.mock import patch
 from ai_gateway.app import handle_request
 from ai_gateway.audit_log import clear_audit_events
 from ai_gateway.host_assets import reset_host_assets
+from ai_gateway.host_bridge import reset_host_bridges
 from ai_gateway.host_context import reset_host_context
 from ai_gateway.host_snapshot import reset_host_snapshots
-from ai_gateway.opencode_runtime import reset_opencode_runtime
+from ai_gateway.opencode_runtime import OpenCodeNativeResponse, reset_opencode_runtime
 from ai_gateway.workspace import get_workspace_path, reset_workspaces
 
 
@@ -21,6 +23,7 @@ class AppTests(unittest.TestCase):
     def tearDown(self) -> None:
         reset_host_context()
         reset_host_assets()
+        reset_host_bridges()
         reset_host_snapshots()
         reset_workspaces()
         reset_opencode_runtime()
@@ -139,6 +142,56 @@ class AppTests(unittest.TestCase):
         self.assertNotIn("secret", response.body)
         reset_runtime.assert_called_once_with()
 
+    def test_model_provider_routes_proxy_only_safe_opencode_operations(self) -> None:
+        runtime = _FakeOpenCodeRuntime()
+        with TemporaryDirectory() as directory, patch(
+            "ai_gateway.app.get_opencode_runtime", return_value=runtime
+        ):
+            handle_request(
+                "POST",
+                "/api/v1/host/workspace?host_session_id=providers",
+                json.dumps({"project_root": directory}),
+            )
+            saved = handle_request(
+                "POST",
+                "/api/v1/model/providers?host_session_id=providers",
+                json.dumps(
+                    {
+                        "id": "company-api",
+                        "name": "Company API",
+                        "base_url": "https://api.example.com/v1",
+                        "api_key": "never-return-this-key",
+                        "models": [{"id": "tool-model", "name": "Tool Model"}],
+                        "activate": True,
+                    }
+                ),
+            )
+            listed = handle_request(
+                "GET", "/api/v1/model/providers?host_session_id=providers"
+            )
+            activated = handle_request(
+                "POST",
+                "/api/v1/model/providers/company-api/activate?host_session_id=providers",
+                json.dumps({"model": "tool-model"}),
+            )
+            tested = handle_request(
+                "POST",
+                "/api/v1/model/providers/company-api/test?host_session_id=providers",
+                json.dumps({"model": "tool-model"}),
+            )
+            deleted = handle_request(
+                "DELETE",
+                "/api/v1/model/providers/company-api?host_session_id=providers",
+            )
+
+        for response in (saved, listed, activated, tested, deleted):
+            self.assertEqual(response.status, 200)
+            self.assertNotIn("never-return-this-key", response.body)
+        self.assertEqual(runtime.saved_providers[0]["id"], "company-api")
+        self.assertEqual(runtime.activated_providers, [("company-api", "tool-model")])
+        self.assertEqual(runtime.tested_providers, [("company-api", "tool-model")])
+        self.assertEqual(runtime.deleted_providers, ["company-api"])
+
     def test_api_access_token_is_optional_and_protects_api_routes(self) -> None:
         with patch.dict("os.environ", {"AI_GATEWAY_ACCESS_TOKEN": "host-secret"}):
             missing = handle_request("GET", "/api/v1/model/config")
@@ -219,6 +272,169 @@ class AppTests(unittest.TestCase):
                 self.assertEqual(font_response.status, 200)
                 self.assertEqual(font_response.content_type, "font/woff2")
                 self.assertIsInstance(font_response.body, bytes)
+
+    def test_native_agent_page_uses_opencode_ui_without_exposing_runtime_auth(self) -> None:
+        runtime = _FakeOpenCodeRuntime()
+        with TemporaryDirectory() as directory, patch(
+            "ai_gateway.app.get_opencode_runtime", return_value=runtime
+        ):
+            handle_request(
+                "POST",
+                "/api/v1/host/workspace?host_session_id=native-page",
+                json.dumps({"project_root": directory}),
+            )
+            response = handle_request(
+                "GET", "/agent-native/?host_session_id=native-page"
+            )
+
+        self.assertEqual(response.status, 200)
+        self.assertIn("<title>CoreTest Agent</title>", response.body)
+        self.assertIn("coretest-agent-bootstrap", response.body)
+        self.assertIn("/coretest-file/", response.body)
+        self.assertNotIn("native-runtime-secret", response.body)
+        self.assertIn("coretest_host_session=native-page", response.headers["Set-Cookie"])
+        self.assertEqual(runtime.native_requests, [])
+
+    def test_native_agent_server_session_route_uses_spa_page(self) -> None:
+        runtime = _FakeOpenCodeRuntime()
+        with TemporaryDirectory() as directory, patch(
+            "ai_gateway.app.get_opencode_runtime", return_value=runtime
+        ):
+            handle_request(
+                "POST",
+                "/api/v1/host/workspace?host_session_id=native-session-page",
+                json.dumps({"project_root": directory}),
+            )
+            response = handle_request(
+                "GET",
+                "/server/bG9jYWw/session/session-1?host_session_id=native-session-page",
+            )
+
+        self.assertEqual(response.status, 200)
+        self.assertEqual(response.content_type, "text/html; charset=utf-8")
+        self.assertIn("coretest-agent-bootstrap", response.body)
+        self.assertEqual(runtime.native_requests, [])
+
+    def test_native_agent_product_assets_are_served_without_runtime_proxy(self) -> None:
+        repo_root = Path(__file__).resolve().parents[3]
+        page = (repo_root / "frontend" / "opencode-coretest" / "dist" / "index.html").read_text(encoding="utf-8")
+        script_path = re.search(r'src="(/assets/[^"]+\.js)"', page)
+        self.assertIsNotNone(script_path)
+        runtime = _FakeOpenCodeRuntime()
+        with TemporaryDirectory() as directory, patch(
+            "ai_gateway.app.get_opencode_runtime", return_value=runtime
+        ):
+            handle_request(
+                "POST",
+                "/api/v1/host/workspace?host_session_id=native-assets",
+                json.dumps({"project_root": directory}),
+            )
+            response = handle_request(
+                "GET",
+                script_path.group(1) + "?host_session_id=native-assets",
+            )
+
+        self.assertEqual(response.status, 200)
+        self.assertEqual(response.content_type, "application/javascript; charset=utf-8")
+        self.assertIsInstance(response.body, bytes)
+        self.assertEqual(runtime.native_requests, [])
+
+    def test_native_agent_product_assets_hide_customer_visible_upstream_branding(self) -> None:
+        dist = Path(__file__).resolve().parents[3] / "frontend" / "opencode-coretest" / "dist"
+        self.assertTrue(dist.is_dir(), "CoreTest Agent native UI dist is missing")
+
+        candidates = [dist / "index.html"]
+        candidates.extend((dist / "assets").glob("index-*.js"))
+        candidates.extend((dist / "assets").glob("dialog-*.js"))
+        candidates.extend((dist / "assets").glob("new-session-*.js"))
+        candidates.extend((dist / "assets").glob("zh-*.js"))
+        candidates.extend((dist / "assets").glob("zht-*.js"))
+
+        visible_upstream_phrases = [
+            "OpenCode Go",
+            "OpenCode Zen",
+            "Subscribe to OpenCode",
+            "opencode.ai/zen",
+            "No recent projects",
+            "Get started by opening a local project",
+            "Switch which OpenCode server",
+            "Configure model API",
+            "Install OpenCode",
+            "Update OpenCode",
+        ]
+        combined = "\n".join(
+            path.read_text(encoding="utf-8", errors="ignore") for path in candidates
+        )
+        for phrase in visible_upstream_phrases:
+            self.assertNotIn(phrase, combined)
+
+    def test_native_agent_page_reports_missing_workspace_without_dropping_connection(self) -> None:
+        response = handle_request(
+            "GET", "/agent-native/?host_session_id=native-missing"
+        )
+
+        self.assertEqual(response.status, 502)
+        self.assertEqual(
+            json.loads(response.body)["error"]["code"], "service_unavailable"
+        )
+
+    def test_native_agent_profile_hides_unsupported_provider_fields(self) -> None:
+        response = handle_request("GET", "/agent-native-profile.css")
+
+        self.assertEqual(response.status, 200)
+        self.assertIn('input[placeholder="Header-Name"]', response.body)
+        self.assertIn('input[placeholder="API 密钥"]', response.body)
+        self.assertIn('href^="https://opencode.ai/docs/providers/"', response.body)
+
+    def test_native_agent_protocol_uses_basic_gateway_auth_and_session_cookie(self) -> None:
+        runtime = _FakeOpenCodeRuntime()
+        basic = b64encode(b"opencode:copilot-secret").decode("ascii")
+        with TemporaryDirectory() as directory, patch.dict(
+            "os.environ",
+            {
+                "AI_GATEWAY_ACCESS_TOKEN": "copilot-secret",
+                "AI_GATEWAY_HOST_TOKEN": "host-secret",
+            },
+        ), patch("ai_gateway.app.get_opencode_runtime", return_value=runtime):
+            handle_request(
+                "POST",
+                "/api/v1/host/workspace?host_session_id=native-api",
+                json.dumps({"project_root": directory}),
+                headers={"Authorization": "Bearer host-secret"},
+            )
+            missing = handle_request(
+                "GET", "/session", headers={"Cookie": "coretest_host_session=native-api"}
+            )
+            response = handle_request(
+                "GET",
+                "/session?directory=C%3A%5Cwrong",
+                headers={
+                    "Authorization": f"Basic {basic}",
+                    "Cookie": "coretest_host_session=native-api",
+                },
+            )
+            signed_cookie = response.headers["Set-Cookie"].split(";", 1)[0]
+            resumed = handle_request(
+                "GET",
+                "/session",
+                headers={
+                    "Cookie": (
+                        "coretest_host_session=native-api; " + signed_cookie
+                    )
+                },
+            )
+
+        self.assertEqual(missing.status, 401)
+        self.assertEqual(response.status, 200)
+        self.assertEqual(resumed.status, 200)
+        self.assertNotIn("copilot-secret", response.headers["Set-Cookie"])
+        self.assertEqual(
+            runtime.native_requests,
+            [
+                ("GET", "/session?directory=C%3A%5Cwrong", None),
+                ("GET", "/session", None),
+            ],
+        )
 
     def test_showcase_page_is_available(self) -> None:
         response = handle_request("GET", "/showcase")
@@ -521,7 +737,15 @@ class AppTests(unittest.TestCase):
             registered = handle_request(
                 "POST",
                 "/api/v1/host/workspace?host_session_id=workspace-session",
-                json.dumps({"project_root": directory}),
+                json.dumps(
+                    {
+                        "project_root": directory,
+                        "host_bridge": {
+                            "url": "http://127.0.0.1:43123",
+                            "token": "private-bridge-token",
+                        },
+                    }
+                ),
                 headers={"Authorization": "Bearer host-secret"},
             )
             status = handle_request(
@@ -537,7 +761,10 @@ class AppTests(unittest.TestCase):
         self.assertNotIn(directory, registered.body)
         self.assertNotIn(directory, status.body)
         self.assertNotIn("runtime-secret", status.body)
+        self.assertNotIn("private-bridge-token", registered.body)
+        self.assertNotIn("127.0.0.1:43123", registered.body)
         self.assertTrue(json.loads(status.body)["result"]["workspace"]["registered"])
+        self.assertTrue(json.loads(registered.body)["result"]["host_bridge"]["available"])
 
     def test_releasing_last_workspace_stops_agent_runtime(self) -> None:
         runtime = _FakeOpenCodeRuntime()
@@ -547,7 +774,15 @@ class AppTests(unittest.TestCase):
             handle_request(
                 "POST",
                 "/api/v1/host/workspace?host_session_id=release-workspace",
-                json.dumps({"project_root": directory}),
+                json.dumps(
+                    {
+                        "project_root": directory,
+                        "host_bridge": {
+                            "url": "http://127.0.0.1:43123",
+                            "token": "private-bridge-token",
+                        },
+                    }
+                ),
             )
             released = handle_request(
                 "DELETE", "/api/v1/host/session?host_session_id=release-workspace"
@@ -555,6 +790,7 @@ class AppTests(unittest.TestCase):
 
         payload = json.loads(released.body)["result"]
         self.assertTrue(payload["released_workspace"])
+        self.assertTrue(payload["released_host_bridge"])
         self.assertEqual(runtime.released_session_groups, ["release-workspace"])
         self.assertTrue(runtime.stopped)
 
@@ -631,6 +867,40 @@ class AppTests(unittest.TestCase):
         self.assertIn('"type": "completed"', chunks)
         self.assertEqual(runtime.started_with, get_workspace_path("agent-stream"))
         self.assertEqual(runtime.streamed_sessions, ["agent-stream:conversation-1"])
+
+    def test_copilot_stream_maps_stalled_runtime_error(self) -> None:
+        runtime = _FakeOpenCodeRuntime()
+
+        def stalled_stream(*_args, **_kwargs):
+            yield {"type": "started"}
+            raise RuntimeError("OpenCode event stream made no progress for too long")
+
+        runtime.stream_prompt = stalled_stream
+        with TemporaryDirectory() as directory, patch(
+            "ai_gateway.app.get_opencode_runtime", return_value=runtime
+        ):
+            handle_request(
+                "POST",
+                "/api/v1/host/workspace?host_session_id=agent-stalled",
+                json.dumps({"project_root": directory}),
+            )
+            response = handle_request(
+                "POST",
+                "/api/v1/copilot/stream?host_session_id=agent-stalled",
+                json.dumps(
+                    {
+                        "question": "inspect the project",
+                        "conversation_id": "conversation-1",
+                        "task": "chat",
+                        "attachments": [],
+                        "history": [],
+                    }
+                ),
+            )
+            chunks = b"".join(response.stream or ()).decode("utf-8")
+
+        self.assertIn('"type": "error"', chunks)
+        self.assertIn('"code": "agent_stalled"', chunks)
 
     def test_copilot_permission_and_abort_routes_are_conversation_scoped(self) -> None:
         runtime = _FakeOpenCodeRuntime()
@@ -840,7 +1110,8 @@ class AppTests(unittest.TestCase):
         payload = json.loads(response.body)
         self.assertEqual(response.status, 200)
         self.assertIn("webview", payload["integration_modes"])
-        self.assertEqual(payload["webview"]["entry"], "/copilot-shell/")
+        self.assertEqual(payload["webview"]["entry"], "/agent-native/")
+        self.assertEqual(payload["webview"]["legacy_entry"], "/copilot-shell/")
         self.assertEqual(payload["webview"]["fallback_entry"], "/copilot")
         self.assertEqual(payload["webview"]["host_session_query_parameter"], "host_session_id")
         self.assertEqual(payload["webview"]["host_origin_query_parameter"], "host_origin")
@@ -876,6 +1147,7 @@ class AppTests(unittest.TestCase):
         self.assertEqual(payload["security"], [{"bearerAuth": []}, {}])
         self.assertEqual(payload["paths"]["/health"]["get"]["security"], [])
         self.assertEqual(payload["paths"]["/copilot-shell/"]["get"]["security"], [])
+        self.assertEqual(payload["paths"]["/agent-native/"]["get"]["security"], [])
         self.assertEqual(
             payload["paths"]["/api/v1/host/assets"]["post"]["x-required-token"],
             "host",
@@ -1015,6 +1287,11 @@ class _FakeOpenCodeRuntime:
         self.aborted_sessions = []
         self.reverted_sessions = []
         self.streamed_sessions = []
+        self.saved_providers = []
+        self.deleted_providers = []
+        self.activated_providers = []
+        self.tested_providers = []
+        self.native_requests = []
 
     def start(self, workspace):
         self.started_with = workspace
@@ -1074,6 +1351,50 @@ class _FakeOpenCodeRuntime:
     def abort(self, host_session_id):
         self.aborted_sessions.append(host_session_id)
         return True
+
+    def providers(self):
+        return {
+            "providers": [
+                {
+                    "id": "company-api",
+                    "name": "Company API",
+                    "base_url": "https://api.example.com/v1",
+                    "models": [{"id": "tool-model", "name": "Tool Model"}],
+                    "api_key_configured": True,
+                    "active": True,
+                }
+            ],
+            "active_provider_id": "company-api",
+            "active_model_id": "tool-model",
+        }
+
+    def save_provider(self, payload):
+        self.saved_providers.append(payload)
+        return self.providers()
+
+    def delete_provider(self, provider_id):
+        self.deleted_providers.append(provider_id)
+        return {"providers": [], "active_provider_id": None, "active_model_id": None}
+
+    def activate_provider(self, provider_id, model_id):
+        self.activated_providers.append((provider_id, model_id))
+        return self.providers()
+
+    def test_provider(self, provider_id, model_id):
+        self.tested_providers.append((provider_id, model_id))
+        return {"ok": True, "provider_id": provider_id, "model_id": model_id}
+
+    def native_request(self, method, path, body=None, *, content_type="application/json"):
+        self.native_requests.append((method, path, body))
+        if path == "/":
+            return OpenCodeNativeResponse(
+                200,
+                b"<!doctype html><html><head><title>OpenCode</title></head><body>native-runtime-secret</body></html>".replace(
+                    b"native-runtime-secret", b"OpenCode UI"
+                ),
+                "text/html; charset=utf-8",
+            )
+        return OpenCodeNativeResponse(200, b"[]", "application/json")
 
 
 if __name__ == "__main__":

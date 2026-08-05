@@ -28,6 +28,8 @@ def register_workspace(
     root = candidate.resolve()
     if root.parent == root:
         raise ValueError("project_root cannot be a filesystem root")
+    if _is_product_source_root(root):
+        raise ValueError("project_root cannot be a CoreTest or CoreTest Agent product source root")
 
     session_id = normalize_host_session_id(host_session_id)
     with _lock:
@@ -75,3 +77,10 @@ def workspace_count() -> int:
 def reset_workspaces() -> None:
     with _lock:
         _workspaces.clear()
+
+
+def _is_product_source_root(root: Path) -> bool:
+    return (
+        (root / "frontend" / "copilot-shell").is_dir()
+        and (root / "src" / "ai-gateway" / "src" / "ai_gateway").is_dir()
+    ) or (root / "app" / "coretest_copilot").is_dir()

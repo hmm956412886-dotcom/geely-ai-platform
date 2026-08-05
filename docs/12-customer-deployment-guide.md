@@ -19,9 +19,9 @@ OpenCode 使用 `config/open-source-lock.json` 锁定的官方 Windows x64 Runti
 
 ## 2. 配置模型与部署参数
 
-普通桌面部署优先在 CoreTest 右侧 Agent 底部点击“API”，填写 Base URL、API Key 和模型名。配置保存到
-`%LOCALAPPDATA%\HK-CoreTest\ai-model.env`，API Key 不会回显；底部模型选择器用于在已配置模型之间切换。
-已有项目旁 `ai-model.env/.env` 继续兼容；无人值守部署可用 `AI_MODEL_CONFIG_FILE` 指定固定路径。
+普通桌面部署只需启动 CoreTest，在右侧 Agent 底部点击“API”，添加 Provider、Base URL、API Key 和一个或多个模型。
+配置由 OpenCode Config/Auth 持久化到 `%LOCALAPPDATA%\HK-CoreTest\opencode`，API Key 不会回显；底部模型选择器
+用于在所有已配置 Provider 的模型之间切换。已有 `ai-model.env/.env` 仅作为首次迁移来源继续兼容。
 
 无人值守部署或需要预置端口、鉴权 Token 时，再复制模板：
 
@@ -38,19 +38,21 @@ AI_GATEWAY_HOST=127.0.0.1
 AI_GATEWAY_PORT=8765
 AI_GATEWAY_ACCESS_TOKEN=生成的高强度随机Token
 AI_GATEWAY_HOST_TOKEN=另一个高强度随机Token
-AI_MODEL_BASE_URL=https://api.example.com/v1
-AI_MODEL_API_KEY=客户自己的 Key
-AI_MODEL_NAME=客户模型名
+# 以下三项仅用于无人值守预置或旧配置首次迁移，普通用户在侧栏配置
+AI_MODEL_BASE_URL=
+AI_MODEL_API_KEY=
+AI_MODEL_NAME=
 AI_MODEL_TIMEOUT_SECONDS=30
 
 # OpenCode Runtime（正式包自动使用内置版本）
 OPENCODE_COMMAND=auto
 OPENCODE_HOST=127.0.0.1
-OPENCODE_PORT=4097
+OPENCODE_PORT=
 ```
 
 注意：
 
+- 普通用户不需要创建 `.env`；该文件只用于无人值守预置 Gateway 端口、鉴权 Token 或迁移旧模型配置。
 - `.env` 已被 `.gitignore` 忽略。
 - 不要把真实 API Key 写入 `runtime.env.example`。
 - Agent 模型必须支持可靠的工具调用；只支持普通文本补全的 OpenAI-compatible 服务不能完成文件和 Shell 工具循环。
@@ -62,8 +64,12 @@ OPENCODE_PORT=4097
 - 默认最多保留 256 个 Host Session；CoreTest 关闭窗口时必须释放当前会话。
 - CoreTest Connector 只发送受限的文件内容或结构化 Snapshot，不向 WebView 暴露本地绝对路径。
 - CoreTest Connector 使用 Host Token 注册当前工程根目录；Gateway 只向 WebView 返回“工作区已注册”，不返回实际路径。
+- CoreTest Connector 会在本机随机端口启动只读能力桥，并把随机令牌仅交给 Gateway/OpenCode；客户无需配置端口或令牌，WebView 也不会获得这些信息。
 
-## 3. 启动 AI Gateway
+## 3. 启动产品
+
+正式交付包直接启动 CoreTest。Connector 会自动启动 Gateway；OpenCode 在第一次使用 Agent 时按需启动，关闭 CoreTest 时自动退出。
+以下命令只用于开发联调 Gateway：
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-ai-gateway.ps1 -EnvFile .\.env
@@ -78,7 +84,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-ai-gateway.p
 只在开发联调时打开页面：
 
 ```text
-http://127.0.0.1:8765/copilot-shell/
+http://127.0.0.1:8765/agent-native/
 http://127.0.0.1:8765/plugin-manifest.json
 http://127.0.0.1:8765/openapi.json
 ```
@@ -145,9 +151,9 @@ Gateway REST/OpenAPI 仍是稳定集成协议，但第一版只以真实 CoreTes
 ## 6. 当前安全边界
 
 - 汽车数据分析默认只读。
-- OpenCode 搜索和读取默认允许；原生 `edit/apply_patch` 修改和 Shell 命令逐次请求用户批准，直接 `write` 保持禁用以防绕过审批。
+- CoreTest、CoreTest Agent 和 Gateway 不注册为 Agent 工作区；OpenCode 只在可信 Connector 注册的当前用户工程内自动搜索、编辑、写入和运行 Shell。文件/Web 工具拒绝工作区外目录和 Web 访问，硬件能力不注册；正式安装目录必须用 ACL 阻止普通用户写入产品文件。
 - 不写客户数据库。
 - 不修改测试配置。
 - 不控制测试设备。
-- API Key 只在客户机器环境变量中配置。
+- API Key 由 OpenCode Auth 保存在客户机器本地，不返回 WebView、不进入 Prompt；环境变量仅用于可选的首次迁移。
 - 响应中的 `request_id` 用于排查和审计。

@@ -21,6 +21,11 @@ class GatewayHandler(BaseHTTPRequestHandler):
         body = self.rfile.read(length).decode("utf-8") if length else ""
         self._send(handle_request("POST", self.path, body, headers=self.headers))
 
+    def do_PATCH(self) -> None:
+        length = int(self.headers.get("Content-Length", "0"))
+        body = self.rfile.read(length).decode("utf-8") if length else ""
+        self._send(handle_request("PATCH", self.path, body, headers=self.headers))
+
     def do_DELETE(self) -> None:
         self._send(handle_request("DELETE", self.path, headers=self.headers))
 

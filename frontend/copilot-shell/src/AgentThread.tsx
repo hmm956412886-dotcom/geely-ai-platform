@@ -8,6 +8,9 @@ import {
   useMessage,
 } from "@assistant-ui/react";
 import { makeMarkdownText } from "@assistant-ui/react-ui";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { useLayoutEffect, useRef } from "react";
 import {
   ArrowDown20Regular,
   ArrowDownload20Regular,
@@ -32,8 +35,10 @@ import type {
   AgentActivity,
   AgentDiffResult,
   AgentPermission,
+  AgentTodo,
+  AgentTurnStatus,
   CopilotArtifact,
-  ModelConfig,
+  ModelProviderCatalog,
 } from "./types";
 
 interface RequestDiagnostic {
@@ -50,10 +55,12 @@ export interface AgentThreadProps {
   contextLabel: string;
   dataLabel: string;
   suggestions: Suggestion[];
-  isRunning: boolean;
+  turnStatus: AgentTurnStatus;
   lastMessageRole?: "assistant" | "user";
   latestAssistantId?: string;
   activity: AgentActivity[];
+  reasoning: string;
+  todos: AgentTodo[];
   permission: AgentPermission | null;
   permissionReplying: boolean;
   onReplyPermission: (reply: "once" | "reject") => void;
@@ -67,9 +74,9 @@ export interface AgentThreadProps {
   saveNotice: string | null;
   composerAttachmentCount: number;
   onGenerateTests: () => void;
-  modelConfig: ModelConfig | null;
+  modelProviders: ModelProviderCatalog | null;
   modelSaving: boolean;
-  onSelectModel: (model: string) => void;
+  onSelectModel: (providerId: string, modelId: string) => void;
   historyCount: number;
   onOpenHistory: () => void;
   onOpenSettings: () => void;
@@ -77,6 +84,7 @@ export interface AgentThreadProps {
 
 const MarkdownText = makeMarkdownText({
   className: "agent-markdown",
+  remarkPlugins: [remarkGfm],
   components: {
     CodeHeader: ({ language, code }) => (
       <div className="code-header">
@@ -96,11 +104,20 @@ const MarkdownText = makeMarkdownText({
 });
 
 export function AgentThread(props: AgentThreadProps) {
-  const showPending = props.isRunning && props.lastMessageRole === "user";
-  const modelOptions = Array.from(new Set([
-    ...(props.modelConfig?.model ? [props.modelConfig.model] : []),
-    ...(props.modelConfig?.available_models ?? []),
-  ]));
+  const isRunning = props.turnStatus === "running";
+  const showPending = isRunning && props.lastMessageRole === "user";
+  const modelOptions = (props.modelProviders?.providers ?? []).flatMap((provider) =>
+    provider.models.map((model) => ({
+      value: JSON.stringify([provider.id, model.id]),
+      label: `${provider.name} · ${model.name}`,
+    })),
+  );
+  const activeModel = props.modelProviders?.active_provider_id && props.modelProviders.active_model_id
+    ? JSON.stringify([
+        props.modelProviders.active_provider_id,
+        props.modelProviders.active_model_id,
+      ])
+    : "";
 
   return (
     <ThreadPrimitive.Root className="agent-thread-root">
@@ -138,28 +155,33 @@ export function AgentThread(props: AgentThreadProps) {
           <AgentComposer
             hostConnected={props.hostConnected}
             attachmentCount={props.composerAttachmentCount}
-            isRunning={props.isRunning}
+            isRunning={isRunning}
             onGenerateTests={props.onGenerateTests}
           />
 
           <div className="agent-control-bar" aria-label="Agent 控制栏">
-            <label className="model-control" title={props.modelConfig?.model ?? "未配置模型"}>
+            <label className="model-control" title={activeModel ? "切换模型" : "未配置模型"}>
               <Bot20Regular aria-hidden="true" />
               <select
                 aria-label="切换模型"
-                value={props.modelConfig?.model ?? ""}
-                onChange={(event) => props.onSelectModel(event.target.value)}
-                disabled={props.modelSaving || props.isRunning || !props.modelConfig?.configured}
+                value={activeModel}
+                onChange={(event) => {
+                  const [providerId, modelId] = JSON.parse(event.target.value) as [string, string];
+                  props.onSelectModel(providerId, modelId);
+                }}
+                disabled={props.modelSaving || isRunning || !modelOptions.length}
               >
-                {!props.modelConfig?.model && <option value="">未配置模型</option>}
-                {modelOptions.map((model) => <option key={model} value={model}>{model}</option>)}
+                {!activeModel && <option value="">未配置模型</option>}
+                {modelOptions.map((model) => (
+                  <option key={model.value} value={model.value}>{model.label}</option>
+                ))}
               </select>
             </label>
             <button
               type="button"
               className="control-button"
               onClick={props.onOpenHistory}
-              disabled={props.isRunning}
+              disabled={isRunning}
               title="历史会话"
             >
               <History20Regular aria-hidden="true" />
@@ -170,7 +192,7 @@ export function AgentThread(props: AgentThreadProps) {
               type="button"
               className="control-button"
               onClick={props.onOpenSettings}
-              disabled={props.isRunning || props.modelSaving}
+              disabled={isRunning || props.modelSaving}
               title="模型与 API 配置"
             >
               <Settings20Regular aria-hidden="true" />
@@ -191,7 +213,7 @@ function AgentWelcome({
 }: Pick<AgentThreadProps, "hostConnected" | "contextLabel" | "dataLabel" | "suggestions">) {
   const title = hostConnected ? "从当前工程开始" : "等待 CoreTest 连接";
   const description = hostConnected
-    ? "我可以读取工程、分析文件，并在你批准后修改代码或运行命令。"
+    ? "我会直接理解、修改并验证当前用户工程，产品源码保持受保护。"
     : "连接后，Agent 会自动获得当前工程作为唯一工作区。";
 
   return (
@@ -256,13 +278,18 @@ function AssistantMessage(props: AgentThreadProps) {
       <div className="assistant-message-header">
         <span className="assistant-badge"><Bot20Regular aria-hidden="true" /></span>
         <strong>Agent</strong>
-        {isCurrentTurn && props.isRunning && (
+        {isCurrentTurn && props.turnStatus === "running" && (
           <span className="running-label"><span className="status-spinner" />正在工作</span>
         )}
       </div>
 
-      {isCurrentTurn && props.activity.length > 0 && (
-        <ActivityTimeline activity={props.activity} isRunning={props.isRunning} />
+      {isCurrentTurn && (props.activity.length > 0 || props.reasoning || props.todos.length > 0) && (
+        <ActivityTimeline
+          activity={props.activity}
+          reasoning={props.reasoning}
+          todos={props.todos}
+          turnStatus={props.turnStatus}
+        />
       )}
 
       {isCurrentTurn && props.permission && (
@@ -287,7 +314,7 @@ function AssistantMessage(props: AgentThreadProps) {
           onDownloadArtifact={props.onDownloadArtifact}
           diagnostic={props.diagnostic}
           saveNotice={props.saveNotice}
-          isRunning={props.isRunning}
+          isRunning={props.turnStatus === "running"}
         />
       )}
 
@@ -315,32 +342,91 @@ function PendingAgentTurn() {
   );
 }
 
-function ActivityTimeline({ activity, isRunning }: { activity: AgentActivity[]; isRunning: boolean }) {
+function ActivityTimeline({
+  activity,
+  reasoning,
+  todos,
+  turnStatus,
+}: {
+  activity: AgentActivity[];
+  reasoning: string;
+  todos: AgentTodo[];
+  turnStatus: AgentTurnStatus;
+}) {
+  const isRunning = turnStatus === "running";
+  const timeline = useRef<HTMLDetailsElement>(null);
+  const reasoningPanel = useRef<HTMLDetailsElement>(null);
+  useLayoutEffect(() => {
+    if (timeline.current) timeline.current.open = isRunning;
+    if (reasoningPanel.current) reasoningPanel.current.open = isRunning;
+  }, [isRunning, Boolean(reasoning)]);
   const runningStep = [...activity].reverse().find((step) => isActiveStep(step.status));
-  const completed = activity.filter((step) => !isActiveStep(step.status)).length;
-  const summary = runningStep
-    ? `${toolLabel(runningStep.tool)}：${runningStep.title}`
-    : `已完成 ${completed} 个步骤`;
+  const completed = activity.filter((step) => step.status === "completed").length;
+  const failed = turnStatus === "failed";
+  const cancelled = turnStatus === "cancelled";
+  const summary = isRunning
+    ? runningStep
+      ? `${toolLabel(runningStep.tool)}：${runningStep.title}`
+      : "正在分析工程"
+    : failed
+      ? `执行失败，已完成 ${completed} 个步骤`
+      : cancelled
+        ? `已取消，完成 ${completed} 个步骤`
+        : `已完成 ${completed} 个步骤`;
+  const finalStatus = failed ? "failed" : cancelled ? "cancelled" : "completed";
 
   return (
-    <details className="activity-timeline" open={isRunning}>
+    <details className="activity-timeline" ref={timeline}>
       <summary>
-        <span className={runningStep ? "status-spinner" : "status-check"}>
-          {!runningStep && <Checkmark20Regular aria-hidden="true" />}
+        <span className={isRunning ? "status-spinner" : "status-check"} data-status={finalStatus}>
+          {!isRunning && (failed
+            ? <Warning16Regular aria-hidden="true" />
+            : cancelled
+              ? <Dismiss20Regular aria-hidden="true" />
+              : <Checkmark20Regular aria-hidden="true" />)}
         </span>
-        <span>{summary}</span>
-        <small>{activity.length}</small>
+        <span><b>工作过程</b><span>{summary}</span></span>
+        <small>{activity.length + todos.length + (reasoning ? 1 : 0)}</small>
         <ChevronRight16Regular className="details-chevron" aria-hidden="true" />
       </summary>
-      <div className="activity-steps">
-        {activity.map((step) => (
+      <div className="activity-details">
+        {todos.length > 0 && (
+          <ol className="agent-todos" aria-label="Agent 任务清单">
+            {todos.map((todo, index) => (
+              <li key={`${index}-${todo.content}`} data-status={todo.status}>
+                <span>{todo.status === "completed"
+                  ? <Checkmark20Regular aria-hidden="true" />
+                  : isFailedStep(todo.status)
+                    ? <Warning16Regular aria-hidden="true" />
+                    : isCancelledStep(todo.status)
+                      ? <Dismiss20Regular aria-hidden="true" />
+                      : index + 1}</span>
+                <span>{todo.content}</span>
+              </li>
+            ))}
+          </ol>
+        )}
+        {reasoning && (
+          <details className="reasoning-details" ref={reasoningPanel}>
+            <summary>分析过程</summary>
+            <div className="reasoning-markdown">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{reasoning}</ReactMarkdown>
+            </div>
+          </details>
+        )}
+        {activity.length > 0 && <div className="activity-steps">
+          {activity.map((step) => (
           <div className="activity-step" key={step.id}>
-            <span className="activity-rail">
+            <span className="activity-rail" data-status={step.status}>
               {isActiveStep(step.status)
                 ? <span className="status-spinner" />
-                : <Checkmark20Regular aria-hidden="true" />}
+                : isFailedStep(step.status)
+                  ? <Warning16Regular aria-hidden="true" />
+                  : isCancelledStep(step.status)
+                    ? <Dismiss20Regular aria-hidden="true" />
+                    : <Checkmark20Regular aria-hidden="true" />}
             </span>
-            <div>
+            <div className="activity-step-copy">
               <strong>{toolLabel(step.tool)}</strong>
               <code title={step.title}>{step.title}</code>
               {step.output && (
@@ -351,7 +437,8 @@ function ActivityTimeline({ activity, isRunning }: { activity: AgentActivity[]; 
               )}
             </div>
           </div>
-        ))}
+          ))}
+        </div>}
       </div>
     </details>
   );
@@ -410,8 +497,7 @@ function TurnResults({
   | "onDownloadArtifact"
   | "diagnostic"
   | "saveNotice"
-  | "isRunning"
->) {
+> & { isRunning: boolean }) {
   const hasDiff = diffResult.files.length > 0
     || diffResult.revert_reason === "workspace_has_no_git_baseline";
 
@@ -422,11 +508,11 @@ function TurnResults({
           <div className="checkpoint-heading">
             <div className="checkpoint-icon"><Code20Regular aria-hidden="true" /></div>
             <div>
-              <strong>工作区检查点</strong>
+              <strong>工程变更</strong>
               <span>
                 {diffResult.files.length > 0
-                  ? `${diffResult.files.length} 个文件发生变更`
-                  : "修改已完成，但当前工程没有 Git 基线"}
+                  ? `${diffResult.files.length} 个工程文件发生变更`
+                  : "已写入文件，但工程没有 Git 基线"}
               </span>
             </div>
             {diffResult.revert_available && (
@@ -446,7 +532,7 @@ function TurnResults({
           {diffResult.revert_reason === "workspace_has_no_git_baseline" && (
             <div className="inline-warning" role="note">
               <Warning16Regular aria-hidden="true" />
-              <span>无法自动撤销，请使用工程自身的版本管理能力检查变更。</span>
+              <span>当前工程没有 Git 基线，CoreTest Agent 无法自动生成 Diff 或撤销本轮修改。</span>
             </div>
           )}
 
@@ -628,10 +714,21 @@ function toolLabel(tool: string): string {
     write: "写入文件",
     apply_patch: "应用修改",
     bash: "运行命令",
+    step: "执行步骤",
+    retry: "重试模型",
+    patch: "文件变更",
   };
   return labels[tool] ?? tool;
 }
 
 function isActiveStep(status: string): boolean {
   return status === "running" || status === "pending";
+}
+
+function isFailedStep(status: string): boolean {
+  return status === "failed" || status === "error";
+}
+
+function isCancelledStep(status: string): boolean {
+  return status === "cancelled" || status === "canceled";
 }

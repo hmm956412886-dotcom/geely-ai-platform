@@ -9,21 +9,23 @@ import {
 } from "@assistant-ui/react";
 import {
   Button,
-  Combobox,
   DrawerBody,
   DrawerHeader,
   DrawerHeaderTitle,
   Field,
   FluentProvider,
   Input,
-  Option,
   OverlayDrawer,
+  Spinner,
+  Textarea,
   webLightTheme,
 } from "@fluentui/react-components";
 import {
   Add20Regular,
   CheckmarkCircle20Regular,
+  Delete20Regular,
   Dismiss24Regular,
+  Play20Regular,
 } from "@fluentui/react-icons";
 import { AgentThread } from "./AgentThread";
 import { GatewayRequestError, gatewayClient, hostSessionId } from "./gatewayClient";
@@ -31,13 +33,15 @@ import type {
   AgentActivity,
   AgentDiffResult,
   AgentPermission,
+  AgentTodo,
+  AgentTurnStatus,
   CopilotArtifact,
   CopilotAttachment,
   CopilotHistoryMessage,
   CopilotResponse,
   HostContext,
   HostContextMessage,
-  ModelConfig,
+  ModelProviderCatalog,
 } from "./types";
 
 interface ChatMessage {
@@ -105,6 +109,25 @@ function userMessage(
   attachments?: readonly CompleteAttachment[],
 ): ChatMessage {
   return { id: crypto.randomUUID(), role: "user", content, attachments };
+}
+
+function parseProviderModels(value: string): Array<{ id: string; name: string }> {
+  const models = value
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const separator = line.indexOf("|");
+      const id = (separator >= 0 ? line.slice(0, separator) : line).trim();
+      const name = (separator >= 0 ? line.slice(separator + 1) : line).trim() || id;
+      if (!id) throw new Error("模型 ID 不能为空");
+      return { id, name };
+    });
+  if (!models.length) throw new Error("请至少填写一个模型");
+  if (new Set(models.map(({ id }) => id)).size !== models.length) {
+    throw new Error("模型 ID 不能重复");
+  }
+  return models;
 }
 
 function createConversation(projectKey: string): Conversation {
@@ -236,11 +259,27 @@ function localizedError(error: unknown): string {
   if (error instanceof GatewayRequestError && error.code === "model_unavailable") {
     return "AI 模型尚未配置或当前不可用，请检查模型设置后重试。";
   }
+  if (error instanceof GatewayRequestError && error.code === "agent_stalled") {
+    return "智能体连续 5 分钟没有新进展，本轮已自动停止。可以直接重新发送任务。";
+  }
+  if (error instanceof GatewayRequestError && error.code === "agent_stream_disconnected") {
+    return "智能体连接意外中断，本轮已停止。可以直接重试，系统会创建干净会话继续。";
+  }
+  if (error instanceof GatewayRequestError && error.code === "agent_timeout") {
+    return "本轮任务已达到 30 分钟上限并自动停止。可以缩小任务范围后重新发送。";
+  }
+  if (error instanceof GatewayRequestError && error.code === "agent_failed") {
+    return "智能体执行失败，本轮已停止。请查看诊断详情后重试。";
+  }
   if (error instanceof TypeError && error.message.includes("fetch")) {
     return "无法连接 AI Gateway，请确认服务已启动。";
   }
   if (error instanceof GatewayRequestError) return "请求未能完成，请检查输入后重试。";
   return error instanceof Error ? error.message : "请求未能完成，请稍后重试。";
+}
+
+function isActiveStatus(status: string): boolean {
+  return status === "running" || status === "pending" || status === "in_progress";
 }
 
 export default function App() {
@@ -251,21 +290,28 @@ export default function App() {
   });
   const [activeConversationId, setActiveConversationId] = useState(() => conversations[0]?.id ?? "");
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [isRunning, setIsRunning] = useState(false);
+  const [turnStatus, setTurnStatus] = useState<AgentTurnStatus>("idle");
   const [composerAttachmentCount, setComposerAttachmentCount] = useState(0);
   const [diagnostic, setDiagnostic] = useState<RequestDiagnostic | null>(null);
   const [saveNotice, setSaveNotice] = useState<string | null>(null);
   const [permission, setPermission] = useState<AgentPermission | null>(null);
   const [permissionReplying, setPermissionReplying] = useState(false);
   const [activity, setActivity] = useState<AgentActivity[]>([]);
+  const [reasoning, setReasoning] = useState("");
+  const [todos, setTodos] = useState<AgentTodo[]>([]);
   const [diffResult, setDiffResult] = useState<AgentDiffResult>(emptyDiffResult);
   const [reverting, setReverting] = useState(false);
-  const [modelConfig, setModelConfig] = useState<ModelConfig | null>(null);
+  const [modelProviders, setModelProviders] = useState<ModelProviderCatalog | null>(null);
+  const [providerModels, setProviderModels] = useState<Record<string, string>>({});
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [modelDraft, setModelDraft] = useState("");
-  const [baseUrlDraft, setBaseUrlDraft] = useState("");
-  const [apiKeyDraft, setApiKeyDraft] = useState("");
+  const [providerIdDraft, setProviderIdDraft] = useState("");
+  const [providerNameDraft, setProviderNameDraft] = useState("");
+  const [providerUrlDraft, setProviderUrlDraft] = useState("");
+  const [providerKeyDraft, setProviderKeyDraft] = useState("");
+  const [providerModelsDraft, setProviderModelsDraft] = useState("");
+  const [settingsError, setSettingsError] = useState<string | null>(null);
   const [modelSaving, setModelSaving] = useState(false);
+  const [testingProviderId, setTestingProviderId] = useState<string | null>(null);
   const activeConversationIdRef = useRef(activeConversationId);
   const abortControllerRef = useRef<AbortController | null>(null);
   const currentProjectKey = projectKey(context);
@@ -279,6 +325,7 @@ export default function App() {
   const latestAssistantId = [...messages].reverse()
     .find((message) => message.role === "assistant")?.id;
   const lastMessageRole = messages[messages.length - 1]?.role;
+  const isRunning = turnStatus === "running";
 
   useEffect(() => {
     try {
@@ -369,59 +416,126 @@ export default function App() {
     }
   }, [reportError]);
 
-  const refreshModelConfig = useCallback(async () => {
-    try {
-      setModelConfig(await gatewayClient.getModelConfig());
-    } catch {
-      setModelConfig(null);
-    }
+  const applyProviderCatalog = useCallback((catalog: ModelProviderCatalog) => {
+    setModelProviders(catalog);
+    setProviderModels((current) => Object.fromEntries(catalog.providers.map((provider) => {
+      const selected = provider.id === catalog.active_provider_id
+        ? catalog.active_model_id
+        : current[provider.id];
+      const model = provider.models.some(({ id }) => id === selected)
+        ? selected!
+        : provider.models[0]?.id ?? "";
+      return [provider.id, model];
+    })));
   }, []);
 
+  const refreshModelProviders = useCallback(async () => {
+    try {
+      applyProviderCatalog(await gatewayClient.getModelProviders());
+      setSettingsError(null);
+    } catch (error) {
+      setModelProviders(null);
+      setSettingsError(error instanceof Error ? error.message : "Provider 列表加载失败");
+    }
+  }, [applyProviderCatalog]);
+
   useEffect(() => {
-    void refreshModelConfig();
-  }, [refreshModelConfig]);
+    void refreshModelProviders();
+  }, [refreshModelProviders]);
+
+  useEffect(() => {
+    if (hostConnected) void refreshModelProviders();
+  }, [hostConnected, refreshModelProviders]);
 
   const openSettings = useCallback(() => {
-    setModelDraft(modelConfig?.model ?? "");
-    setBaseUrlDraft(modelConfig?.base_url ?? "");
-    setApiKeyDraft("");
+    setSettingsError(null);
     setSettingsOpen(true);
-  }, [modelConfig]);
+    void refreshModelProviders();
+  }, [refreshModelProviders]);
 
-  const saveModelSettings = useCallback(async () => {
+  const saveProvider = useCallback(async () => {
     if (modelSaving) return;
+    setSettingsError(null);
     setModelSaving(true);
     try {
-      const update: { base_url?: string; api_key?: string; model?: string } = {
-        base_url: baseUrlDraft.trim(),
-        model: modelDraft.trim(),
-      };
-      if (apiKeyDraft.trim()) update.api_key = apiKeyDraft.trim();
-      const next = await gatewayClient.updateModelConfig(update);
-      setModelConfig(next);
-      setApiKeyDraft("");
-      setSettingsOpen(false);
-      setSaveNotice("模型配置已保存，下一次请求将使用新配置");
+      const models = parseProviderModels(providerModelsDraft);
+      const next = await gatewayClient.saveModelProvider({
+        id: providerIdDraft.trim(),
+        name: providerNameDraft.trim(),
+        base_url: providerUrlDraft.trim(),
+        api_key: providerKeyDraft.trim(),
+        models,
+        activate: true,
+      });
+      applyProviderCatalog(next);
+      setProviderIdDraft("");
+      setProviderNameDraft("");
+      setProviderUrlDraft("");
+      setProviderKeyDraft("");
+      setProviderModelsDraft("");
+      setSaveNotice(`已保存并启用：${next.active_provider_id}/${next.active_model_id}`);
     } catch (error) {
-      reportError(error);
+      setSettingsError(error instanceof Error ? error.message : "Provider 保存失败");
     } finally {
       setModelSaving(false);
     }
-  }, [apiKeyDraft, baseUrlDraft, modelDraft, modelSaving, reportError]);
+  }, [
+    applyProviderCatalog,
+    modelSaving,
+    providerIdDraft,
+    providerKeyDraft,
+    providerModelsDraft,
+    providerNameDraft,
+    providerUrlDraft,
+  ]);
 
-  const selectModel = useCallback(async (model: string) => {
-    if (!model || model === modelConfig?.model || modelSaving) return;
+  const selectModel = useCallback(async (providerId: string, modelId: string) => {
+    if (!providerId || !modelId || modelSaving) return;
+    if (
+      providerId === modelProviders?.active_provider_id
+      && modelId === modelProviders.active_model_id
+    ) return;
     setModelSaving(true);
     try {
-      const next = await gatewayClient.updateModelConfig({ model });
-      setModelConfig(next);
-      setSaveNotice(`已切换模型：${model}`);
+      applyProviderCatalog(await gatewayClient.activateModelProvider(providerId, modelId));
+      setSaveNotice(`已切换模型：${providerId}/${modelId}`);
     } catch (error) {
       reportError(error);
     } finally {
       setModelSaving(false);
     }
-  }, [modelConfig?.model, modelSaving, reportError]);
+  }, [applyProviderCatalog, modelProviders, modelSaving, reportError]);
+
+  const testProvider = useCallback(async (providerId: string) => {
+    const modelId = providerModels[providerId];
+    if (!modelId || modelSaving) return;
+    setSettingsError(null);
+    setModelSaving(true);
+    setTestingProviderId(providerId);
+    try {
+      await gatewayClient.testModelProvider(providerId, modelId);
+      setSaveNotice(`连接测试通过：${providerId}/${modelId}`);
+    } catch (error) {
+      setSettingsError(error instanceof Error ? error.message : "连接测试失败");
+    } finally {
+      setTestingProviderId(null);
+      setModelSaving(false);
+    }
+  }, [modelSaving, providerModels]);
+
+  const deleteProvider = useCallback(async (providerId: string) => {
+    if (modelSaving || !window.confirm(`删除 Provider “${providerId}”？`)) return;
+    setSettingsError(null);
+    setModelSaving(true);
+    try {
+      applyProviderCatalog(await gatewayClient.deleteModelProvider(providerId));
+      setSaveNotice(`已删除 Provider：${providerId}`);
+    } catch (error) {
+      setSettingsError(error instanceof Error ? error.message : "Provider 删除失败");
+    } finally {
+      setModelSaving(false);
+    }
+  }, [applyProviderCatalog, modelSaving]);
 
   useEffect(() => {
     void refreshContext();
@@ -449,7 +563,10 @@ export default function App() {
         .then(([permissions, nextActivity]) => {
           if (active) {
             setPermission(permissions[0] ?? null);
-            setActivity(nextActivity);
+            setActivity((current) => [
+              ...current.filter((item) => ["step", "retry", "patch"].includes(item.tool)),
+              ...nextActivity,
+            ].slice(-20));
           }
         })
         .catch(() => undefined);
@@ -493,22 +610,44 @@ export default function App() {
       abortControllerRef.current = controller;
       appendMessage(conversationId, message);
       setActivity([]);
+      setReasoning("");
+      setTodos([]);
       setDiffResult(emptyDiffResult);
       setDiagnostic(null);
       setSaveNotice(null);
-      setIsRunning(true);
+      setTurnStatus("running");
       try {
         const content = await action(conversationId, controller.signal);
         if (content) appendAssistant(conversationId, content);
+        setActivity((current) => current.map((item) =>
+          isActiveStatus(item.status) ? { ...item, status: "completed" } : item
+        ));
+        setTodos((current) => current.map((item) =>
+          isActiveStatus(item.status) ? { ...item, status: "completed" } : item
+        ));
+        setTurnStatus("completed");
       } catch (error) {
         if (error instanceof Error && error.name === "AbortError") {
+          setActivity((current) => current.map((item) =>
+            isActiveStatus(item.status) ? { ...item, status: "cancelled" } : item
+          ));
+          setTodos((current) => current.map((item) =>
+            isActiveStatus(item.status) ? { ...item, status: "cancelled" } : item
+          ));
           appendAssistant(conversationId, "已停止本次请求。");
+          setTurnStatus("cancelled");
         } else {
+          setActivity((current) => current.map((item) =>
+            isActiveStatus(item.status) ? { ...item, status: "failed" } : item
+          ));
+          setTodos((current) => current.map((item) =>
+            isActiveStatus(item.status) ? { ...item, status: "failed" } : item
+          ));
           reportError(error, conversationId);
+          setTurnStatus("failed");
         }
       } finally {
         if (abortControllerRef.current === controller) abortControllerRef.current = null;
-        setIsRunning(false);
       }
     },
     [appendAssistant, appendMessage, isRunning, reportError],
@@ -540,6 +679,12 @@ export default function App() {
                   added = true;
                 }
                 updateMessage(conversationId, response.id, answer);
+              } else if (event.type === "reasoning_delta") {
+                if (!added) {
+                  appendMessage(conversationId, response);
+                  added = true;
+                }
+                setReasoning((current) => current + event.delta);
               } else if (event.type === "tool") {
                 if (!added) {
                   appendMessage(conversationId, response);
@@ -549,15 +694,64 @@ export default function App() {
                   ...current.filter((item) => item.id !== event.id),
                   event,
                 ].slice(-20));
+              } else if (event.type === "step") {
+                if (!added) {
+                  appendMessage(conversationId, response);
+                  added = true;
+                }
+                setActivity((current) => [
+                  ...current.filter((item) => item.id !== event.id),
+                  { ...event, tool: "step", output: "" },
+                ].slice(-20));
+              } else if (event.type === "todo") {
+                if (!added) {
+                  appendMessage(conversationId, response);
+                  added = true;
+                }
+                setTodos(event.todos);
+              } else if (event.type === "retry") {
+                if (!added) {
+                  appendMessage(conversationId, response);
+                  added = true;
+                }
+                setActivity((current) => [
+                  ...current.map((item) =>
+                    item.tool === "retry" && isActiveStatus(item.status)
+                      ? { ...item, status: "completed" }
+                      : item
+                  ).filter((item) => item.id !== `retry-${event.attempt}`),
+                  {
+                    id: `retry-${event.attempt}`,
+                    tool: "retry",
+                    status: "running",
+                    title: event.message,
+                    output: "",
+                  },
+                ].slice(-20));
+              } else if (event.type === "patch") {
+                if (!added) {
+                  appendMessage(conversationId, response);
+                  added = true;
+                }
+                setActivity((current) => [
+                  ...current.filter((item) => item.id !== "workspace-patch"),
+                  {
+                    id: "workspace-patch",
+                    tool: "patch",
+                    status: "completed",
+                    title: event.files.length ? `${event.files.length} 个文件发生变化` : "已记录文件变化",
+                    output: event.files.join("\n"),
+                  },
+                ].slice(-20));
               } else if (event.type === "permission") {
                 setPermission(event.permission);
               } else if (event.type === "error") {
-                throw new GatewayRequestError(event.message, undefined, "model_unavailable");
+                throw new GatewayRequestError(event.message, undefined, event.code ?? "agent_failed");
               }
             },
             signal,
           );
-          if (!answer.trim()) throw new Error("OpenCode returned an empty response");
+          if (!answer.trim()) throw new Error("CoreTest Agent returned an empty response");
           setDiffResult(await gatewayClient.diff(conversationId).catch(() => emptyDiffResult));
           return null;
         }
@@ -642,7 +836,10 @@ export default function App() {
     composerConversationRef.current = activeConversationId;
     setComposerAttachmentCount(0);
     setActivity([]);
+    setReasoning("");
+    setTodos([]);
     setDiffResult(emptyDiffResult);
+    setTurnStatus("idle");
     void runtime.thread.composer.reset();
   }, [activeConversationId, runtime]);
 
@@ -651,7 +848,7 @@ export default function App() {
     if (composer.getState().attachments.length) {
       composer.setText(
         "先理解当前工程和已添加文件，在工程合适的测试目录创建或修改 pytest 测试，"
-        + "然后运行最小相关测试并根据结果修正。写文件和运行命令前分别请求我的批准。",
+        + "然后自动运行最小相关测试并根据结果修正。不要修改 CoreTest 或 CoreTest Agent 产品源码。",
       );
       composer.setRunConfig({ custom: { task: "chat" } });
       composer.send();
@@ -660,7 +857,7 @@ export default function App() {
     if (hasSelectedFile) {
       void askCopilot(
         "先理解当前工程和选中的文件，在工程合适的测试目录创建或修改 pytest 测试，"
-          + "然后运行最小相关测试并根据结果修正。写文件和运行命令前分别请求我的批准。",
+          + "然后自动运行最小相关测试并根据结果修正。不要修改 CoreTest 或 CoreTest Agent 产品源码。",
         [],
         conversationHistory(messages),
         "chat",
@@ -832,49 +1029,141 @@ export default function App() {
             </DrawerHeaderTitle>
           </DrawerHeader>
           <DrawerBody>
-            <div className="settings-form">
-              <Field label="模型名称" hint="可输入任意已支持工具调用的模型">
-                <Combobox
-                  freeform
-                  value={modelDraft}
-                  onChange={(event) => setModelDraft(event.target.value)}
-                  onOptionSelect={(_, data) => setModelDraft(data.optionValue ?? data.selectedOptions[0] ?? "")}
-                  placeholder="例如 gpt-5.5"
-                >
-                  {(modelConfig?.available_models ?? []).map((model) => (
-                    <Option key={model} value={model}>{model}</Option>
-                  ))}
-                </Combobox>
-              </Field>
-              <Field label="API Base URL">
-                <Input
-                  value={baseUrlDraft}
-                  onChange={(_, data) => setBaseUrlDraft(data.value)}
-                  placeholder="https://api.example.com/v1"
-                />
-              </Field>
-              <Field
-                label="API Key"
-                hint={modelConfig?.api_key_configured ? "已配置，不会回显；留空表示保持不变" : "首次配置必须填写"}
-              >
-                <Input
-                  type="password"
-                  value={apiKeyDraft}
-                  onChange={(_, data) => setApiKeyDraft(data.value)}
-                  placeholder={modelConfig?.api_key_configured ? "留空保持现有 Key" : "输入 API Key"}
-                />
-              </Field>
-              <Button
-                appearance="primary"
-                icon={<CheckmarkCircle20Regular />}
-                onClick={() => void saveModelSettings()}
-                disabled={isRunning || modelSaving || !modelDraft.trim() || !baseUrlDraft.trim()}
-              >
-                {modelSaving ? "保存中…" : "保存配置"}
-              </Button>
-              <p className="settings-note">
-                当前状态：{modelConfig?.configured ? "已配置" : "未配置"}
-              </p>
+            <div className="provider-settings">
+              <section className="provider-section" aria-labelledby="provider-list-title">
+                <div className="provider-section-heading">
+                  <h3 id="provider-list-title">已配置</h3>
+                  <span>{modelProviders?.providers.length ?? 0}</span>
+                </div>
+                <div className="provider-list">
+                  {(modelProviders?.providers ?? []).map((provider) => {
+                    const selectedModel = providerModels[provider.id] ?? provider.models[0]?.id ?? "";
+                    const isActive = provider.id === modelProviders?.active_provider_id
+                      && selectedModel === modelProviders.active_model_id;
+                    return (
+                      <article className="provider-item" key={provider.id}>
+                        <div className="provider-item-heading">
+                          <div>
+                            <strong>{provider.name}</strong>
+                            <span>{provider.id}</span>
+                          </div>
+                          <span className={provider.api_key_configured ? "provider-status ready" : "provider-status"}>
+                            {provider.api_key_configured ? "已连接" : "缺少 Key"}
+                          </span>
+                        </div>
+                        <span className="provider-url" title={provider.base_url}>{provider.base_url}</span>
+                        <label className="provider-model-select">
+                          <span>模型</span>
+                          <select
+                            value={selectedModel}
+                            onChange={(event) => setProviderModels((current) => ({
+                              ...current,
+                              [provider.id]: event.target.value,
+                            }))}
+                            disabled={modelSaving || isRunning}
+                          >
+                            {provider.models.map((model) => (
+                              <option key={model.id} value={model.id}>{model.name}</option>
+                            ))}
+                          </select>
+                        </label>
+                        <div className="provider-actions">
+                          <Button
+                            appearance={isActive ? "secondary" : "primary"}
+                            icon={<CheckmarkCircle20Regular />}
+                            disabled={isActive || modelSaving || isRunning || !selectedModel}
+                            onClick={() => void selectModel(provider.id, selectedModel)}
+                          >
+                            {isActive ? "使用中" : "使用"}
+                          </Button>
+                          <Button
+                            appearance="subtle"
+                            icon={testingProviderId === provider.id ? <Spinner size="tiny" /> : <Play20Regular />}
+                            disabled={modelSaving || isRunning || !selectedModel || !provider.api_key_configured}
+                            onClick={() => void testProvider(provider.id)}
+                          >
+                            {testingProviderId === provider.id ? "测试中…" : "测试"}
+                          </Button>
+                          <Button
+                            appearance="subtle"
+                            icon={<Delete20Regular />}
+                            disabled={modelSaving || isRunning}
+                            onClick={() => void deleteProvider(provider.id)}
+                          >
+                            删除
+                          </Button>
+                        </div>
+                      </article>
+                    );
+                  })}
+                  {modelProviders && !modelProviders.providers.length && (
+                    <p className="provider-empty">尚未配置模型 API</p>
+                  )}
+                </div>
+              </section>
+
+              {settingsError && <p className="settings-error" role="alert">{settingsError}</p>}
+
+              <section className="provider-section provider-create" aria-labelledby="provider-create-title">
+                <div className="provider-section-heading">
+                  <h3 id="provider-create-title">添加 Provider</h3>
+                </div>
+                <div className="settings-form">
+                  <Field label="Provider ID" hint="字母、数字、下划线或连字符">
+                    <Input
+                      value={providerIdDraft}
+                      onChange={(_, data) => setProviderIdDraft(data.value)}
+                      placeholder="company-api"
+                    />
+                  </Field>
+                  <Field label="显示名称">
+                    <Input
+                      value={providerNameDraft}
+                      onChange={(_, data) => setProviderNameDraft(data.value)}
+                      placeholder="Company API"
+                    />
+                  </Field>
+                  <Field label="API Base URL">
+                    <Input
+                      value={providerUrlDraft}
+                      onChange={(_, data) => setProviderUrlDraft(data.value)}
+                      placeholder="https://api.example.com/v1"
+                    />
+                  </Field>
+                  <Field label="API Key" hint="保存到本机 Agent 凭据，不会回显">
+                    <Input
+                      type="password"
+                      value={providerKeyDraft}
+                      onChange={(_, data) => setProviderKeyDraft(data.value)}
+                      placeholder="输入 API Key"
+                    />
+                  </Field>
+                  <Field label="模型" hint="每行一个：模型 ID | 显示名称">
+                    <Textarea
+                      value={providerModelsDraft}
+                      onChange={(_, data) => setProviderModelsDraft(data.value)}
+                      placeholder={"gpt-5.5 | GPT 5.5\ngpt-5-mini | GPT 5 mini"}
+                      resize="vertical"
+                    />
+                  </Field>
+                  <Button
+                    appearance="primary"
+                    icon={<Add20Regular />}
+                    onClick={() => void saveProvider()}
+                    disabled={
+                      isRunning
+                      || modelSaving
+                      || !providerIdDraft.trim()
+                      || !providerNameDraft.trim()
+                      || !providerUrlDraft.trim()
+                      || !providerKeyDraft.trim()
+                      || !providerModelsDraft.trim()
+                    }
+                  >
+                    {modelSaving ? "处理中…" : "保存并使用"}
+                  </Button>
+                </div>
+              </section>
             </div>
           </DrawerBody>
         </OverlayDrawer>
@@ -886,10 +1175,12 @@ export default function App() {
               contextLabel={contextLabel}
               dataLabel={dataLabel}
               suggestions={suggestions}
-              isRunning={isRunning}
+              turnStatus={turnStatus}
               lastMessageRole={lastMessageRole}
               latestAssistantId={latestAssistantId}
               activity={activity}
+              reasoning={reasoning}
+              todos={todos}
               permission={permission}
               permissionReplying={permissionReplying}
               onReplyPermission={(reply) => void replyPermission(reply)}
@@ -903,9 +1194,9 @@ export default function App() {
               saveNotice={saveNotice}
               composerAttachmentCount={composerAttachmentCount}
               onGenerateTests={generateTests}
-              modelConfig={modelConfig}
+              modelProviders={modelProviders}
               modelSaving={modelSaving}
-              onSelectModel={(model) => void selectModel(model)}
+              onSelectModel={(providerId, modelId) => void selectModel(providerId, modelId)}
               historyCount={projectConversations.length}
               onOpenHistory={() => setHistoryOpen(true)}
               onOpenSettings={openSettings}

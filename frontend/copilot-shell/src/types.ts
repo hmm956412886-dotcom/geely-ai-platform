@@ -57,6 +57,26 @@ export interface ModelConfig {
   timeout_seconds: number;
 }
 
+export interface ModelProviderModel {
+  id: string;
+  name: string;
+}
+
+export interface ModelProvider {
+  id: string;
+  name: string;
+  base_url: string;
+  models: ModelProviderModel[];
+  api_key_configured: boolean;
+  active: boolean;
+}
+
+export interface ModelProviderCatalog {
+  providers: ModelProvider[];
+  active_provider_id: string | null;
+  active_model_id: string | null;
+}
+
 export interface CopilotHistoryMessage {
   role: "user" | "assistant";
   content: string;
@@ -74,12 +94,17 @@ export interface CopilotResponse extends AnalysisResponse {
 
 export type CopilotStreamEvent =
   | { type: "started" }
-  | { type: "text_delta"; delta: string }
+  | { type: "text_delta"; delta: string; segment_id?: string }
+  | { type: "reasoning_delta"; delta: string; segment_id?: string }
   | { type: "tool"; id: string; tool: string; status: string; title: string; output: string }
+  | { type: "step"; id: string; status: string; title: string }
+  | { type: "todo"; todos: AgentTodo[] }
+  | { type: "retry"; attempt: number; message: string }
+  | { type: "patch"; files: string[] }
   | { type: "permission"; permission: AgentPermission }
   | { type: "completed"; answer: string }
   | { type: "idle" }
-  | { type: "error"; message: string };
+  | { type: "error"; message: string; code?: string };
 
 export interface AgentPermission {
   id: string;
@@ -93,6 +118,14 @@ export interface AgentActivity {
   status: string;
   title: string;
   output: string;
+}
+
+export type AgentTurnStatus = "idle" | "running" | "completed" | "failed" | "cancelled";
+
+export interface AgentTodo {
+  content: string;
+  status: string;
+  priority: string;
 }
 
 export interface AgentFileDiff {

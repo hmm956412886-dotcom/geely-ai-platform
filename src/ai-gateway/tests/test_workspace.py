@@ -38,6 +38,22 @@ class WorkspaceTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "existing directory"):
             register_workspace({"project_root": "D:/missing"}, "session")
 
+    def test_register_rejects_coretest_and_agent_source_roots(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "frontend" / "copilot-shell").mkdir(parents=True)
+            (root / "src" / "ai-gateway" / "src" / "ai_gateway").mkdir(parents=True)
+
+            with self.assertRaisesRegex(ValueError, "product source"):
+                register_workspace({"project_root": directory}, "session")
+
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "app" / "coretest_copilot").mkdir(parents=True)
+
+            with self.assertRaisesRegex(ValueError, "product source"):
+                register_workspace({"project_root": directory}, "session")
+
     def test_release_removes_only_requested_session(self) -> None:
         with TemporaryDirectory() as directory:
             register_workspace({"project_root": directory}, "first")

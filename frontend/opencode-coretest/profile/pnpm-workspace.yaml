@@ -1,0 +1,16 @@
+packages:
+  - packages/app
+  - packages/core
+  - packages/schema
+  - packages/session-ui
+  - packages/ui
+  - packages/sdk-js
+
+allowBuilds:
+  '@sentry/cli': true
+  '@tailwindcss/oxide': true
+  esbuild: true
+  msgpackr-extract: true
+
+patchedDependencies:
+  solid-js@1.9.10: patches/solid-js@1.9.10.patch

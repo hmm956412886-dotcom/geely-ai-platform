@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from base64 import urlsafe_b64encode
+from http.cookies import CookieError, SimpleCookie
 from dataclasses import dataclass
 import json
 import os
@@ -13,9 +15,21 @@ from urllib.parse import parse_qs, unquote, urlsplit
 from uuid import uuid4
 
 from .audit_log import append_audit_event, list_audit_events
-from .access_control import access_control_enabled, is_authorized, is_host_authorized
+from .access_control import (
+    access_control_enabled,
+    is_authorized,
+    is_host_authorized,
+    is_native_ui_authorized,
+    native_ui_cookie_value,
+)
 from .copilot_service import run_copilot, stream_copilot
 from .host_assets import register_host_asset, release_host_assets, resolve_host_asset
+from .host_bridge import (
+    get_host_bridge,
+    register_host_bridge,
+    release_host_bridge,
+    validate_host_bridge,
+)
 from .host_context import (
     get_host_context,
     normalize_host_session_id,
@@ -60,7 +74,31 @@ def handle_request(
     host_session_id = None
     try:
         host_session_id = _query_value(parsed_url.query, "host_session_id")
-        if route_path.startswith("/api/v1/") and not is_authorized(headers):
+        if host_session_id is None:
+            cookie_session = _native_session_cookie(headers)
+            host_session_id = (
+                normalize_host_session_id(cookie_session) if cookie_session else None
+            )
+        if _is_native_protocol_route(route_path) and not is_native_ui_authorized(
+            headers, host_session_id
+        ):
+            response = Response(
+                401,
+                json.dumps(
+                    {
+                        "request_id": _request_id(),
+                        "error": {
+                            "code": "unauthorized",
+                            "message": "A valid CoreTest Agent UI credential is required",
+                        },
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+                + "\n",
+                headers={"WWW-Authenticate": 'Basic realm="CoreTest Agent"'},
+            )
+        elif route_path.startswith("/api/v1/") and not is_authorized(headers):
             response = Response(
                 401,
                 json.dumps(
@@ -92,12 +130,20 @@ def handle_request(
                 "A valid AI Gateway host token is required for trusted host operations",
                 status=403,
             )
+        elif _is_native_route(route_path):
+            response = _handle_native_request(
+                method, parsed_url.path, parsed_url.query, body, host_session_id, headers
+            )
         else:
             response = _handle_request(method, route_path, body, host_session_id)
     except json.JSONDecodeError as exc:
         response = error_response("invalid_json", f"Invalid JSON request body: {exc.msg}", status=400)
     except ValueError as exc:
         response = error_response("bad_request", str(exc), status=400)
+    except PermissionError as exc:
+        response = error_response("forbidden", str(exc), status=403)
+    except RuntimeError as exc:
+        response = error_response("service_unavailable", str(exc), status=502)
     _append_request_audit(method, route_path, response, host_session_id)
     return response
 
@@ -125,6 +171,40 @@ def _handle_request(
         config = update_model_config(_read_json(body))
         reset_opencode_runtime()
         return json_response({"request_id": _request_id(), "result": config.public_dict()})
+    if method == "GET" and path == "/api/v1/model/providers":
+        try:
+            result = _provider_runtime(host_session_id).providers()
+            return json_response({"request_id": _request_id(), "result": result})
+        except RuntimeError as exc:
+            return error_response("model_unavailable", str(exc), status=502)
+    if method == "POST" and path == "/api/v1/model/providers":
+        try:
+            result = _provider_runtime(host_session_id).save_provider(_read_json(body))
+            return json_response({"request_id": _request_id(), "result": result})
+        except RuntimeError as exc:
+            return error_response("model_unavailable", str(exc), status=502)
+    provider_route = re.fullmatch(r"/api/v1/model/providers/([A-Za-z0-9_-]+)", path)
+    if method == "DELETE" and provider_route:
+        try:
+            result = _provider_runtime(host_session_id).delete_provider(provider_route.group(1))
+            return json_response({"request_id": _request_id(), "result": result})
+        except RuntimeError as exc:
+            return error_response("model_unavailable", str(exc), status=502)
+    provider_action = re.fullmatch(
+        r"/api/v1/model/providers/([A-Za-z0-9_-]+)/(activate|test)", path
+    )
+    if method == "POST" and provider_action:
+        payload = _read_json(body)
+        _require_fields(payload, {"model"})
+        try:
+            runtime = _provider_runtime(host_session_id)
+            if provider_action.group(2) == "activate":
+                result = runtime.activate_provider(provider_action.group(1), payload["model"])
+            else:
+                result = runtime.test_provider(provider_action.group(1), payload["model"])
+            return json_response({"request_id": _request_id(), "result": result})
+        except RuntimeError as exc:
+            return error_response("model_unavailable", str(exc), status=502)
     if method == "GET" and path == "/api/v1/agent/status":
         return json_response(
             {
@@ -227,8 +307,24 @@ def _handle_request(
             }
         )
     if method == "POST" and path == "/api/v1/host/workspace":
+        payload = _read_json(body)
+        unknown = set(payload) - {"project_root", "host_bridge"}
+        if unknown:
+            raise ValueError(f"unsupported workspace fields: {', '.join(sorted(unknown))}")
+        bridge_payload = payload.get("host_bridge")
+        if bridge_payload is not None:
+            if not isinstance(bridge_payload, dict):
+                raise ValueError("host_bridge must be a JSON object")
+            validate_host_bridge(bridge_payload)
         previous_workspace = get_workspace_path(host_session_id)
-        workspace = register_workspace(_read_json(body), host_session_id)
+        workspace = register_workspace(
+            {"project_root": payload.get("project_root")}, host_session_id
+        )
+        bridge = (
+            register_host_bridge(bridge_payload, host_session_id)
+            if isinstance(bridge_payload, dict)
+            else {"available": get_host_bridge(host_session_id) is not None}
+        )
         workspace_path = get_workspace_path(host_session_id)
         if workspace_path is None:
             raise ValueError("workspace registration is unavailable")
@@ -244,7 +340,11 @@ def _handle_request(
         return json_response(
             {
                 "request_id": _request_id(),
-                "result": {"workspace": workspace, "runtime": runtime_status},
+                "result": {
+                    "workspace": workspace,
+                    "host_bridge": bridge,
+                    "runtime": runtime_status,
+                },
             }
         )
     if method == "GET" and path == "/api/v1/host/snapshot":
@@ -264,6 +364,7 @@ def _handle_request(
         released_assets = release_host_assets(session_id)
         released_context = release_host_context(session_id)
         released_snapshot = release_host_snapshot(session_id)
+        released_host_bridge = release_host_bridge(session_id)
         released_workspace = release_workspace(session_id)
         if released_workspace and workspace_count() == 0:
             get_opencode_runtime().stop()
@@ -275,6 +376,7 @@ def _handle_request(
                     "released_context": released_context,
                     "released_assets": released_assets,
                     "released_snapshot": released_snapshot,
+                    "released_host_bridge": released_host_bridge,
                     "released_workspace": released_workspace,
                 },
             }
@@ -334,6 +436,237 @@ def error_response(code: str, message: str, *, status: int) -> Response:
         {"request_id": _request_id(), "error": {"code": code, "message": message}},
         status=status,
     )
+
+
+def _handle_native_request(
+    method: str,
+    path: str,
+    query: str,
+    body: str,
+    host_session_id: str | None,
+    headers: Mapping[str, str] | None,
+) -> Response:
+    if method == "GET" and path == "/agent-native-profile.css":
+        return Response(200, _native_profile_css(), "text/css; charset=utf-8")
+    runtime = _provider_runtime(host_session_id)
+    product_ui = _native_product_ui_file(path) if method == "GET" else None
+    if product_ui is not None:
+        response_headers = dict(product_ui.headers or {})
+        if _is_native_page_route(path):
+            session_id = normalize_host_session_id(host_session_id)
+            response_headers["Set-Cookie"] = (
+                f"coretest_host_session={session_id}; Path=/; SameSite=Strict"
+            )
+            return Response(
+                product_ui.status,
+                _native_page_html(product_ui.body.decode("utf-8")),
+                product_ui.content_type,
+                response_headers,
+            )
+        return Response(
+            product_ui.status,
+            product_ui.body,
+            product_ui.content_type,
+            response_headers,
+        )
+    upstream_path = "/" if _is_native_page_route(path) else path
+    if query and upstream_path != "/":
+        upstream_path += f"?{query}"
+    native = runtime.native_request(
+        method,
+        upstream_path,
+        body.encode("utf-8") if body else None,
+        content_type=_header_value(headers, "content-type") or "application/json",
+    )
+    response_headers = dict(native.headers or {})
+    if _is_native_page_route(path):
+        if not native.content_type.lower().startswith("text/html"):
+            raise RuntimeError("CoreTest Agent native UI returned an invalid page")
+        page = _native_page_html(native.body.decode("utf-8"))
+        session_id = normalize_host_session_id(host_session_id)
+        response_headers["Set-Cookie"] = (
+            f"coretest_host_session={session_id}; Path=/; SameSite=Strict"
+        )
+        return Response(native.status, page, "text/html; charset=utf-8", response_headers)
+    signed_cookie = native_ui_cookie_value(host_session_id)
+    if signed_cookie:
+        response_headers["Set-Cookie"] = (
+            f"coretest_native_auth={signed_cookie}; Path=/; HttpOnly; SameSite=Strict"
+        )
+    return Response(
+        native.status,
+        native.body,
+        native.content_type,
+        response_headers,
+        native.stream,
+    )
+
+
+def _is_native_route(path: str) -> bool:
+    return _is_native_page_route(path) or path == "/agent-native-profile.css" or path.startswith(
+        "/assets/"
+    ) or path in {
+        "/apple-touch-icon-v3.png",
+        "/favicon-96x96-v3.png",
+        "/favicon-v3.ico",
+        "/favicon-v3.svg",
+        "/site.webmanifest",
+        "/social-share.png",
+    } or _is_native_protocol_route(path)
+
+
+def _is_native_page_route(path: str) -> bool:
+    workspace_route = _native_workspace_route()
+    return bool(re.fullmatch(r"/server/[^/]+/session/[^/]+", path)) or path in {
+        "/",
+        "/agent-native",
+        "/agent-native/",
+        "/new-session",
+        workspace_route,
+    } or path.startswith(f"{workspace_route}/session/")
+
+
+def _is_native_protocol_route(path: str) -> bool:
+    if path.startswith("/api/v1/"):
+        return False
+    roots = (
+        "/agent",
+        "/api/",
+        "/auth/",
+        "/command",
+        "/config",
+        "/event",
+        "/experimental/",
+        "/file",
+        "/find",
+        "/formatter",
+        "/global/",
+        "/instance/",
+        "/log",
+        "/lsp",
+        "/mcp",
+        "/path",
+        "/permission",
+        "/project",
+        "/provider",
+        "/pty",
+        "/question",
+        "/session",
+        "/skill",
+        "/sync/",
+        "/tui/",
+        "/vcs",
+    )
+    return path.startswith(roots)
+
+
+def _native_session_cookie(headers: Mapping[str, str] | None) -> str | None:
+    value = _header_value(headers, "cookie")
+    if not value:
+        return None
+    cookie = SimpleCookie()
+    try:
+        cookie.load(value)
+    except CookieError:
+        return None
+    item = cookie.get("coretest_host_session")
+    return item.value if item is not None else None
+
+
+def _header_value(headers: Mapping[str, str] | None, name: str) -> str:
+    if headers is None:
+        return ""
+    return next(
+        (str(value) for key, value in headers.items() if key.lower() == name.lower()), ""
+    )
+
+
+def _native_page_html(page: str) -> str:
+    workspace_route = _native_workspace_route()
+    bootstrap = """<link rel="stylesheet" href="/agent-native-profile.css">
+<script id="coretest-agent-bootstrap">
+(() => {
+  const query = new URLSearchParams(location.search);
+  const hash = new URLSearchParams(location.hash.slice(1));
+  const token = hash.get("access_token");
+  if (token && !query.has("auth_token")) {
+    query.set("auth_token", btoa(`opencode:${token}`));
+  }
+  const search = query.size ? `?${query}` : "";
+  const initial = ["/", "/agent-native", "/agent-native/"].includes(location.pathname);
+  const path = initial ? "__WORKSPACE_ROUTE__" : location.pathname;
+  history.replaceState(null, "", `${path}${search}${location.hash}`);
+  document.addEventListener("click", (event) => {
+    const anchor = event.target instanceof Element ? event.target.closest("a") : null;
+    if (!anchor) return;
+    const target = new URL(anchor.href, location.href);
+    if (target.origin !== location.origin || !target.pathname.startsWith("/coretest-file/")) return;
+    event.preventDefault();
+    location.assign(`${target.pathname}${target.search}`);
+  }, true);
+})();
+</script>"""
+    bootstrap = bootstrap.replace("__WORKSPACE_ROUTE__", workspace_route)
+    branded = page.replace("<title>OpenCode</title>", "<title>CoreTest Agent</title>")
+    if "coretest-agent-bootstrap" in branded:
+        return branded
+    return branded.replace("</head>", f"{bootstrap}\n</head>", 1)
+
+
+def _native_product_ui_file(path: str) -> Response | None:
+    root = _repo_root() / "frontend" / "opencode-coretest" / "dist"
+    if not root.is_dir():
+        return None
+    relative = "index.html" if _is_native_page_route(path) else path.lstrip("/")
+    requested = Path(relative)
+    if requested.is_absolute() or ".." in requested.parts:
+        return None
+    target = root / requested
+    if not target.is_file():
+        return None
+    return Response(
+        200,
+        target.read_bytes(),
+        _content_type(target.suffix),
+        {"Cache-Control": "no-cache" if relative == "index.html" else "public, max-age=31536000, immutable"},
+    )
+
+
+def _native_workspace_route() -> str:
+    encoded = urlsafe_b64encode(b"CoreTest Workspace").decode("ascii").rstrip("=")
+    return f"/{encoded}"
+
+
+def _native_profile_css() -> str:
+    return """
+:root { --coretest-accent: #0f6cbd; }
+* { letter-spacing: 0 !important; }
+html, body, #root { width: 100%; height: 100%; }
+#root { padding: 0 !important; }
+[data-component="terminal"],
+.settings-v2-servers,
+.settings-v2-server-dialog,
+aside[aria-label="项目"],
+aside[aria-label="Projects"],
+button[data-action="prompt-project"],
+[role="tab"][data-value="servers"],
+[data-slot="titlebar-v2"] button[aria-label="Close tab"],
+[data-slot="titlebar-v2"] button[aria-label="新建会话"],
+[data-slot="titlebar-v2"] button[aria-label="New session"],
+[data-component="session-new-design"] svg[class*="text-v2-background-bg-inverse"] {
+  display: none !important;
+}
+[role="dialog"] p:has(a[href^="https://opencode.ai/docs/providers/"]),
+[role="dialog"] div:has(> label):has(input[placeholder="Header-Name"]) {
+  display: none !important;
+}
+[role="dialog"] [data-component="input"]:has(input[placeholder="API 密钥"])
+  [data-slot="input-description"] {
+  display: none !important;
+}
+[data-slot="titlebar-v2"] { border-bottom: 1px solid var(--v2-border-border-muted); }
+[data-slot="titlebar-v2"] [data-titlebar-tab] { background: transparent !important; }
+""".strip() + "\n"
 
 
 def _copilot_shell_file(relative_path: str) -> Response:
@@ -524,9 +857,9 @@ def _workspace_copilot(
 ) -> dict[str, Any]:
     workspace = get_workspace_path(host_session_id)
     if workspace is None:
-        raise RuntimeError("OpenCode workspace is not registered")
+        raise RuntimeError("CoreTest Agent workspace is not registered")
     runtime = get_opencode_runtime()
-    runtime.start(workspace)
+    _start_runtime(runtime, workspace, host_session_id)
     session_id = normalize_host_session_id(host_session_id)
     conversation_id = payload.get("conversation_id") or "default"
     return run_copilot(
@@ -543,14 +876,23 @@ def _workspace_copilot(
     )
 
 
+def _provider_runtime(host_session_id: str | None):
+    workspace = get_workspace_path(host_session_id)
+    if workspace is None:
+        raise RuntimeError("CoreTest Agent workspace is not registered")
+    runtime = get_opencode_runtime()
+    _start_runtime(runtime, workspace, host_session_id)
+    return runtime
+
+
 def _workspace_copilot_stream(
     payload: dict[str, Any], host_session_id: str | None
 ) -> Response:
     workspace = get_workspace_path(host_session_id)
     if workspace is None:
-        raise RuntimeError("OpenCode workspace is not registered")
+        raise RuntimeError("CoreTest Agent workspace is not registered")
     runtime = get_opencode_runtime()
-    runtime.start(workspace)
+    _start_runtime(runtime, workspace, host_session_id)
     session_id = normalize_host_session_id(host_session_id)
     conversation_id = payload.get("conversation_id") or "default"
     request_id = _request_id()
@@ -572,11 +914,23 @@ def _workspace_copilot_stream(
             for event in agent_events:
                 yield (f"data: {json.dumps(event, ensure_ascii=False)}\n\n").encode("utf-8")
         except (RuntimeError, ValueError) as exc:
+            message = str(exc)
             yield (
                 "data: "
-                + json.dumps({"type": "error", "message": str(exc)}, ensure_ascii=False)
+                + json.dumps(
+                    {
+                        "type": "error",
+                        "message": message,
+                        "code": _agent_stream_error_code(message),
+                    },
+                    ensure_ascii=False,
+                )
                 + "\n\n"
             ).encode("utf-8")
+        finally:
+            close = getattr(agent_events, "close", None)
+            if close is not None:
+                close()
 
     return Response(
         200,
@@ -589,6 +943,25 @@ def _workspace_copilot_stream(
         },
         stream=events(),
     )
+
+
+def _agent_stream_error_code(message: str) -> str:
+    normalized = message.lower()
+    if "no progress" in normalized:
+        return "agent_stalled"
+    if "maximum duration" in normalized:
+        return "agent_timeout"
+    if "disconnected" in normalized:
+        return "agent_stream_disconnected"
+    return "agent_failed"
+
+
+def _start_runtime(runtime: Any, workspace: Path, host_session_id: str | None) -> None:
+    bridge = get_host_bridge(host_session_id)
+    if bridge is None:
+        runtime.start(workspace)
+        return
+    runtime.start(workspace, host_bridge=bridge)
 
 
 def _agent_session_key(

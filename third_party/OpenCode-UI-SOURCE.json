@@ -1,0 +1,45 @@
+{
+  "name": "OpenCode Web UI - CoreTest Profile source set",
+  "repository": "https://github.com/anomalyco/opencode.git",
+  "tag": "v1.18.10",
+  "commit": "7902e04c3a67f7c69726bc955efb46e29214c797",
+  "license": "MIT",
+  "source_archives": [
+    {
+      "path": "third_party/sources/OpenCode-UI-workspace-v1.18.10.tar.gz",
+      "sha256": "dc271e90d677c86bf13dda90671f3c62fe523802facb004029319ec38dc82992",
+      "source": "Git blobs from the locked upstream commit",
+      "packages": [
+        "packages/app",
+        "packages/client",
+        "packages/core",
+        "packages/schema",
+        "packages/sdk",
+        "packages/session-ui"
+      ],
+      "verified_files": 1340
+    },
+    {
+      "path": "third_party/sources/OpenCode-UI-package-v1.18.10.tgz",
+      "sha256": "5316e2276f387a2dab9f2eff4faf6c196a17167e153ce28f0c8d767d42f58f49",
+      "source": "https://registry.npmjs.org/@opencode-ai/ui/-/ui-1.18.10.tgz",
+      "package": "@opencode-ai/ui@1.18.10"
+    },
+    {
+      "path": "third_party/sources/OpenCode-SDK-package-v1.18.10.tgz",
+      "sha256": "1050e23c531a4e5f1f750bebc1ee8056f822d4acbfefb10af3f08538e3f1fb49",
+      "source": "https://registry.npmjs.org/@opencode-ai/sdk/-/sdk-1.18.10.tgz",
+      "package": "@opencode-ai/sdk@1.18.10"
+    }
+  ],
+  "build_lockfile": {
+    "path": "frontend/opencode-coretest/profile/pnpm-lock.yaml",
+    "sha256": "a87364c51e446e5bf75bdb17291282c5113246125441932634a36511c27accc8"
+  },
+  "build_tools": {
+    "node": "24.14.0",
+    "pnpm": "11.9.0"
+  },
+  "customization_root": "frontend/opencode-coretest",
+  "build_script": "scripts/build-opencode-ui.ps1"
+}

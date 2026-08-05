@@ -7,8 +7,10 @@ from datetime import datetime, timezone
 import hashlib
 from pathlib import Path
 from typing import Any
+from urllib.parse import unquote
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QUrl
+from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QApplication,
     QDockWidget,
@@ -20,9 +22,12 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from PySide6.QtWebEngineCore import QWebEnginePage
 from PySide6.QtWebEngineWidgets import QWebEngineView
 
 from .gateway import GatewayBridge
+from .host_bridge import ReadOnlyHostBridge
+from .host_capabilities import CAPABILITIES, CoreTestReadOnlyCapabilities
 from .snapshots import (
     dbc_snapshot,
     diagnostic_snapshot,
@@ -34,7 +39,22 @@ from .snapshots import (
 )
 
 
+class _CoreTestAgentPage(QWebEnginePage):
+    def acceptNavigationRequest(
+        self, url: Any, navigation_type: Any, is_main_frame: bool
+    ) -> bool:
+        if url.path().startswith("/coretest-file/"):
+            target = _resolve_workspace_file(url.path())
+            if target is not None:
+                QDesktopServices.openUrl(QUrl.fromLocalFile(str(target)))
+            return False
+        return super().acceptNavigationRequest(url, navigation_type, is_main_frame)
+
+
 class CoreTestCopilot:
+    COMPACT_DOCK_WIDTH = 440
+    EXPANDED_DOCK_WIDTH = 840
+
     def __init__(self, window: Any) -> None:
         self.window = window
         self.revision = 0
@@ -43,12 +63,22 @@ class CoreTestCopilot:
         self.diag_pdx = ""
         self.diag_logs: deque[dict[str, Any]] = deque(maxlen=100)
         self.live_frames: deque[Any] = deque(maxlen=10000)
+        self._agent_loaded = False
+        self.host_capabilities = CoreTestReadOnlyCapabilities(
+            next_revision=self._revision,
+            diagnostic_state=lambda: (self.diag_pdx, self.diag_ecu, self.diag_logs),
+        )
+        self.host_bridge = ReadOnlyHostBridge(
+            capabilities=CAPABILITIES,
+            invoke=self.host_capabilities.invoke,
+        )
+        self.host_bridge.start()
         self.bridge = GatewayBridge(window)
         self._build_dock()
         self._bind_signals()
         self.bridge.on_ready(self._gateway_ready)
         self.bridge.on_error(self._show_error)
-        QApplication.instance().aboutToQuit.connect(self.bridge.release)
+        QApplication.instance().aboutToQuit.connect(self._release)
         self.bridge.start()
 
     def _build_dock(self) -> None:
@@ -62,6 +92,7 @@ class CoreTestCopilot:
         )
         self._build_title_bar()
         self.web = QWebEngineView(self.dock)
+        self.web.setPage(_CoreTestAgentPage(self.web.page().profile(), self.web))
         self.web.page().profile().downloadRequested.connect(self._save_generated_file)
         self.status = QWidget(self.dock)
         layout = QVBoxLayout(self.status)
@@ -77,7 +108,9 @@ class CoreTestCopilot:
         self.dock.setWidget(self.status)
         self.window.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.dock)
         self._add_open_entry()
-        self.window.resizeDocks([self.dock], [440], Qt.Orientation.Horizontal)
+        self.window.resizeDocks(
+            [self.dock], [self.COMPACT_DOCK_WIDTH], Qt.Orientation.Horizontal
+        )
 
     def _build_title_bar(self) -> None:
         title_bar = QWidget(self.dock)
@@ -91,8 +124,14 @@ class CoreTestCopilot:
         layout.addWidget(self.title_label)
         layout.addStretch(1)
 
+        self.expand_button = self._title_button(
+            QStyle.StandardPixmap.SP_TitleBarMaxButton,
+            "展开侧栏",
+            self._toggle_dock_width,
+        )
+        layout.addWidget(self.expand_button)
         self.close_button = self._title_button(
-            QStyle.StandardPixmap.SP_TitleBarCloseButton, "关闭 Copilot", self.dock.hide
+            QStyle.StandardPixmap.SP_TitleBarCloseButton, "关闭 CoreTest Agent", self.dock.hide
         )
         layout.addWidget(self.close_button)
         self.dock.setTitleBarWidget(title_bar)
@@ -127,6 +166,19 @@ class CoreTestCopilot:
         button.setToolTip(tooltip)
         button.clicked.connect(slot)
         return button
+
+    def _toggle_dock_width(self) -> None:
+        midpoint = (self.COMPACT_DOCK_WIDTH + self.EXPANDED_DOCK_WIDTH) // 2
+        expanding = self.dock.width() < midpoint
+        target = self.EXPANDED_DOCK_WIDTH if expanding else self.COMPACT_DOCK_WIDTH
+        icon = (
+            QStyle.StandardPixmap.SP_TitleBarNormalButton
+            if expanding
+            else QStyle.StandardPixmap.SP_TitleBarMaxButton
+        )
+        self.window.resizeDocks([self.dock], [target], Qt.Orientation.Horizontal)
+        self.expand_button.setIcon(self.window.style().standardIcon(icon))
+        self.expand_button.setToolTip("恢复侧栏宽度" if expanding else "展开侧栏")
 
     def _add_open_entry(self) -> None:
         self.open_action = self.dock.toggleViewAction()
@@ -177,25 +229,40 @@ class CoreTestCopilot:
         diag_runtime_session_service.log_info.connect(self._diag_info)
 
     def _gateway_ready(self) -> None:
+        self.status_text.setText("正在连接当前 CoreTest 工程...")
+        self.dock.setWidget(self.status)
+        self.publish_project(complete=self._load_agent)
+
+    def _load_agent(self) -> None:
+        self._agent_loaded = True
         self.dock.setWidget(self.web)
-        self.web.setUrl(self.bridge.copilot_url)
-        self.publish_project()
+        self.web.setUrl(self.bridge.native_agent_url)
 
     def _show_error(self, message: str) -> None:
         self.status_text.setText(f"CoreTest Agent 暂不可用\n\n{message}")
         self.dock.setWidget(self.status)
+
+    def _release(self) -> None:
+        self.bridge.release()
+        self.host_bridge.stop()
 
     def publish_current_view(self, _index: int = 0) -> None:
         if not self.bridge.ready:
             return
         self.publish_project()
 
-    def publish_project(self) -> None:
+    def publish_project(self, *, complete: Any | None = None) -> None:
         from app.service import project_file_service, project_runtime_service
 
         project = project_runtime_service.get_active_project()
         snapshot = project_snapshot(project, project_file_service.get_all_fileinfos(), self._revision())
-        self._publish(snapshot, selection_label=self._current_view())
+        if project is None or not getattr(project, "url", None):
+            self.status_text.setText("请先打开一个 CoreTest 工程，Agent 将以该工程作为唯一工作区。")
+            self.dock.setWidget(self.status)
+            complete = None
+        elif complete is None and not self._agent_loaded:
+            complete = self._load_agent
+        self._publish(snapshot, selection_label=self._current_view(), complete=complete)
 
     def publish_project_file(self, index: Any) -> None:
         node = index.internalPointer() if index.isValid() else None
@@ -303,7 +370,13 @@ class CoreTestCopilot:
         download.setDownloadFileName(destination.name)
         download.accept()
 
-    def _publish(self, snapshot: dict[str, Any], *, selection_label: str) -> None:
+    def _publish(
+        self,
+        snapshot: dict[str, Any],
+        *,
+        selection_label: str,
+        complete: Any | None = None,
+    ) -> None:
         from app.service import project_runtime_service
 
         project = project_runtime_service.get_active_project()
@@ -320,7 +393,13 @@ class CoreTestCopilot:
         }
         snapshot["captured_at"] = datetime.now(timezone.utc).isoformat()
         workspace_root = str(project.url) if project is not None and project.url else None
-        self.bridge.publish(context, snapshot, workspace_root=workspace_root)
+        self.bridge.publish(
+            context,
+            snapshot,
+            workspace_root=workspace_root,
+            host_bridge=self.host_bridge.registration if workspace_root else None,
+            complete=complete,
+        )
 
     def _current_view(self) -> str:
         main = self.window.main_tabs.tabText(self.window.main_tabs.currentIndex())
@@ -344,3 +423,21 @@ def _project_identity(project: Any) -> tuple[str | None, str | None]:
     normalized = str(Path(project_url).resolve()).casefold()
     digest = hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:16]
     return f"coretest-{digest}", label
+
+
+def _resolve_workspace_file(url_path: str) -> Path | None:
+    from app.service import project_runtime_service
+
+    project = project_runtime_service.get_active_project()
+    if project is None or not getattr(project, "url", None):
+        return None
+    root = Path(project.url).resolve()
+    relative = unquote(url_path.removeprefix("/coretest-file/")).replace("\\", "/")
+    if not relative:
+        return None
+    target = (root / relative).resolve()
+    try:
+        target.relative_to(root)
+    except ValueError:
+        return None
+    return target if target.is_file() else None

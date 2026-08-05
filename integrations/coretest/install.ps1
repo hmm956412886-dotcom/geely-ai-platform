@@ -34,6 +34,9 @@ Sync-Directory `
     (Join-Path $repoRoot "frontend\copilot-shell\dist") `
     (Join-Path $runtime "frontend\copilot-shell\dist")
 Sync-Directory `
+    (Join-Path $repoRoot "frontend\opencode-coretest\dist") `
+    (Join-Path $runtime "frontend\opencode-coretest\dist")
+Sync-Directory `
     (Join-Path $repoRoot "src\ai-gateway\src\ai_gateway") `
     (Join-Path $runtime "src\ai_gateway")
 Sync-Directory `

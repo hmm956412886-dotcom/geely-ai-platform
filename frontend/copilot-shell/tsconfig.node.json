@@ -5,7 +5,8 @@
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "allowImportingTsExtensions": true,
-    "noEmit": true
+    "noEmit": true,
+    "tsBuildInfoFile": "../../tmp/copilot-shell/tsconfig.node.tsbuildinfo"
   },
   "include": ["vite.config.ts"]
 }

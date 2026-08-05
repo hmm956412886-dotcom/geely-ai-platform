@@ -14,10 +14,10 @@
 当前唯一产品目标是：
 
 ```text
-在真实 HK CoreTest 中交付可运行的右侧工作区智能体：像 Codex 一样理解工程、分析文件、生成代码并在审批后执行工作区操作
+在真实 HK CoreTest 中交付可运行的右侧工作区智能体：像 Codex 一样理解工程、分析文件、使用已有 SDK/CLI，并在用户工程内自动生成代码和运行测试
 ```
 
-方向：保留 CoreTest Qt Dock、assistant-ui + Fluent UI、Gateway REST API 和分级 Bearer 鉴权；引入 MIT 许可的 OpenCode 作为本地工作区 Agent Sidecar。Gateway 负责可信工作区注册、生命周期、鉴权和宿主数据桥接，OpenCode 负责检索、读写、命令执行、会话和工具调用。现有确定性 PDX/Trace/DBC/诊断分析继续保留，不重复实现。
+方向：保留 CoreTest Qt Dock、Gateway REST API 和分级 Bearer 鉴权；默认前端使用锁定版 OpenCode 官方 Web UI 源码构建的 CoreTest Profile，旧 assistant-ui 只作回退。MIT 许可的 OpenCode 作为本地工作区 Agent Sidecar。Gateway 负责可信工作区注册、生命周期、鉴权、安全代理和宿主数据桥接，OpenCode 负责 Agent loop、检索、读写、命令执行、会话和工具调用。现有确定性 PDX/Trace/DBC/诊断分析继续保留，不重复实现。
 
 ## 1. 先想清楚再写代码
 
@@ -49,7 +49,7 @@
 - Gateway 和 OpenCode Sidecar 的启动、健康检查、会话释放和故障隔离。
 - Gateway REST/OpenAPI 和 Plugin Manifest 作为稳定宿主协议。
 - 每个宿主会话只注册一个可信工作区根目录，绝对路径不返回 WebView。
-- Agent 可自行搜索、读取和理解工作区；写文件和执行命令必须经过权限策略。
+- Agent 可自行搜索、读取和理解工作区；用户工程内写文件和执行命令自动允许，产品源码、工作区外目录、网络和硬件能力直接拒绝。
 - 项目内已有 SDK、CLI、说明文档和脚本由 Agent 按需发现和使用，不为每个功能编写固定绑定。
 - 当前工程、选中文件、PDX、DBC、Trace 和诊断对象继续作为宿主运行期上下文同步。
 - PDX、Trace、DBC 和诊断日志的确定性只读分析。
@@ -59,7 +59,7 @@
 暂不做：
 
 - 控制测试设备。
-- 未经审批修改工作区文件或执行命令。
+- 要求用户逐步批准用户工程内的常规文件修改和命令执行。
 - 访问已注册工作区以外的文件。
 - 让 Agent 直接调用 CAN 发送、UDS、刷写或设备控制能力。
 - 全量迁移飞书知识库。
@@ -67,7 +67,7 @@
 
 ## 5. 开源复用优先级
 
-- Copilot 前端：继续使用 assistant-ui External Store Runtime 和 Fluent UI，不引入 CopilotKit 或第二套聊天框架。
+- Agent 前端：使用锁定版 OpenCode 官方 Web UI 源码构建 CoreTest Profile；assistant-ui External Store Runtime 和 Fluent UI 只保留为回退，不引入 CopilotKit 或第二套聊天框架。
 - Agent 运行时：使用 OpenCode `serve` + OpenAPI/SDK，不自行实现文件搜索、编辑、命令循环和会话引擎。
 - 模型：把现有 OpenAI-compatible Base URL、API Key 和模型名映射到 OpenCode Provider；迁移期间保留现有 `openai-python` 确定性分析调用。
 - Agent 扩展：优先使用项目 `AGENTS.md`、Skills、现成 CLI 和 SDK；只有进程内实时状态才通过 Host Snapshot 或通用 CLI/MCP 桥接。

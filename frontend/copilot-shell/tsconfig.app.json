@@ -14,6 +14,7 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,
+    "tsBuildInfoFile": "../../tmp/copilot-shell/tsconfig.app.tsbuildinfo",
     "jsx": "react-jsx"
   },
   "include": ["src"]
