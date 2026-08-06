@@ -9,6 +9,7 @@ from typing import Sequence
 
 from .access_control import validate_bind_access
 from .app import Response, handle_request
+from .opencode_runtime import reset_opencode_runtime
 
 
 class GatewayHandler(BaseHTTPRequestHandler):
@@ -20,6 +21,11 @@ class GatewayHandler(BaseHTTPRequestHandler):
         body = self.rfile.read(length).decode("utf-8") if length else ""
         self._send(handle_request("POST", self.path, body, headers=self.headers))
 
+    def do_PATCH(self) -> None:
+        length = int(self.headers.get("Content-Length", "0"))
+        body = self.rfile.read(length).decode("utf-8") if length else ""
+        self._send(handle_request("PATCH", self.path, body, headers=self.headers))
+
     def do_DELETE(self) -> None:
         self._send(handle_request("DELETE", self.path, headers=self.headers))
 
@@ -27,6 +33,26 @@ class GatewayHandler(BaseHTTPRequestHandler):
         return
 
     def _send(self, response: Response) -> None:
+        if response.stream is not None:
+            self.send_response(response.status)
+            self.send_header("Content-Type", response.content_type)
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Connection", "close")
+            for name, value in (response.headers or {}).items():
+                self.send_header(name, value)
+            self.end_headers()
+            try:
+                for chunk in response.stream:
+                    self.wfile.write(chunk)
+                    self.wfile.flush()
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+            finally:
+                close = getattr(response.stream, "close", None)
+                if close is not None:
+                    close()
+                self.close_connection = True
+            return
         encoded = response.body.encode("utf-8") if isinstance(response.body, str) else response.body
         self.send_response(response.status)
         self.send_header("Content-Type", response.content_type)
@@ -57,6 +83,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     except KeyboardInterrupt:
         return 0
     finally:
+        reset_opencode_runtime()
         server.server_close()
     return 0
 

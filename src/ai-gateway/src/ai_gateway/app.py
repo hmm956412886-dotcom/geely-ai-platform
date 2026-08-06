@@ -2,19 +2,34 @@
 
 from __future__ import annotations
 
+from base64 import urlsafe_b64encode
+from http.cookies import CookieError, SimpleCookie
 from dataclasses import dataclass
 import json
 import os
 from pathlib import Path
+import re
 import sys
-from typing import Any, Mapping
+from typing import Any, Iterator, Mapping
 from urllib.parse import parse_qs, unquote, urlsplit
 from uuid import uuid4
 
 from .audit_log import append_audit_event, list_audit_events
-from .access_control import access_control_enabled, is_authorized, is_host_authorized
-from .copilot_service import run_copilot
+from .access_control import (
+    access_control_enabled,
+    is_authorized,
+    is_host_authorized,
+    is_native_ui_authorized,
+    native_ui_cookie_value,
+)
+from .copilot_service import run_copilot, stream_copilot
 from .host_assets import register_host_asset, release_host_assets, resolve_host_asset
+from .host_bridge import (
+    get_host_bridge,
+    register_host_bridge,
+    release_host_bridge,
+    validate_host_bridge,
+)
 from .host_context import (
     get_host_context,
     normalize_host_session_id,
@@ -23,13 +38,20 @@ from .host_context import (
     update_host_context,
 )
 from .host_snapshot import (
-    analyze_host_snapshot,
     get_host_snapshot,
     release_host_snapshot,
     update_host_snapshot,
 )
-from .model_client import chat_completion, load_model_config
+from .model_client import load_model_config, update_model_config
+from .opencode_runtime import get_opencode_runtime, reset_opencode_runtime
 from .test_data_adapter import compare_test_runs, load_test_data_insights, load_test_run_summary
+from .workspace import (
+    get_workspace_path,
+    get_workspace_status,
+    register_workspace,
+    release_workspace,
+    workspace_count,
+)
 
 
 @dataclass(frozen=True)
@@ -38,6 +60,7 @@ class Response:
     body: str | bytes
     content_type: str = "application/json; charset=utf-8"
     headers: Mapping[str, str] | None = None
+    stream: Iterator[bytes] | None = None
 
 
 def handle_request(
@@ -51,7 +74,31 @@ def handle_request(
     host_session_id = None
     try:
         host_session_id = _query_value(parsed_url.query, "host_session_id")
-        if route_path.startswith("/api/v1/") and not is_authorized(headers):
+        if host_session_id is None:
+            cookie_session = _native_session_cookie(headers)
+            host_session_id = (
+                normalize_host_session_id(cookie_session) if cookie_session else None
+            )
+        if _is_native_protocol_route(route_path) and not is_native_ui_authorized(
+            headers, host_session_id
+        ):
+            response = Response(
+                401,
+                json.dumps(
+                    {
+                        "request_id": _request_id(),
+                        "error": {
+                            "code": "unauthorized",
+                            "message": "A valid CoreTest Agent UI credential is required",
+                        },
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+                + "\n",
+                headers={"WWW-Authenticate": 'Basic realm="CoreTest Agent"'},
+            )
+        elif route_path.startswith("/api/v1/") and not is_authorized(headers):
             response = Response(
                 401,
                 json.dumps(
@@ -73,6 +120,7 @@ def handle_request(
             in {
                 ("POST", "/api/v1/host/assets"),
                 ("POST", "/api/v1/host/snapshot"),
+                ("POST", "/api/v1/host/workspace"),
                 ("DELETE", "/api/v1/host/session"),
             }
             and not is_host_authorized(headers)
@@ -82,12 +130,20 @@ def handle_request(
                 "A valid AI Gateway host token is required for trusted host operations",
                 status=403,
             )
+        elif _is_native_route(route_path):
+            response = _handle_native_request(
+                method, parsed_url.path, parsed_url.query, body, host_session_id, headers
+            )
         else:
             response = _handle_request(method, route_path, body, host_session_id)
     except json.JSONDecodeError as exc:
         response = error_response("invalid_json", f"Invalid JSON request body: {exc.msg}", status=400)
     except ValueError as exc:
         response = error_response("bad_request", str(exc), status=400)
+    except PermissionError as exc:
+        response = error_response("forbidden", str(exc), status=403)
+    except RuntimeError as exc:
+        response = error_response("service_unavailable", str(exc), status=502)
     _append_request_audit(method, route_path, response, host_session_id)
     return response
 
@@ -111,6 +167,127 @@ def _handle_request(
         return json_response(_contract_json("host-plugin.manifest.json"))
     if method == "GET" and path == "/api/v1/model/config":
         return json_response({"request_id": _request_id(), "result": load_model_config().public_dict()})
+    if method == "POST" and path == "/api/v1/model/config":
+        config = update_model_config(_read_json(body))
+        reset_opencode_runtime()
+        return json_response({"request_id": _request_id(), "result": config.public_dict()})
+    if method == "GET" and path == "/api/v1/model/providers":
+        try:
+            result = _provider_runtime(host_session_id).providers()
+            return json_response({"request_id": _request_id(), "result": result})
+        except RuntimeError as exc:
+            return error_response("model_unavailable", str(exc), status=502)
+    if method == "POST" and path == "/api/v1/model/providers":
+        try:
+            result = _provider_runtime(host_session_id).save_provider(_read_json(body))
+            return json_response({"request_id": _request_id(), "result": result})
+        except RuntimeError as exc:
+            return error_response("model_unavailable", str(exc), status=502)
+    provider_route = re.fullmatch(r"/api/v1/model/providers/([A-Za-z0-9_-]+)", path)
+    if method == "DELETE" and provider_route:
+        try:
+            result = _provider_runtime(host_session_id).delete_provider(provider_route.group(1))
+            return json_response({"request_id": _request_id(), "result": result})
+        except RuntimeError as exc:
+            return error_response("model_unavailable", str(exc), status=502)
+    provider_action = re.fullmatch(
+        r"/api/v1/model/providers/([A-Za-z0-9_-]+)/(activate|test)", path
+    )
+    if method == "POST" and provider_action:
+        payload = _read_json(body)
+        _require_fields(payload, {"model"})
+        try:
+            runtime = _provider_runtime(host_session_id)
+            if provider_action.group(2) == "activate":
+                result = runtime.activate_provider(provider_action.group(1), payload["model"])
+            else:
+                result = runtime.test_provider(provider_action.group(1), payload["model"])
+            return json_response({"request_id": _request_id(), "result": result})
+        except RuntimeError as exc:
+            return error_response("model_unavailable", str(exc), status=502)
+    if method == "GET" and path == "/api/v1/agent/status":
+        return json_response(
+            {
+                "request_id": _request_id(),
+                "result": {
+                    "workspace": get_workspace_status(host_session_id),
+                    "runtime": get_opencode_runtime().status(check_health=True),
+                },
+            }
+        )
+    if method == "POST" and path == "/api/v1/agent/permissions":
+        payload = _read_json(body)
+        _require_fields(payload, {"conversation_id"})
+        try:
+            permissions = get_opencode_runtime().pending_permissions(
+                _agent_session_key(payload, host_session_id)
+            )
+            return json_response(
+                {"request_id": _request_id(), "result": {"permissions": permissions}}
+            )
+        except RuntimeError as exc:
+            return error_response("agent_unavailable", str(exc), status=502)
+    if method == "POST" and path == "/api/v1/agent/activity":
+        payload = _read_json(body)
+        _require_fields(payload, {"conversation_id"})
+        try:
+            activity = get_opencode_runtime().activity(
+                _agent_session_key(payload, host_session_id)
+            )
+            return json_response(
+                {"request_id": _request_id(), "result": {"activity": activity}}
+            )
+        except RuntimeError as exc:
+            return error_response("agent_unavailable", str(exc), status=502)
+    if method == "POST" and path == "/api/v1/agent/diff":
+        payload = _read_json(body)
+        _require_fields(payload, {"conversation_id"})
+        try:
+            result = get_opencode_runtime().diff(
+                _agent_session_key(payload, host_session_id)
+            )
+            return json_response({"request_id": _request_id(), "result": result})
+        except RuntimeError as exc:
+            return error_response("agent_unavailable", str(exc), status=502)
+    if method == "POST" and path == "/api/v1/agent/revert":
+        payload = _read_json(body)
+        _require_fields(payload, {"conversation_id"})
+        try:
+            reverted = get_opencode_runtime().revert(
+                _agent_session_key(payload, host_session_id)
+            )
+            return json_response(
+                {"request_id": _request_id(), "result": {"reverted": reverted}}
+            )
+        except RuntimeError as exc:
+            return error_response("agent_unavailable", str(exc), status=502)
+    if method == "POST" and path == "/api/v1/agent/permissions/reply":
+        payload = _read_json(body)
+        _require_fields(payload, {"conversation_id", "request_id", "reply"})
+        request_id = str(payload["request_id"])
+        if re.fullmatch(r"[A-Za-z0-9_-]{1,100}", request_id) is None:
+            raise ValueError("request_id must be a short identifier")
+        try:
+            get_opencode_runtime().reply_permission(
+                _agent_session_key(payload, host_session_id),
+                request_id,
+                str(payload["reply"]),
+            )
+            return json_response({"request_id": _request_id(), "result": {"replied": True}})
+        except RuntimeError as exc:
+            return error_response("agent_unavailable", str(exc), status=502)
+    if method == "POST" and path == "/api/v1/agent/abort":
+        payload = _read_json(body)
+        _require_fields(payload, {"conversation_id"})
+        try:
+            aborted = get_opencode_runtime().abort(
+                _agent_session_key(payload, host_session_id)
+            )
+            return json_response(
+                {"request_id": _request_id(), "result": {"aborted": aborted}}
+            )
+        except RuntimeError as exc:
+            return error_response("agent_unavailable", str(exc), status=502)
     if method == "GET" and path == "/api/v1/host/context":
         return json_response(
             {"request_id": _request_id(), "result": get_host_context(host_session_id)}
@@ -129,6 +306,47 @@ def _handle_request(
                 "result": register_host_asset(_read_json(body), host_session_id),
             }
         )
+    if method == "POST" and path == "/api/v1/host/workspace":
+        payload = _read_json(body)
+        unknown = set(payload) - {"project_root", "host_bridge"}
+        if unknown:
+            raise ValueError(f"unsupported workspace fields: {', '.join(sorted(unknown))}")
+        bridge_payload = payload.get("host_bridge")
+        if bridge_payload is not None:
+            if not isinstance(bridge_payload, dict):
+                raise ValueError("host_bridge must be a JSON object")
+            validate_host_bridge(bridge_payload)
+        previous_workspace = get_workspace_path(host_session_id)
+        workspace = register_workspace(
+            {"project_root": payload.get("project_root")}, host_session_id
+        )
+        bridge = (
+            register_host_bridge(bridge_payload, host_session_id)
+            if isinstance(bridge_payload, dict)
+            else {"available": get_host_bridge(host_session_id) is not None}
+        )
+        workspace_path = get_workspace_path(host_session_id)
+        if workspace_path is None:
+            raise ValueError("workspace registration is unavailable")
+        runtime = get_opencode_runtime()
+        try:
+            if previous_workspace is not None and previous_workspace != workspace_path:
+                runtime.release_sessions(normalize_host_session_id(host_session_id))
+                runtime.stop()
+            runtime_status = runtime.status()
+        except (OSError, RuntimeError, ValueError) as exc:
+            runtime_status = runtime.status()
+            runtime_status["error"] = str(exc)
+        return json_response(
+            {
+                "request_id": _request_id(),
+                "result": {
+                    "workspace": workspace,
+                    "host_bridge": bridge,
+                    "runtime": runtime_status,
+                },
+            }
+        )
     if method == "GET" and path == "/api/v1/host/snapshot":
         return json_response(
             {"request_id": _request_id(), "result": get_host_snapshot(host_session_id)}
@@ -142,9 +360,14 @@ def _handle_request(
         )
     if method == "DELETE" and path == "/api/v1/host/session":
         session_id = normalize_host_session_id(host_session_id)
+        get_opencode_runtime().release_sessions(session_id)
         released_assets = release_host_assets(session_id)
         released_context = release_host_context(session_id)
         released_snapshot = release_host_snapshot(session_id)
+        released_host_bridge = release_host_bridge(session_id)
+        released_workspace = release_workspace(session_id)
+        if released_workspace and workspace_count() == 0:
+            get_opencode_runtime().stop()
         return json_response(
             {
                 "request_id": _request_id(),
@@ -153,6 +376,8 @@ def _handle_request(
                     "released_context": released_context,
                     "released_assets": released_assets,
                     "released_snapshot": released_snapshot,
+                    "released_host_bridge": released_host_bridge,
+                    "released_workspace": released_workspace,
                 },
             }
         )
@@ -166,29 +391,39 @@ def _handle_request(
         return json_response(_test_data_insights(_read_json(body), host_session_id))
     if method == "POST" and path == "/api/v1/copilot/query":
         try:
-            result = run_copilot(
-                _read_json(body),
-                host_context=get_host_context(host_session_id),
-                host_snapshot=get_host_snapshot(host_session_id),
+            payload = _read_json(body)
+            result = _workspace_copilot(payload, host_session_id)
+            return json_response({"request_id": _request_id(), **result})
+        except RuntimeError as exc:
+            return error_response("model_unavailable", str(exc), status=502)
+    if method == "POST" and path == "/api/v1/copilot/stream":
+        try:
+            payload = _read_json(body)
+            if str(payload.get("task") or "chat") != "chat":
+                raise ValueError("streaming is currently available for chat tasks only")
+            return _workspace_copilot_stream(payload, host_session_id)
+        except RuntimeError as exc:
+            return error_response("model_unavailable", str(exc), status=502)
+    if method == "POST" and path == "/api/v1/host/snapshot/analyze":
+        try:
+            payload = _read_json(body)
+            result = _workspace_copilot(
+                {
+                    "question": str(payload.get("question") or "分析当前界面"),
+                    "conversation_id": str(
+                        payload.get("conversation_id") or "current-object"
+                    ),
+                },
+                host_session_id,
             )
             return json_response({"request_id": _request_id(), **result})
         except RuntimeError as exc:
             return error_response("model_unavailable", str(exc), status=502)
-    if method == "POST" and path == "/api/v1/host/snapshot/analyze":
-        question = str(_read_json(body).get("question") or "分析当前界面")
-        result = analyze_host_snapshot(question, host_session_id)
-        return json_response(
-            {
-                "request_id": _request_id(),
-                "answer": result["answer"],
-                "data": result["snapshot"],
-                "citations": result["citations"],
-                "warnings": result["warnings"],
-                "question": result["question"],
-            }
-        )
     if method == "POST" and path == "/api/v1/analyze":
-        return json_response(_analyze(_read_json(body), host_session_id))
+        try:
+            return json_response(_analyze(_read_json(body), host_session_id))
+        except RuntimeError as exc:
+            return error_response("model_unavailable", str(exc), status=502)
     return error_response("not_found", f"No route for {method} {path}", status=404)
 
 
@@ -201,6 +436,236 @@ def error_response(code: str, message: str, *, status: int) -> Response:
         {"request_id": _request_id(), "error": {"code": code, "message": message}},
         status=status,
     )
+
+
+def _handle_native_request(
+    method: str,
+    path: str,
+    query: str,
+    body: str,
+    host_session_id: str | None,
+    headers: Mapping[str, str] | None,
+) -> Response:
+    if method == "GET" and path == "/agent-native-profile.css":
+        return Response(200, _native_profile_css(), "text/css; charset=utf-8")
+    runtime = _provider_runtime(host_session_id)
+    product_ui = _native_product_ui_file(path) if method == "GET" else None
+    if product_ui is not None:
+        response_headers = dict(product_ui.headers or {})
+        if _is_native_page_route(path):
+            session_id = normalize_host_session_id(host_session_id)
+            response_headers["Set-Cookie"] = (
+                f"coretest_host_session={session_id}; Path=/; SameSite=Strict"
+            )
+            return Response(
+                product_ui.status,
+                _native_page_html(product_ui.body.decode("utf-8")),
+                product_ui.content_type,
+                response_headers,
+            )
+        return Response(
+            product_ui.status,
+            product_ui.body,
+            product_ui.content_type,
+            response_headers,
+        )
+    upstream_path = "/" if _is_native_page_route(path) else path
+    if query and upstream_path != "/":
+        upstream_path += f"?{query}"
+    native = runtime.native_request(
+        method,
+        upstream_path,
+        body.encode("utf-8") if body else None,
+        content_type=_header_value(headers, "content-type") or "application/json",
+    )
+    response_headers = dict(native.headers or {})
+    if _is_native_page_route(path):
+        if not native.content_type.lower().startswith("text/html"):
+            raise RuntimeError("CoreTest Agent native UI returned an invalid page")
+        page = _native_page_html(native.body.decode("utf-8"))
+        session_id = normalize_host_session_id(host_session_id)
+        response_headers["Set-Cookie"] = (
+            f"coretest_host_session={session_id}; Path=/; SameSite=Strict"
+        )
+        return Response(native.status, page, "text/html; charset=utf-8", response_headers)
+    signed_cookie = native_ui_cookie_value(host_session_id)
+    if signed_cookie:
+        response_headers["Set-Cookie"] = (
+            f"coretest_native_auth={signed_cookie}; Path=/; HttpOnly; SameSite=Strict"
+        )
+    return Response(
+        native.status,
+        native.body,
+        native.content_type,
+        response_headers,
+        native.stream,
+    )
+
+
+def _is_native_route(path: str) -> bool:
+    return _is_native_page_route(path) or path == "/agent-native-profile.css" or path.startswith(
+        "/assets/"
+    ) or path in {
+        "/apple-touch-icon-v3.png",
+        "/favicon-96x96-v3.png",
+        "/favicon-v3.ico",
+        "/favicon-v3.svg",
+        "/site.webmanifest",
+        "/social-share.png",
+    } or _is_native_protocol_route(path)
+
+
+def _is_native_page_route(path: str) -> bool:
+    workspace_route = _native_workspace_route()
+    return bool(re.fullmatch(r"/server/[^/]+/session/[^/]+", path)) or path in {
+        "/",
+        "/agent-native",
+        "/agent-native/",
+        "/new-session",
+        workspace_route,
+    } or path.startswith(f"{workspace_route}/session/")
+
+
+def _is_native_protocol_route(path: str) -> bool:
+    if path.startswith("/api/v1/"):
+        return False
+    roots = (
+        "/agent",
+        "/api/",
+        "/auth/",
+        "/command",
+        "/config",
+        "/event",
+        "/experimental/",
+        "/file",
+        "/find",
+        "/formatter",
+        "/global/",
+        "/instance/",
+        "/log",
+        "/lsp",
+        "/mcp",
+        "/path",
+        "/permission",
+        "/project",
+        "/provider",
+        "/pty",
+        "/question",
+        "/session",
+        "/skill",
+        "/sync/",
+        "/tui/",
+        "/vcs",
+    )
+    return path.startswith(roots)
+
+
+def _native_session_cookie(headers: Mapping[str, str] | None) -> str | None:
+    value = _header_value(headers, "cookie")
+    if not value:
+        return None
+    cookie = SimpleCookie()
+    try:
+        cookie.load(value)
+    except CookieError:
+        return None
+    item = cookie.get("coretest_host_session")
+    return item.value if item is not None else None
+
+
+def _header_value(headers: Mapping[str, str] | None, name: str) -> str:
+    if headers is None:
+        return ""
+    return next(
+        (str(value) for key, value in headers.items() if key.lower() == name.lower()), ""
+    )
+
+
+def _native_page_html(page: str) -> str:
+    workspace_route = _native_workspace_route()
+    bootstrap = """<link rel="stylesheet" href="/agent-native-profile.css">
+<script id="coretest-agent-bootstrap">
+(() => {
+  const query = new URLSearchParams(location.search);
+  const hash = new URLSearchParams(location.hash.slice(1));
+  const token = hash.get("access_token");
+  if (token && !query.has("auth_token")) {
+    query.set("auth_token", btoa(`opencode:${token}`));
+  }
+  const search = query.size ? `?${query}` : "";
+  const initial = ["/", "/agent-native", "/agent-native/"].includes(location.pathname);
+  const path = initial ? "__WORKSPACE_ROUTE__" : location.pathname;
+  history.replaceState(null, "", `${path}${search}${location.hash}`);
+  document.addEventListener("click", (event) => {
+    const anchor = event.target instanceof Element ? event.target.closest("a") : null;
+    if (!anchor) return;
+    const target = new URL(anchor.href, location.href);
+    if (target.origin !== location.origin || !target.pathname.startsWith("/coretest-file/")) return;
+    event.preventDefault();
+    location.assign(`${target.pathname}${target.search}`);
+  }, true);
+})();
+</script>"""
+    bootstrap = bootstrap.replace("__WORKSPACE_ROUTE__", workspace_route)
+    branded = page.replace("<title>OpenCode</title>", "<title>CoreTest Agent</title>")
+    if "coretest-agent-bootstrap" in branded:
+        return branded
+    return branded.replace("</head>", f"{bootstrap}\n</head>", 1)
+
+
+def _native_product_ui_file(path: str) -> Response | None:
+    root = _repo_root() / "frontend" / "opencode-coretest" / "dist"
+    if not root.is_dir():
+        return None
+    relative = "index.html" if _is_native_page_route(path) else path.lstrip("/")
+    requested = Path(relative)
+    if requested.is_absolute() or ".." in requested.parts:
+        return None
+    target = root / requested
+    if not target.is_file():
+        return None
+    return Response(
+        200,
+        target.read_bytes(),
+        _content_type(target.suffix),
+        {"Cache-Control": "no-cache" if relative == "index.html" else "public, max-age=31536000, immutable"},
+    )
+
+
+def _native_workspace_route() -> str:
+    encoded = urlsafe_b64encode(b"CoreTest Workspace").decode("ascii").rstrip("=")
+    return f"/{encoded}"
+
+
+def _native_profile_css() -> str:
+    return """
+:root { --coretest-accent: #0f6cbd; }
+* { letter-spacing: 0 !important; }
+html, body, #root { width: 100%; height: 100%; }
+#root { padding: 0 !important; }
+[data-component="terminal"],
+.settings-v2-servers,
+.settings-v2-server-dialog,
+button[data-action="prompt-project"],
+button[data-action="home-add-project"],
+button[data-action="home-add-project-row"],
+button[data-action="home-project-menu"],
+[role="tab"][data-value="servers"],
+[data-slot="titlebar-v2"] button[aria-label="Close tab"],
+[data-component="session-new-design"] svg[class*="text-v2-background-bg-inverse"] {
+  display: none !important;
+}
+[role="dialog"] p:has(a[href^="https://opencode.ai/docs/providers/"]),
+[role="dialog"] div:has(> label):has(input[placeholder="Header-Name"]) {
+  display: none !important;
+}
+[role="dialog"] [data-component="input"]:has(input[placeholder="API 密钥"])
+  [data-slot="input-description"] {
+  display: none !important;
+}
+[data-slot="titlebar-v2"] { border-bottom: 1px solid var(--v2-border-border-muted); }
+[data-slot="titlebar-v2"] [data-titlebar-tab] { background: transparent !important; }
+""".strip() + "\n"
 
 
 def _copilot_shell_file(relative_path: str) -> Response:
@@ -261,8 +726,11 @@ def _append_request_audit(
 ) -> None:
     if not path.startswith("/api/v1/") or path == "/api/v1/audit/events":
         return
-    assert isinstance(response.body, str)
-    payload = json.loads(response.body)
+    if response.stream is not None:
+        payload = {"request_id": (response.headers or {}).get("X-Request-ID")}
+    else:
+        assert isinstance(response.body, str)
+        payload = json.loads(response.body)
     append_audit_event(
         method=method,
         path=path,
@@ -339,19 +807,25 @@ def _analyze(payload: dict[str, Any], host_session_id: str | None = None) -> dic
         }
     summary = _test_data_summary(summary_payload, host_session_id)
     result = summary["result"]
-    answer = _fallback_analysis_answer(result)
-    model_warning = None
-    if payload.get("use_model"):
-        try:
-            answer = chat_completion(_analysis_messages(question, result))
-        except ValueError as exc:
-            model_warning = str(exc)
+    agent = _workspace_copilot(
+        {
+            "question": question,
+            "conversation_id": "test-data-analysis",
+            "attachments": [
+                {
+                    "name": "test-data.json",
+                    "content": json.dumps(result, ensure_ascii=False),
+                }
+            ],
+        },
+        host_session_id,
+    )
     return {
         "request_id": _request_id(),
-        "answer": answer,
+        "answer": agent["answer"],
         "data": result,
         "citations": [],
-        "warnings": [model_warning] if model_warning else [],
+        "warnings": [],
         "question": question,
     }
 
@@ -377,32 +851,132 @@ def _mask_asset_source(result: dict[str, Any], asset_id: str | None) -> None:
         result["source"] = {"type": "host_asset", "ref": asset_id}
 
 
-def _fallback_analysis_answer(result: dict[str, Any]) -> str:
-    first_failure = result["failures"][0]["name"] if result["failures"] else "当前测试结果"
-    return (
-        f"本次测试共 {result['total_cases']} 个用例，失败 {result['failed_cases']} 个，"
-        f"通过率 {result['metrics']['pass_rate']:.2%}。主要风险集中在{first_failure}，"
-        "建议先核对扭矩误差阈值、测试环境和相关标定版本。"
+def _workspace_copilot(
+    payload: dict[str, Any], host_session_id: str | None
+) -> dict[str, Any]:
+    workspace = get_workspace_path(host_session_id)
+    if workspace is None:
+        raise RuntimeError("CoreTest Agent workspace is not registered")
+    runtime = get_opencode_runtime()
+    _start_runtime(runtime, workspace, host_session_id)
+    session_id = normalize_host_session_id(host_session_id)
+    conversation_id = payload.get("conversation_id") or "default"
+    return run_copilot(
+        payload,
+        host_context=get_host_context(session_id),
+        host_snapshot=get_host_snapshot(session_id),
+        workspace_agent=lambda question, system, history, new_session: runtime.prompt(
+            f"{session_id}:{conversation_id}",
+            question,
+            system=system,
+            history=history,
+            new_session=new_session,
+        ),
     )
 
 
-def _analysis_messages(
-    question: str,
-    result: dict[str, Any],
-) -> list[dict[str, str]]:
-    return [
-        {
-            "role": "system",
-            "content": "你是汽车测试数据分析助手。只能基于给定测试数据和引用来源回答，不要编造。",
+def _provider_runtime(host_session_id: str | None):
+    workspace = get_workspace_path(host_session_id)
+    if workspace is None:
+        raise RuntimeError("CoreTest Agent workspace is not registered")
+    runtime = get_opencode_runtime()
+    _start_runtime(runtime, workspace, host_session_id)
+    return runtime
+
+
+def _workspace_copilot_stream(
+    payload: dict[str, Any], host_session_id: str | None
+) -> Response:
+    workspace = get_workspace_path(host_session_id)
+    if workspace is None:
+        raise RuntimeError("CoreTest Agent workspace is not registered")
+    runtime = get_opencode_runtime()
+    _start_runtime(runtime, workspace, host_session_id)
+    session_id = normalize_host_session_id(host_session_id)
+    conversation_id = payload.get("conversation_id") or "default"
+    request_id = _request_id()
+    agent_events = stream_copilot(
+        payload,
+        host_context=get_host_context(session_id),
+        host_snapshot=get_host_snapshot(session_id),
+        workspace_agent=lambda question, system, history, new_session: runtime.stream_prompt(
+            f"{session_id}:{conversation_id}",
+            question,
+            system=system,
+            history=history,
+            new_session=new_session,
+        ),
+    )
+
+    def events() -> Iterator[bytes]:
+        try:
+            for event in agent_events:
+                yield (f"data: {json.dumps(event, ensure_ascii=False)}\n\n").encode("utf-8")
+        except (RuntimeError, ValueError) as exc:
+            message = str(exc)
+            yield (
+                "data: "
+                + json.dumps(
+                    {
+                        "type": "error",
+                        "message": message,
+                        "code": _agent_stream_error_code(message),
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n\n"
+            ).encode("utf-8")
+        finally:
+            close = getattr(agent_events, "close", None)
+            if close is not None:
+                close()
+
+    return Response(
+        200,
+        b"",
+        "text/event-stream; charset=utf-8",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "X-Request-ID": request_id,
         },
-        {
-            "role": "user",
-            "content": json.dumps(
-                {"question": question, "test_data": result},
-                ensure_ascii=False,
-            ),
-        },
-    ]
+        stream=events(),
+    )
+
+
+def _agent_stream_error_code(message: str) -> str:
+    normalized = message.lower()
+    if "no progress" in normalized:
+        return "agent_stalled"
+    if "maximum duration" in normalized:
+        return "agent_timeout"
+    if "disconnected" in normalized:
+        return "agent_stream_disconnected"
+    return "agent_failed"
+
+
+def _start_runtime(runtime: Any, workspace: Path, host_session_id: str | None) -> None:
+    bridge = get_host_bridge(host_session_id)
+    if bridge is None:
+        runtime.start(workspace)
+        return
+    runtime.start(workspace, host_bridge=bridge)
+
+
+def _agent_session_key(
+    payload: dict[str, Any], host_session_id: str | None
+) -> str:
+    conversation_id = payload.get("conversation_id")
+    if not isinstance(conversation_id, str) or re.fullmatch(
+        r"[A-Za-z0-9_-]{1,100}", conversation_id
+    ) is None:
+        raise ValueError("conversation_id must be a short identifier")
+    return f"{normalize_host_session_id(host_session_id)}:{conversation_id}"
+
+
+def _require_fields(payload: dict[str, Any], fields: set[str]) -> None:
+    if set(payload) != fields:
+        raise ValueError(f"request fields must be: {', '.join(sorted(fields))}")
 
 
 def _request_id() -> str:
@@ -525,7 +1099,7 @@ def _showcase_html() -> str:
       </div>
     </main>
     <aside>
-      <iframe class="copilot-frame" id="copilotFrame" title="Reusable Geely AI Copilot"></iframe>
+      <iframe class="copilot-frame" id="copilotFrame" title="CoreTest Agent"></iframe>
     </aside>
   </div>
   <script>

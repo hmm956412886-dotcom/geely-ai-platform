@@ -1,0 +1,8 @@
+{
+  "name": "coretest-agent-opencode-ui",
+  "private": true,
+  "packageManager": "pnpm@10.15.1",
+  "scripts": {
+    "build": "pnpm --dir ../../tmp/opencode-ui-build --filter @opencode-ai/app build"
+  }
+}

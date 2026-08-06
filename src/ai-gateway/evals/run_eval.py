@@ -32,9 +32,7 @@ def main() -> int:
     server_thread = Thread(target=server.serve_forever, daemon=True)
     server_thread.start()
     previous_base_url = os.environ.get("AI_GATEWAY_INTERNAL_BASE_URL")
-    previous_agent_mode = os.environ.get("AI_AGENT_MODE")
     os.environ["AI_GATEWAY_INTERNAL_BASE_URL"] = f"http://127.0.0.1:{server.server_port}"
-    os.environ["AI_AGENT_MODE"] = "deterministic"
     _register_eval_assets()
     clear_audit_events()
     cases = json.loads(CASES.read_text(encoding="utf-8"))
@@ -52,7 +50,6 @@ def main() -> int:
         server.server_close()
         server_thread.join(timeout=5)
         _restore_env("AI_GATEWAY_INTERNAL_BASE_URL", previous_base_url)
-        _restore_env("AI_AGENT_MODE", previous_agent_mode)
     print(f"{len(cases) - failures} passed, {failures} failed")
     return 1 if failures else 0
 

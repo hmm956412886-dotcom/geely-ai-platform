@@ -5,13 +5,16 @@ from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import patch
 
-from PySide6.QtCore import QByteArray, QUrl
+from PySide6.QtCore import QByteArray, QProcessEnvironment, QUrl
 from PySide6.QtNetwork import QNetworkReply
 
 from coretest_copilot.gateway import (
     GatewayBridge,
+    _configuration_file,
+    _gateway_asset_root,
     _gateway_executable,
     _load_env_values,
+    _protect_packaged_runtime,
     _server_arguments,
 )
 
@@ -27,6 +30,13 @@ class GatewayConfigTests(unittest.TestCase):
             bridge.copilot_url,
             QUrl(
                 "http://127.0.0.1:8765/copilot-shell/?host_session_id=coretest-session"
+                "#access_token=token%20with%20spaces"
+            ),
+        )
+        self.assertEqual(
+            bridge.native_agent_url,
+            QUrl(
+                "http://127.0.0.1:8765/agent-native/?host_session_id=coretest-session"
                 "#access_token=token%20with%20spaces"
             ),
         )
@@ -47,22 +57,130 @@ class GatewayConfigTests(unittest.TestCase):
         self.assertTrue(calls[0][3])
         self.assertFalse(calls[1][3])
 
+    def test_publish_registers_workspace_before_snapshot(self) -> None:
+        bridge = GatewayBridge.__new__(GatewayBridge)
+        calls = []
+
+        def request(method, path, payload=None, *, privileged=False, success=None):
+            calls.append((method, path, payload, privileged))
+            if success:
+                success({"result": payload})
+
+        bridge.request = request
+        bridge.publish(
+            {"selection_kind": "project"},
+            {"kind": "project", "revision": "1"},
+            workspace_root="D:/projects/demo",
+            host_bridge={"url": "http://127.0.0.1:43123", "token": "secret"},
+        )
+
+        self.assertEqual(
+            [call[1] for call in calls],
+            [
+                "/api/v1/host/workspace",
+                "/api/v1/host/snapshot",
+                "/api/v1/host/context",
+            ],
+        )
+        self.assertEqual(
+            calls[0][2],
+            {
+                "project_root": "D:/projects/demo",
+                "host_bridge": {
+                    "url": "http://127.0.0.1:43123",
+                    "token": "secret",
+                },
+            },
+        )
+        self.assertTrue(calls[0][3])
+
+    def test_publish_completes_only_after_context_succeeds(self) -> None:
+        bridge = GatewayBridge.__new__(GatewayBridge)
+        completed = []
+
+        def request(method, path, payload=None, *, privileged=False, success=None):
+            if success:
+                success({"result": payload})
+
+        bridge.request = request
+        bridge.publish(
+            {"selection_kind": "project"},
+            {"kind": "project", "revision": "1"},
+            workspace_root="D:/projects/demo",
+            complete=lambda: completed.append(True),
+        )
+
+        self.assertEqual(completed, [True])
+
     def test_load_env_values_reads_only_assignments(self) -> None:
         with TemporaryDirectory() as directory:
             path = Path(directory) / ".env"
             path.write_text(
-                "# CoreTest model settings\nAI_MODEL_BASE_URL=https://api.example.com\ninvalid\nAI_MODEL_WIRE_API=responses\n",
+                "# CoreTest model settings\nAI_MODEL_BASE_URL=https://api.example.com\ninvalid\nOPENCODE_COMMAND=opencode.exe\n",
                 encoding="utf-8",
             )
 
             values = _load_env_values(path)
 
         self.assertEqual(values["AI_MODEL_BASE_URL"], "https://api.example.com")
-        self.assertEqual(values["AI_MODEL_WIRE_API"], "responses")
+        self.assertEqual(values["OPENCODE_COMMAND"], "opencode.exe")
         self.assertNotIn("invalid", values)
 
     def test_load_env_values_ignores_missing_file(self) -> None:
         self.assertEqual(_load_env_values(Path("missing.env")), {})
+
+    def test_packaged_gateway_ignores_external_runtime_command(self) -> None:
+        environment = QProcessEnvironment()
+        environment.insert("OPENCODE_COMMAND", "D:/temporary/opencode.exe")
+        environment.insert("OPENCODE_ALLOW_DOWNLOAD", "true")
+
+        _protect_packaged_runtime(environment)
+
+        self.assertFalse(environment.contains("OPENCODE_COMMAND"))
+        self.assertEqual(environment.value("OPENCODE_ALLOW_DOWNLOAD"), "false")
+
+    def test_configuration_file_accepts_legacy_env_file(self) -> None:
+        with TemporaryDirectory() as directory:
+            app_root = Path(directory)
+            legacy = app_root / ".env"
+            legacy.write_text("AI_MODEL_NAME=demo-model\n", encoding="utf-8")
+            fake_module = app_root / "app" / "coretest_copilot" / "gateway.py"
+            with patch(
+                "coretest_copilot.gateway.Path.cwd", return_value=app_root / "workspace"
+            ), patch(
+                "coretest_copilot.gateway.Path.resolve",
+                return_value=fake_module,
+            ):
+                resolved = _configuration_file(None, None)
+
+        self.assertEqual(resolved, legacy)
+
+    def test_configuration_file_honors_explicit_path(self) -> None:
+        with TemporaryDirectory() as directory:
+            configured = Path(directory) / "settings" / "model.env"
+            with patch.dict(
+                "os.environ", {"AI_MODEL_CONFIG_FILE": str(configured)}, clear=False
+            ):
+                resolved = _configuration_file(None, None)
+
+            self.assertEqual(resolved, configured.resolve())
+            self.assertTrue(configured.parent.is_dir())
+
+    def test_configuration_file_defaults_to_local_app_data(self) -> None:
+        with TemporaryDirectory() as directory:
+            fake_module = Path(directory) / "app" / "coretest_copilot" / "gateway.py"
+            with patch.dict(
+                "os.environ",
+                {"LOCALAPPDATA": directory, "AI_MODEL_CONFIG_FILE": ""},
+                clear=False,
+            ), patch(
+                "coretest_copilot.gateway.Path.cwd", return_value=Path(directory) / "work"
+            ), patch(
+                "coretest_copilot.gateway.Path.resolve", return_value=fake_module
+            ):
+                resolved = _configuration_file(None, None)
+
+        self.assertEqual(resolved, Path(directory) / "HK-CoreTest" / "ai-model.env")
 
     def test_gateway_executable_uses_configured_sidecar(self) -> None:
         with TemporaryDirectory() as directory:
@@ -88,6 +206,13 @@ class GatewayConfigTests(unittest.TestCase):
 
         self.assertEqual(resolved, executable.resolve())
 
+    def test_packaged_gateway_uses_only_its_bundled_assets(self) -> None:
+        executable = Path("D:/CoreTest/ai-gateway/geely-ai-gateway.exe")
+        source = Path("D:/CoreTest/app/coretest_copilot/runtime/src")
+
+        self.assertIsNone(_gateway_asset_root(executable, source))
+        self.assertEqual(_gateway_asset_root(None, source), source.parent)
+
     def test_server_arguments_follow_bridge_base_url(self) -> None:
         self.assertEqual(
             _server_arguments("http://127.0.0.1:8877"),
@@ -109,6 +234,21 @@ class GatewayConfigTests(unittest.TestCase):
 
         self.assertEqual(errors, ["snapshot exceeds size limit"])
         reply.deleteLater.assert_called_once_with()
+
+    def test_release_requests_runtime_cleanup_before_stopping_gateway(self) -> None:
+        bridge = GatewayBridge.__new__(GatewayBridge)
+        bridge.ready = True
+        reply = unittest.mock.Mock()
+        reply.isFinished.return_value = True
+        bridge.request = unittest.mock.Mock(return_value=reply)
+        bridge.stop_process = unittest.mock.Mock()
+
+        bridge.release()
+
+        bridge.request.assert_called_once_with(
+            "DELETE", "/api/v1/host/session", privileged=True
+        )
+        bridge.stop_process.assert_called_once_with()
 
 
 if __name__ == "__main__":

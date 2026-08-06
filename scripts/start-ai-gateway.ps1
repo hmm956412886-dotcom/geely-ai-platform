@@ -33,6 +33,10 @@ function Import-EnvFile {
 
 Import-EnvFile -Path $EnvFile
 
+if (-not [string]::IsNullOrWhiteSpace($EnvFile)) {
+    $env:AI_MODEL_CONFIG_FILE = [System.IO.Path]::GetFullPath($EnvFile)
+}
+
 if (-not $PSBoundParameters.ContainsKey("HostName") -and $env:AI_GATEWAY_HOST) {
     $HostName = $env:AI_GATEWAY_HOST
 }
@@ -45,8 +49,10 @@ $env:PYTHONPATH = "src"
 Write-Host "Starting Geely AI Gateway..."
 Write-Host "URL: http://$HostName`:$Port"
 Write-Host "Showcase: http://$HostName`:$Port/showcase"
-Write-Host "Copilot: http://$HostName`:$Port/copilot-shell/"
+Write-Host "CoreTest Agent: http://$HostName`:$Port/agent-native/"
+Write-Host "Legacy UI: http://$HostName`:$Port/copilot-shell/"
 Write-Host "Model configured: $([bool]($env:AI_MODEL_BASE_URL -and $env:AI_MODEL_API_KEY -and $env:AI_MODEL_NAME))"
+Write-Host "Agent runtime command configured: $([bool]$env:OPENCODE_COMMAND)"
 Write-Host "API access token configured: $([bool]$env:AI_GATEWAY_ACCESS_TOKEN)"
 Write-Host "Host token configured: $([bool]$env:AI_GATEWAY_HOST_TOKEN)"
 

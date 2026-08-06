@@ -1,0 +1,2520 @@
+{
+    "bomFormat":  "CycloneDX",
+    "specVersion":  "1.6",
+    "version":  1,
+    "metadata":  {
+                     "component":  {
+                                       "type":  "application",
+                                       "name":  "CoreTest Agent OpenCode UI",
+                                       "version":  "1.18.10",
+                                       "bom-ref":  "coretest-agent-opencode-ui",
+                                       "licenses":  [
+                                                        {
+                                                            "expression":  "MIT"
+                                                        }
+                                                    ],
+                                       "externalReferences":  [
+                                                                  {
+                                                                      "type":  "vcs",
+                                                                      "url":  "https://github.com/anomalyco/opencode.git"
+                                                                  }
+                                                              ],
+                                       "properties":  [
+                                                          {
+                                                              "name":  "opencode:tag",
+                                                              "value":  "v1.18.10"
+                                                          },
+                                                          {
+                                                              "name":  "opencode:commit",
+                                                              "value":  "7902e04c3a67f7c69726bc955efb46e29214c797"
+                                                          }
+                                                      ]
+                                   }
+                 },
+    "components":  [
+                       {
+                           "type":  "library",
+                           "name":  "@corvu/dialog",
+                           "version":  "0.2.4",
+                           "bom-ref":  "npm:@corvu/dialog@0.2.4",
+                           "purl":  "pkg:npm/%40corvu/dialog@0.2.4",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "git+https://github.com/corvudev/corvu.git"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "@corvu/drawer",
+                           "version":  "0.2.4",
+                           "bom-ref":  "npm:@corvu/drawer@0.2.4",
+                           "purl":  "pkg:npm/%40corvu/drawer@0.2.4",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "git+https://github.com/corvudev/corvu.git"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "@corvu/utils",
+                           "version":  "0.3.2",
+                           "bom-ref":  "npm:@corvu/utils@0.3.2",
+                           "purl":  "pkg:npm/%40corvu/utils@0.3.2",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "git+https://github.com/corvudev/corvu.git"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "@corvu/utils",
+                           "version":  "0.4.2",
+                           "bom-ref":  "npm:@corvu/utils@0.4.2",
+                           "purl":  "pkg:npm/%40corvu/utils@0.4.2",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "git+https://github.com/corvudev/corvu.git"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "@dnd-kit/abstract",
+                           "version":  "0.5.0",
+                           "bom-ref":  "npm:@dnd-kit/abstract@0.5.0",
+                           "purl":  "pkg:npm/%40dnd-kit/abstract@0.5.0",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "https://github.com/clauderic/dnd-kit"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "@dnd-kit/dom",
+                           "version":  "0.5.0",
+                           "bom-ref":  "npm:@dnd-kit/dom@0.5.0",
+                           "purl":  "pkg:npm/%40dnd-kit/dom@0.5.0",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "https://github.com/clauderic/dnd-kit"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "@dnd-kit/helpers",
+                           "version":  "0.5.0",
+                           "bom-ref":  "npm:@dnd-kit/helpers@0.5.0",
+                           "purl":  "pkg:npm/%40dnd-kit/helpers@0.5.0",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "https://github.com/clauderic/dnd-kit"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "@dnd-kit/solid",
+                           "version":  "0.5.0",
+                           "bom-ref":  "npm:@dnd-kit/solid@0.5.0",
+                           "purl":  "pkg:npm/%40dnd-kit/solid@0.5.0",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "https://github.com/clauderic/dnd-kit"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "@dnd-kit/state",
+                           "version":  "0.5.0",
+                           "bom-ref":  "npm:@dnd-kit/state@0.5.0",
+                           "purl":  "pkg:npm/%40dnd-kit/state@0.5.0",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "https://github.com/clauderic/dnd-kit"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "@floating-ui/dom",
+                           "version":  "1.8.0",
+                           "bom-ref":  "npm:@floating-ui/dom@1.8.0",
+                           "purl":  "pkg:npm/%40floating-ui/dom@1.8.0",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "https://github.com/floating-ui/floating-ui.git"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "@internationalized/date",
+                           "version":  "3.12.3",
+                           "bom-ref":  "npm:@internationalized/date@3.12.3",
+                           "purl":  "pkg:npm/%40internationalized/date@3.12.3",
+                           "licenses":  [
+                                            {
+                                                "expression":  "Apache-2.0"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "https://github.com/adobe/react-spectrum/tree/main/packages/@internationalized/date"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "@internationalized/number",
+                           "version":  "3.6.7",
+                           "bom-ref":  "npm:@internationalized/number@3.6.7",
+                           "purl":  "pkg:npm/%40internationalized/number@3.6.7",
+                           "licenses":  [
+                                            {
+                                                "expression":  "Apache-2.0"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "https://github.com/adobe/react-spectrum"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "@kobalte/core",
+                           "version":  "0.13.11",
+                           "bom-ref":  "npm:@kobalte/core@0.13.11",
+                           "purl":  "pkg:npm/%40kobalte/core@0.13.11",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "git+https://github.com/kobaltedev/kobalte.git"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "@kobalte/utils",
+                           "version":  "0.9.2",
+                           "bom-ref":  "npm:@kobalte/utils@0.9.2",
+                           "purl":  "pkg:npm/%40kobalte/utils@0.9.2",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "git+https://github.com/kobaltedev/kobalte.git"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "@opencode-ai/app",
+                           "version":  "1.18.10",
+                           "bom-ref":  "npm:@opencode-ai/app@1.18.10",
+                           "purl":  "pkg:npm/%40opencode-ai/app@1.18.10",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "@opencode-ai/client",
+                           "version":  "1.17.13",
+                           "bom-ref":  "npm:@opencode-ai/client@1.17.13",
+                           "purl":  "pkg:npm/%40opencode-ai/client@1.17.13",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "git+https://github.com/anomalyco/opencode.git"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "@opencode-ai/core",
+                           "version":  "1.18.10",
+                           "bom-ref":  "npm:@opencode-ai/core@1.18.10",
+                           "purl":  "pkg:npm/%40opencode-ai/core@1.18.10",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "@opencode-ai/schema",
+                           "version":  "1.18.10",
+                           "bom-ref":  "npm:@opencode-ai/schema@1.18.10",
+                           "purl":  "pkg:npm/%40opencode-ai/schema@1.18.10",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "@opencode-ai/sdk",
+                           "version":  "1.18.10",
+                           "bom-ref":  "npm:@opencode-ai/sdk@1.18.10",
+                           "purl":  "pkg:npm/%40opencode-ai/sdk@1.18.10",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "@opencode-ai/session-ui",
+                           "version":  "1.18.10",
+                           "bom-ref":  "npm:@opencode-ai/session-ui@1.18.10",
+                           "purl":  "pkg:npm/%40opencode-ai/session-ui@1.18.10",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "@opencode-ai/ui",
+                           "version":  "1.18.10",
+                           "bom-ref":  "npm:@opencode-ai/ui@1.18.10",
+                           "purl":  "pkg:npm/%40opencode-ai/ui@1.18.10",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "git+https://github.com/anomalyco/opencode.git"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "@pierre/diffs",
+                           "version":  "1.2.10",
+                           "bom-ref":  "npm:@pierre/diffs@1.2.10",
+                           "purl":  "pkg:npm/%40pierre/diffs@1.2.10",
+                           "licenses":  [
+                                            {
+                                                "expression":  "apache-2.0"
+                                            }
+                                        ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "@pierre/trees",
+                           "version":  "1.0.0-beta.4",
+                           "bom-ref":  "npm:@pierre/trees@1.0.0-beta.4",
+                           "purl":  "pkg:npm/%40pierre/trees@1.0.0-beta.4",
+                           "licenses":  [
+                                            {
+                                                "expression":  "apache-2.0"
+                                            }
+                                        ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "@sentry/browser",
+                           "version":  "10.36.0",
+                           "bom-ref":  "npm:@sentry/browser@10.36.0",
+                           "purl":  "pkg:npm/%40sentry/browser@10.36.0",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "git://github.com/getsentry/sentry-javascript.git"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "@sentry/core",
+                           "version":  "10.36.0",
+                           "bom-ref":  "npm:@sentry/core@10.36.0",
+                           "purl":  "pkg:npm/%40sentry/core@10.36.0",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "git://github.com/getsentry/sentry-javascript.git"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "@sentry/solid",
+                           "version":  "10.36.0",
+                           "bom-ref":  "npm:@sentry/solid@10.36.0",
+                           "purl":  "pkg:npm/%40sentry/solid@10.36.0",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "git://github.com/getsentry/sentry-javascript.git"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "@sentry-internal/browser-utils",
+                           "version":  "10.36.0",
+                           "bom-ref":  "npm:@sentry-internal/browser-utils@10.36.0",
+                           "purl":  "pkg:npm/%40sentry-internal/browser-utils@10.36.0",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "git://github.com/getsentry/sentry-javascript.git"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "@sentry-internal/feedback",
+                           "version":  "10.36.0",
+                           "bom-ref":  "npm:@sentry-internal/feedback@10.36.0",
+                           "purl":  "pkg:npm/%40sentry-internal/feedback@10.36.0",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "git://github.com/getsentry/sentry-javascript.git"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "@sentry-internal/replay",
+                           "version":  "10.36.0",
+                           "bom-ref":  "npm:@sentry-internal/replay@10.36.0",
+                           "purl":  "pkg:npm/%40sentry-internal/replay@10.36.0",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "git+https://github.com/getsentry/sentry-javascript.git"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "@sentry-internal/replay-canvas",
+                           "version":  "10.36.0",
+                           "bom-ref":  "npm:@sentry-internal/replay-canvas@10.36.0",
+                           "purl":  "pkg:npm/%40sentry-internal/replay-canvas@10.36.0",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "git+https://github.com/getsentry/sentry-javascript.git"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "@shikijs/stream",
+                           "version":  "4.2.0",
+                           "bom-ref":  "npm:@shikijs/stream@4.2.0",
+                           "purl":  "pkg:npm/%40shikijs/stream@4.2.0",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "git+https://github.com/shikijs/shiki.git"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "@shikijs/transformers",
+                           "version":  "3.9.2",
+                           "bom-ref":  "npm:@shikijs/transformers@3.9.2",
+                           "purl":  "pkg:npm/%40shikijs/transformers@3.9.2",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "git+https://github.com/shikijs/shiki.git"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "@solidjs/meta",
+                           "version":  "0.29.4",
+                           "bom-ref":  "npm:@solidjs/meta@0.29.4",
+                           "purl":  "pkg:npm/%40solidjs/meta@0.29.4",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "https://github.com/solidjs/solid-meta"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "@solidjs/router",
+                           "version":  "0.15.4",
+                           "bom-ref":  "npm:@solidjs/router@0.15.4",
+                           "purl":  "pkg:npm/%40solidjs/router@0.15.4",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "https://github.com/solidjs/solid-router"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "@solid-primitives/active-element",
+                           "version":  "2.1.3",
+                           "bom-ref":  "npm:@solid-primitives/active-element@2.1.3",
+                           "purl":  "pkg:npm/%40solid-primitives/active-element@2.1.3",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "git+https://github.com/solidjs-community/solid-primitives.git"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "@solid-primitives/audio",
+                           "version":  "1.4.2",
+                           "bom-ref":  "npm:@solid-primitives/audio@1.4.2",
+                           "purl":  "pkg:npm/%40solid-primitives/audio@1.4.2",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "git+https://github.com/solidjs-community/solid-primitives.git"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "@solid-primitives/bounds",
+                           "version":  "0.1.3",
+                           "bom-ref":  "npm:@solid-primitives/bounds@0.1.3",
+                           "purl":  "pkg:npm/%40solid-primitives/bounds@0.1.3",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "git+https://github.com/solidjs-community/solid-primitives.git"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "@solid-primitives/event-bus",
+                           "version":  "1.1.2",
+                           "bom-ref":  "npm:@solid-primitives/event-bus@1.1.2",
+                           "purl":  "pkg:npm/%40solid-primitives/event-bus@1.1.2",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "git+https://github.com/solidjs-community/solid-primitives.git"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "@solid-primitives/event-listener",
+                           "version":  "2.4.5",
+                           "bom-ref":  "npm:@solid-primitives/event-listener@2.4.5",
+                           "purl":  "pkg:npm/%40solid-primitives/event-listener@2.4.5",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "git+https://github.com/solidjs-community/solid-primitives.git"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "@solid-primitives/i18n",
+                           "version":  "2.2.1",
+                           "bom-ref":  "npm:@solid-primitives/i18n@2.2.1",
+                           "purl":  "pkg:npm/%40solid-primitives/i18n@2.2.1",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "git+https://github.com/solidjs-community/solid-primitives.git"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "@solid-primitives/keyed",
+                           "version":  "1.5.3",
+                           "bom-ref":  "npm:@solid-primitives/keyed@1.5.3",
+                           "purl":  "pkg:npm/%40solid-primitives/keyed@1.5.3",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "git+https://github.com/solidjs-community/solid-primitives.git"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "@solid-primitives/map",
+                           "version":  "0.4.13",
+                           "bom-ref":  "npm:@solid-primitives/map@0.4.13",
+                           "purl":  "pkg:npm/%40solid-primitives/map@0.4.13",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "git+https://github.com/solidjs-community/solid-primitives.git"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "@solid-primitives/media",
+                           "version":  "2.3.3",
+                           "bom-ref":  "npm:@solid-primitives/media@2.3.3",
+                           "purl":  "pkg:npm/%40solid-primitives/media@2.3.3",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "git+https://github.com/solidjs-community/solid-primitives.git"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "@solid-primitives/memo",
+                           "version":  "1.5.1",
+                           "bom-ref":  "npm:@solid-primitives/memo@1.5.1",
+                           "purl":  "pkg:npm/%40solid-primitives/memo@1.5.1",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "git+https://github.com/solidjs-community/solid-primitives.git"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "@solid-primitives/props",
+                           "version":  "3.2.4",
+                           "bom-ref":  "npm:@solid-primitives/props@3.2.4",
+                           "purl":  "pkg:npm/%40solid-primitives/props@3.2.4",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "git+https://github.com/solidjs-community/solid-primitives.git"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "@solid-primitives/refs",
+                           "version":  "1.1.4",
+                           "bom-ref":  "npm:@solid-primitives/refs@1.1.4",
+                           "purl":  "pkg:npm/%40solid-primitives/refs@1.1.4",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "git+https://github.com/solidjs-community/solid-primitives.git"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "@solid-primitives/resize-observer",
+                           "version":  "2.1.3",
+                           "bom-ref":  "npm:@solid-primitives/resize-observer@2.1.3",
+                           "purl":  "pkg:npm/%40solid-primitives/resize-observer@2.1.3",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "git+https://github.com/solidjs-community/solid-primitives.git"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "@solid-primitives/resize-observer",
+                           "version":  "2.1.5",
+                           "bom-ref":  "npm:@solid-primitives/resize-observer@2.1.5",
+                           "purl":  "pkg:npm/%40solid-primitives/resize-observer@2.1.5",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "git+https://github.com/solidjs-community/solid-primitives.git"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "@solid-primitives/rootless",
+                           "version":  "1.5.4",
+                           "bom-ref":  "npm:@solid-primitives/rootless@1.5.4",
+                           "purl":  "pkg:npm/%40solid-primitives/rootless@1.5.4",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "git+https://github.com/solidjs-community/solid-primitives.git"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "@solid-primitives/scheduled",
+                           "version":  "1.5.3",
+                           "bom-ref":  "npm:@solid-primitives/scheduled@1.5.3",
+                           "purl":  "pkg:npm/%40solid-primitives/scheduled@1.5.3",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "git+https://github.com/solidjs-community/solid-primitives.git"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "@solid-primitives/scroll",
+                           "version":  "2.1.3",
+                           "bom-ref":  "npm:@solid-primitives/scroll@2.1.3",
+                           "purl":  "pkg:npm/%40solid-primitives/scroll@2.1.3",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "git+https://github.com/solidjs-community/solid-primitives.git"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "@solid-primitives/static-store",
+                           "version":  "0.1.4",
+                           "bom-ref":  "npm:@solid-primitives/static-store@0.1.4",
+                           "purl":  "pkg:npm/%40solid-primitives/static-store@0.1.4",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "git+https://github.com/solidjs-community/solid-primitives.git"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "@solid-primitives/storage",
+                           "version":  "4.3.3",
+                           "bom-ref":  "npm:@solid-primitives/storage@4.3.3",
+                           "purl":  "pkg:npm/%40solid-primitives/storage@4.3.3",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "git+https://github.com/solidjs-community/solid-primitives.git"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "@solid-primitives/timer",
+                           "version":  "1.4.4",
+                           "bom-ref":  "npm:@solid-primitives/timer@1.4.4",
+                           "purl":  "pkg:npm/%40solid-primitives/timer@1.4.4",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "git+https://github.com/solidjs-community/solid-primitives.git"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "@solid-primitives/trigger",
+                           "version":  "1.2.4",
+                           "bom-ref":  "npm:@solid-primitives/trigger@1.2.4",
+                           "purl":  "pkg:npm/%40solid-primitives/trigger@1.2.4",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "git+https://github.com/solidjs-community/solid-primitives.git"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "@solid-primitives/utils",
+                           "version":  "6.4.1",
+                           "bom-ref":  "npm:@solid-primitives/utils@6.4.1",
+                           "purl":  "pkg:npm/%40solid-primitives/utils@6.4.1",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "git+https://github.com/solidjs-community/solid-primitives.git"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "@solid-primitives/websocket",
+                           "version":  "1.3.1",
+                           "bom-ref":  "npm:@solid-primitives/websocket@1.3.1",
+                           "purl":  "pkg:npm/%40solid-primitives/websocket@1.3.1",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "git+https://github.com/solidjs-community/solid-primitives.git"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "@swc/helpers",
+                           "version":  "0.5.23",
+                           "bom-ref":  "npm:@swc/helpers@0.5.23",
+                           "purl":  "pkg:npm/%40swc/helpers@0.5.23",
+                           "licenses":  [
+                                            {
+                                                "expression":  "Apache-2.0"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "git+https://github.com/swc-project/swc.git"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "@tanstack/query-core",
+                           "version":  "5.91.2",
+                           "bom-ref":  "npm:@tanstack/query-core@5.91.2",
+                           "purl":  "pkg:npm/%40tanstack/query-core@5.91.2",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "git+https://github.com/TanStack/query.git"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "@tanstack/solid-query",
+                           "version":  "5.91.4",
+                           "bom-ref":  "npm:@tanstack/solid-query@5.91.4",
+                           "purl":  "pkg:npm/%40tanstack/solid-query@5.91.4",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "git+https://github.com/TanStack/query.git"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "@tanstack/solid-virtual",
+                           "version":  "3.13.32",
+                           "bom-ref":  "npm:@tanstack/solid-virtual@3.13.32",
+                           "purl":  "pkg:npm/%40tanstack/solid-virtual@3.13.32",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "git+https://github.com/TanStack/virtual.git"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "@tanstack/virtual-core",
+                           "version":  "3.17.3",
+                           "bom-ref":  "npm:@tanstack/virtual-core@3.17.3",
+                           "purl":  "pkg:npm/%40tanstack/virtual-core@3.17.3",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "git+https://github.com/TanStack/virtual.git"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "@thisbeyond/solid-dnd",
+                           "version":  "0.7.5",
+                           "bom-ref":  "npm:@thisbeyond/solid-dnd@0.7.5",
+                           "purl":  "pkg:npm/%40thisbeyond/solid-dnd@0.7.5",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "git+https://github.com/thisbeyond/solid-dnd.git"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "cross-spawn",
+                           "version":  "7.0.6",
+                           "bom-ref":  "npm:cross-spawn@7.0.6",
+                           "purl":  "pkg:npm/cross-spawn@7.0.6",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "git@github.com:moxystudio/node-cross-spawn.git"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "diff",
+                           "version":  "8.0.2",
+                           "bom-ref":  "npm:diff@8.0.2",
+                           "purl":  "pkg:npm/diff@8.0.2",
+                           "licenses":  [
+                                            {
+                                                "expression":  "BSD-3-Clause"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "git://github.com/kpdecker/jsdiff.git"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "dompurify",
+                           "version":  "3.3.1",
+                           "bom-ref":  "npm:dompurify@3.3.1",
+                           "purl":  "pkg:npm/dompurify@3.3.1",
+                           "licenses":  [
+                                            {
+                                                "expression":  "(MPL-2.0 OR Apache-2.0)"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "git://github.com/cure53/DOMPurify.git"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "effect",
+                           "version":  "4.0.0-beta.83",
+                           "bom-ref":  "npm:effect@4.0.0-beta.83",
+                           "purl":  "pkg:npm/effect@4.0.0-beta.83",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "https://github.com/Effect-TS/effect-smol.git"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "fuzzysort",
+                           "version":  "3.1.0",
+                           "bom-ref":  "npm:fuzzysort@3.1.0",
+                           "purl":  "pkg:npm/fuzzysort@3.1.0",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "https://github.com/farzher/fuzzysort.git"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "ghostty-web",
+                           "version":  "0.4.0",
+                           "bom-ref":  "npm:ghostty-web@0.4.0",
+                           "purl":  "pkg:npm/ghostty-web@0.4.0",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "https://github.com/coder/ghostty-web.git"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "isexe",
+                           "version":  "2.0.0",
+                           "bom-ref":  "npm:isexe@2.0.0",
+                           "purl":  "pkg:npm/isexe@2.0.0",
+                           "licenses":  [
+                                            {
+                                                "expression":  "ISC"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "git+https://github.com/isaacs/isexe.git"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "katex",
+                           "version":  "0.16.27",
+                           "bom-ref":  "npm:katex@0.16.27",
+                           "purl":  "pkg:npm/katex@0.16.27",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "https://github.com/KaTeX/KaTeX.git"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "luxon",
+                           "version":  "3.6.1",
+                           "bom-ref":  "npm:luxon@3.6.1",
+                           "purl":  "pkg:npm/luxon@3.6.1",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "https://github.com/moment/luxon"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "marked",
+                           "version":  "17.0.6",
+                           "bom-ref":  "npm:marked@17.0.6",
+                           "purl":  "pkg:npm/marked@17.0.6",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "git://github.com/markedjs/marked.git"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "marked-katex-extension",
+                           "version":  "5.1.6",
+                           "bom-ref":  "npm:marked-katex-extension@5.1.6",
+                           "purl":  "pkg:npm/marked-katex-extension@5.1.6",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "git+https://github.com/UziTech/marked-katex-extension.git"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "marked-shiki",
+                           "version":  "1.2.1",
+                           "bom-ref":  "npm:marked-shiki@1.2.1",
+                           "purl":  "pkg:npm/marked-shiki@1.2.1",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "https://github.com/bent10/marked-extensions"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "morphdom",
+                           "version":  "2.7.8",
+                           "bom-ref":  "npm:morphdom@2.7.8",
+                           "purl":  "pkg:npm/morphdom@2.7.8",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "https://github.com/patrick-steele-idem/morphdom.git"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "motion",
+                           "version":  "12.34.5",
+                           "bom-ref":  "npm:motion@12.34.5",
+                           "purl":  "pkg:npm/motion@12.34.5",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "https://github.com/motiondivision/motion"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "path-key",
+                           "version":  "3.1.1",
+                           "bom-ref":  "npm:path-key@3.1.1",
+                           "purl":  "pkg:npm/path-key@3.1.1",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "sindresorhus/path-key"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "preact",
+                           "version":  "11.0.0-beta.0",
+                           "bom-ref":  "npm:preact@11.0.0-beta.0",
+                           "purl":  "pkg:npm/preact@11.0.0-beta.0",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "preactjs/preact"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "preact-render-to-string",
+                           "version":  "6.6.5",
+                           "bom-ref":  "npm:preact-render-to-string@6.6.5",
+                           "purl":  "pkg:npm/preact-render-to-string@6.6.5",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "https://github.com/preactjs/preact-render-to-string"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "react",
+                           "version":  "19.2.8",
+                           "bom-ref":  "npm:react@19.2.8",
+                           "purl":  "pkg:npm/react@19.2.8",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "https://github.com/react/react.git"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "react-dom",
+                           "version":  "19.2.8",
+                           "bom-ref":  "npm:react-dom@19.2.8",
+                           "purl":  "pkg:npm/react-dom@19.2.8",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "https://github.com/react/react.git"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "remeda",
+                           "version":  "2.26.0",
+                           "bom-ref":  "npm:remeda@2.26.0",
+                           "purl":  "pkg:npm/remeda@2.26.0",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "git+https://github.com/remeda/remeda.git"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "remend",
+                           "version":  "1.3.0",
+                           "bom-ref":  "npm:remend@1.3.0",
+                           "purl":  "pkg:npm/remend@1.3.0",
+                           "licenses":  [
+                                            {
+                                                "expression":  "Apache-2.0"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "git+https://github.com/vercel/streamdown.git"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "shebang-command",
+                           "version":  "2.0.0",
+                           "bom-ref":  "npm:shebang-command@2.0.0",
+                           "purl":  "pkg:npm/shebang-command@2.0.0",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "kevva/shebang-command"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "shebang-regex",
+                           "version":  "3.0.0",
+                           "bom-ref":  "npm:shebang-regex@3.0.0",
+                           "purl":  "pkg:npm/shebang-regex@3.0.0",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "sindresorhus/shebang-regex"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "shiki",
+                           "version":  "4.2.0",
+                           "bom-ref":  "npm:shiki@4.2.0",
+                           "purl":  "pkg:npm/shiki@4.2.0",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "git+https://github.com/shikijs/shiki.git"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "solid-dismissible",
+                           "version":  "0.1.1",
+                           "bom-ref":  "npm:solid-dismissible@0.1.1",
+                           "purl":  "pkg:npm/solid-dismissible@0.1.1",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "git+https://github.com/corvudev/corvu.git"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "solid-focus-trap",
+                           "version":  "0.1.9",
+                           "bom-ref":  "npm:solid-focus-trap@0.1.9",
+                           "purl":  "pkg:npm/solid-focus-trap@0.1.9",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "git+https://github.com/corvudev/corvu.git"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "solid-js",
+                           "version":  "1.9.10",
+                           "bom-ref":  "npm:solid-js@1.9.10",
+                           "purl":  "pkg:npm/solid-js@1.9.10",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "https://github.com/solidjs/solid"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "solid-list",
+                           "version":  "0.3.0",
+                           "bom-ref":  "npm:solid-list@0.3.0",
+                           "purl":  "pkg:npm/solid-list@0.3.0",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "git+https://github.com/corvudev/corvu.git"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "solid-presence",
+                           "version":  "0.1.8",
+                           "bom-ref":  "npm:solid-presence@0.1.8",
+                           "purl":  "pkg:npm/solid-presence@0.1.8",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "git+https://github.com/corvudev/corvu.git"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "solid-presence",
+                           "version":  "0.2.0",
+                           "bom-ref":  "npm:solid-presence@0.2.0",
+                           "purl":  "pkg:npm/solid-presence@0.2.0",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "git+https://github.com/corvudev/corvu.git"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "solid-prevent-scroll",
+                           "version":  "0.1.11",
+                           "bom-ref":  "npm:solid-prevent-scroll@0.1.11",
+                           "purl":  "pkg:npm/solid-prevent-scroll@0.1.11",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "git+https://github.com/corvudev/corvu.git"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "solid-transition-size",
+                           "version":  "0.1.4",
+                           "bom-ref":  "npm:solid-transition-size@0.1.4",
+                           "purl":  "pkg:npm/solid-transition-size@0.1.4",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "git+https://github.com/corvudev/corvu.git"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "strip-ansi",
+                           "version":  "7.1.2",
+                           "bom-ref":  "npm:strip-ansi@7.1.2",
+                           "purl":  "pkg:npm/strip-ansi@7.1.2",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "chalk/strip-ansi"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "tailwindcss",
+                           "version":  "4.1.11",
+                           "bom-ref":  "npm:tailwindcss@4.1.11",
+                           "purl":  "pkg:npm/tailwindcss@4.1.11",
+                           "licenses":  [
+                                            {
+                                                "expression":  "MIT"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "https://github.com/tailwindlabs/tailwindcss.git"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "tslib",
+                           "version":  "2.8.1",
+                           "bom-ref":  "npm:tslib@2.8.1",
+                           "purl":  "pkg:npm/tslib@2.8.1",
+                           "licenses":  [
+                                            {
+                                                "expression":  "0BSD"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "https://github.com/Microsoft/tslib.git"
+                                                      }
+                                                  ]
+                       },
+                       {
+                           "type":  "library",
+                           "name":  "which",
+                           "version":  "2.0.2",
+                           "bom-ref":  "npm:which@2.0.2",
+                           "purl":  "pkg:npm/which@2.0.2",
+                           "licenses":  [
+                                            {
+                                                "expression":  "ISC"
+                                            }
+                                        ],
+                           "externalReferences":  [
+                                                      {
+                                                          "type":  "vcs",
+                                                          "url":  "git://github.com/isaacs/node-which.git"
+                                                      }
+                                                  ]
+                       }
+                   ],
+    "dependencies":  [
+                         {
+                             "ref":  "coretest-agent-opencode-ui",
+                             "dependsOn":  [
+                                               "npm:@opencode-ai/app@1.18.10",
+                                               "npm:@opencode-ai/core@1.18.10",
+                                               "npm:@opencode-ai/schema@1.18.10",
+                                               "npm:@opencode-ai/sdk@1.18.10",
+                                               "npm:@opencode-ai/session-ui@1.18.10",
+                                               "npm:@opencode-ai/ui@1.18.10"
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:@corvu/dialog@0.2.4",
+                             "dependsOn":  [
+                                               "npm:@corvu/utils@0.4.2",
+                                               "npm:solid-dismissible@0.1.1",
+                                               "npm:solid-focus-trap@0.1.9",
+                                               "npm:solid-js@1.9.10",
+                                               "npm:solid-presence@0.2.0",
+                                               "npm:solid-prevent-scroll@0.1.11"
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:@corvu/drawer@0.2.4",
+                             "dependsOn":  [
+                                               "npm:@corvu/dialog@0.2.4",
+                                               "npm:@corvu/utils@0.4.2",
+                                               "npm:@solid-primitives/memo@1.5.1",
+                                               "npm:solid-js@1.9.10",
+                                               "npm:solid-transition-size@0.1.4"
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:@corvu/utils@0.3.2",
+                             "dependsOn":  [
+                                               "npm:@floating-ui/dom@1.8.0",
+                                               "npm:solid-js@1.9.10"
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:@corvu/utils@0.4.2",
+                             "dependsOn":  [
+
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:@dnd-kit/abstract@0.5.0",
+                             "dependsOn":  [
+
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:@dnd-kit/dom@0.5.0",
+                             "dependsOn":  [
+
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:@dnd-kit/helpers@0.5.0",
+                             "dependsOn":  [
+                                               "npm:@dnd-kit/abstract@0.5.0",
+                                               "npm:tslib@2.8.1"
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:@dnd-kit/solid@0.5.0",
+                             "dependsOn":  [
+                                               "npm:@dnd-kit/abstract@0.5.0",
+                                               "npm:@dnd-kit/dom@0.5.0",
+                                               "npm:@dnd-kit/state@0.5.0",
+                                               "npm:solid-js@1.9.10",
+                                               "npm:tslib@2.8.1"
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:@dnd-kit/state@0.5.0",
+                             "dependsOn":  [
+
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:@floating-ui/dom@1.8.0",
+                             "dependsOn":  [
+
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:@internationalized/date@3.12.3",
+                             "dependsOn":  [
+                                               "npm:@swc/helpers@0.5.23"
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:@internationalized/number@3.6.7",
+                             "dependsOn":  [
+                                               "npm:@swc/helpers@0.5.23"
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:@kobalte/core@0.13.11",
+                             "dependsOn":  [
+                                               "npm:@floating-ui/dom@1.8.0",
+                                               "npm:@internationalized/date@3.12.3",
+                                               "npm:@internationalized/number@3.6.7",
+                                               "npm:@kobalte/utils@0.9.2",
+                                               "npm:@solid-primitives/props@3.2.4",
+                                               "npm:@solid-primitives/resize-observer@2.1.5",
+                                               "npm:solid-js@1.9.10",
+                                               "npm:solid-presence@0.1.8",
+                                               "npm:solid-prevent-scroll@0.1.11"
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:@kobalte/utils@0.9.2",
+                             "dependsOn":  [
+                                               "npm:@solid-primitives/event-listener@2.4.5",
+                                               "npm:@solid-primitives/keyed@1.5.3",
+                                               "npm:@solid-primitives/map@0.4.13",
+                                               "npm:@solid-primitives/media@2.3.3",
+                                               "npm:@solid-primitives/props@3.2.4",
+                                               "npm:@solid-primitives/refs@1.1.4",
+                                               "npm:@solid-primitives/utils@6.4.1",
+                                               "npm:solid-js@1.9.10"
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:@opencode-ai/app@1.18.10",
+                             "dependsOn":  [
+                                               "npm:@corvu/drawer@0.2.4",
+                                               "npm:@dnd-kit/abstract@0.5.0",
+                                               "npm:@dnd-kit/dom@0.5.0",
+                                               "npm:@dnd-kit/helpers@0.5.0",
+                                               "npm:@dnd-kit/solid@0.5.0",
+                                               "npm:@kobalte/core@0.13.11",
+                                               "npm:@opencode-ai/client@1.17.13",
+                                               "npm:@opencode-ai/core@1.18.10",
+                                               "npm:@opencode-ai/schema@1.18.10",
+                                               "npm:@opencode-ai/sdk@1.18.10",
+                                               "npm:@opencode-ai/session-ui@1.18.10",
+                                               "npm:@opencode-ai/ui@1.18.10",
+                                               "npm:@pierre/trees@1.0.0-beta.4",
+                                               "npm:@sentry/solid@10.36.0",
+                                               "npm:@shikijs/transformers@3.9.2",
+                                               "npm:@solidjs/meta@0.29.4",
+                                               "npm:@solidjs/router@0.15.4",
+                                               "npm:@solid-primitives/active-element@2.1.3",
+                                               "npm:@solid-primitives/audio@1.4.2",
+                                               "npm:@solid-primitives/event-bus@1.1.2",
+                                               "npm:@solid-primitives/event-listener@2.4.5",
+                                               "npm:@solid-primitives/i18n@2.2.1",
+                                               "npm:@solid-primitives/media@2.3.3",
+                                               "npm:@solid-primitives/resize-observer@2.1.5",
+                                               "npm:@solid-primitives/scheduled@1.5.3",
+                                               "npm:@solid-primitives/scroll@2.1.3",
+                                               "npm:@solid-primitives/storage@4.3.3",
+                                               "npm:@solid-primitives/timer@1.4.4",
+                                               "npm:@solid-primitives/websocket@1.3.1",
+                                               "npm:@tanstack/solid-query@5.91.4",
+                                               "npm:@tanstack/solid-virtual@3.13.32",
+                                               "npm:@thisbeyond/solid-dnd@0.7.5",
+                                               "npm:diff@8.0.2",
+                                               "npm:effect@4.0.0-beta.83",
+                                               "npm:fuzzysort@3.1.0",
+                                               "npm:ghostty-web@0.4.0",
+                                               "npm:luxon@3.6.1",
+                                               "npm:marked@17.0.6",
+                                               "npm:marked-shiki@1.2.1",
+                                               "npm:remeda@2.26.0",
+                                               "npm:shiki@4.2.0",
+                                               "npm:solid-js@1.9.10",
+                                               "npm:solid-list@0.3.0",
+                                               "npm:solid-presence@0.2.0",
+                                               "npm:tailwindcss@4.1.11"
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:@opencode-ai/client@1.17.13",
+                             "dependsOn":  [
+
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:@opencode-ai/core@1.18.10",
+                             "dependsOn":  [
+
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:@opencode-ai/schema@1.18.10",
+                             "dependsOn":  [
+                                               "npm:effect@4.0.0-beta.83"
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:@opencode-ai/sdk@1.18.10",
+                             "dependsOn":  [
+                                               "npm:cross-spawn@7.0.6"
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:@opencode-ai/session-ui@1.18.10",
+                             "dependsOn":  [
+                                               "npm:@kobalte/core@0.13.11",
+                                               "npm:@opencode-ai/client@1.17.13",
+                                               "npm:@opencode-ai/core@1.18.10",
+                                               "npm:@opencode-ai/sdk@1.18.10",
+                                               "npm:@opencode-ai/ui@1.18.10",
+                                               "npm:@pierre/diffs@1.2.10",
+                                               "npm:@shikijs/stream@4.2.0",
+                                               "npm:@shikijs/transformers@3.9.2",
+                                               "npm:@solidjs/meta@0.29.4",
+                                               "npm:@solidjs/router@0.15.4",
+                                               "npm:@solid-primitives/bounds@0.1.3",
+                                               "npm:@solid-primitives/event-listener@2.4.5",
+                                               "npm:@solid-primitives/media@2.3.3",
+                                               "npm:@solid-primitives/resize-observer@2.1.3",
+                                               "npm:diff@8.0.2",
+                                               "npm:dompurify@3.3.1",
+                                               "npm:fuzzysort@3.1.0",
+                                               "npm:katex@0.16.27",
+                                               "npm:luxon@3.6.1",
+                                               "npm:marked@17.0.6",
+                                               "npm:marked-katex-extension@5.1.6",
+                                               "npm:marked-shiki@1.2.1",
+                                               "npm:morphdom@2.7.8",
+                                               "npm:motion@12.34.5",
+                                               "npm:remeda@2.26.0",
+                                               "npm:remend@1.3.0",
+                                               "npm:shiki@4.2.0",
+                                               "npm:solid-js@1.9.10",
+                                               "npm:solid-list@0.3.0",
+                                               "npm:strip-ansi@7.1.2"
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:@opencode-ai/ui@1.18.10",
+                             "dependsOn":  [
+
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:@pierre/diffs@1.2.10",
+                             "dependsOn":  [
+
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:@pierre/trees@1.0.0-beta.4",
+                             "dependsOn":  [
+                                               "npm:preact@11.0.0-beta.0",
+                                               "npm:preact-render-to-string@6.6.5",
+                                               "npm:react@19.2.8",
+                                               "npm:react-dom@19.2.8"
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:@sentry/browser@10.36.0",
+                             "dependsOn":  [
+                                               "npm:@sentry/core@10.36.0",
+                                               "npm:@sentry-internal/browser-utils@10.36.0",
+                                               "npm:@sentry-internal/feedback@10.36.0",
+                                               "npm:@sentry-internal/replay@10.36.0",
+                                               "npm:@sentry-internal/replay-canvas@10.36.0"
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:@sentry/core@10.36.0",
+                             "dependsOn":  [
+
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:@sentry/solid@10.36.0",
+                             "dependsOn":  [
+                                               "npm:@sentry/browser@10.36.0",
+                                               "npm:@sentry/core@10.36.0",
+                                               "npm:@solidjs/router@0.15.4",
+                                               "npm:solid-js@1.9.10"
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:@sentry-internal/browser-utils@10.36.0",
+                             "dependsOn":  [
+                                               "npm:@sentry/core@10.36.0"
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:@sentry-internal/feedback@10.36.0",
+                             "dependsOn":  [
+                                               "npm:@sentry/core@10.36.0"
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:@sentry-internal/replay@10.36.0",
+                             "dependsOn":  [
+                                               "npm:@sentry/core@10.36.0",
+                                               "npm:@sentry-internal/browser-utils@10.36.0"
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:@sentry-internal/replay-canvas@10.36.0",
+                             "dependsOn":  [
+                                               "npm:@sentry/core@10.36.0",
+                                               "npm:@sentry-internal/replay@10.36.0"
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:@shikijs/stream@4.2.0",
+                             "dependsOn":  [
+
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:@shikijs/transformers@3.9.2",
+                             "dependsOn":  [
+
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:@solidjs/meta@0.29.4",
+                             "dependsOn":  [
+
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:@solidjs/router@0.15.4",
+                             "dependsOn":  [
+
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:@solid-primitives/active-element@2.1.3",
+                             "dependsOn":  [
+                                               "npm:@solid-primitives/event-listener@2.4.5",
+                                               "npm:@solid-primitives/utils@6.4.1",
+                                               "npm:solid-js@1.9.10"
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:@solid-primitives/audio@1.4.2",
+                             "dependsOn":  [
+                                               "npm:@solid-primitives/static-store@0.1.4",
+                                               "npm:@solid-primitives/utils@6.4.1",
+                                               "npm:solid-js@1.9.10"
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:@solid-primitives/bounds@0.1.3",
+                             "dependsOn":  [
+
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:@solid-primitives/event-bus@1.1.2",
+                             "dependsOn":  [
+                                               "npm:@solid-primitives/utils@6.4.1",
+                                               "npm:solid-js@1.9.10"
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:@solid-primitives/event-listener@2.4.5",
+                             "dependsOn":  [
+
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:@solid-primitives/i18n@2.2.1",
+                             "dependsOn":  [
+                                               "npm:solid-js@1.9.10"
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:@solid-primitives/keyed@1.5.3",
+                             "dependsOn":  [
+                                               "npm:solid-js@1.9.10"
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:@solid-primitives/map@0.4.13",
+                             "dependsOn":  [
+                                               "npm:@solid-primitives/trigger@1.2.4",
+                                               "npm:solid-js@1.9.10"
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:@solid-primitives/media@2.3.3",
+                             "dependsOn":  [
+
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:@solid-primitives/memo@1.5.1",
+                             "dependsOn":  [
+                                               "npm:@solid-primitives/scheduled@1.5.3",
+                                               "npm:@solid-primitives/utils@6.4.1",
+                                               "npm:solid-js@1.9.10"
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:@solid-primitives/props@3.2.4",
+                             "dependsOn":  [
+
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:@solid-primitives/refs@1.1.4",
+                             "dependsOn":  [
+                                               "npm:@solid-primitives/utils@6.4.1",
+                                               "npm:solid-js@1.9.10"
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:@solid-primitives/resize-observer@2.1.3",
+                             "dependsOn":  [
+
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:@solid-primitives/resize-observer@2.1.5",
+                             "dependsOn":  [
+
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:@solid-primitives/rootless@1.5.4",
+                             "dependsOn":  [
+
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:@solid-primitives/scheduled@1.5.3",
+                             "dependsOn":  [
+
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:@solid-primitives/scroll@2.1.3",
+                             "dependsOn":  [
+                                               "npm:@solid-primitives/event-listener@2.4.5",
+                                               "npm:@solid-primitives/rootless@1.5.4",
+                                               "npm:@solid-primitives/static-store@0.1.4",
+                                               "npm:solid-js@1.9.10"
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:@solid-primitives/static-store@0.1.4",
+                             "dependsOn":  [
+
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:@solid-primitives/storage@4.3.3",
+                             "dependsOn":  [
+                                               "npm:@solid-primitives/utils@6.4.1",
+                                               "npm:solid-js@1.9.10"
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:@solid-primitives/timer@1.4.4",
+                             "dependsOn":  [
+                                               "npm:solid-js@1.9.10"
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:@solid-primitives/trigger@1.2.4",
+                             "dependsOn":  [
+                                               "npm:@solid-primitives/utils@6.4.1",
+                                               "npm:solid-js@1.9.10"
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:@solid-primitives/utils@6.4.1",
+                             "dependsOn":  [
+
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:@solid-primitives/websocket@1.3.1",
+                             "dependsOn":  [
+                                               "npm:solid-js@1.9.10"
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:@swc/helpers@0.5.23",
+                             "dependsOn":  [
+
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:@tanstack/query-core@5.91.2",
+                             "dependsOn":  [
+
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:@tanstack/solid-query@5.91.4",
+                             "dependsOn":  [
+                                               "npm:@tanstack/query-core@5.91.2",
+                                               "npm:solid-js@1.9.10"
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:@tanstack/solid-virtual@3.13.32",
+                             "dependsOn":  [
+                                               "npm:@tanstack/virtual-core@3.17.3",
+                                               "npm:solid-js@1.9.10"
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:@tanstack/virtual-core@3.17.3",
+                             "dependsOn":  [
+
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:@thisbeyond/solid-dnd@0.7.5",
+                             "dependsOn":  [
+                                               "npm:solid-js@1.9.10"
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:cross-spawn@7.0.6",
+                             "dependsOn":  [
+                                               "npm:path-key@3.1.1",
+                                               "npm:shebang-command@2.0.0",
+                                               "npm:which@2.0.2"
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:diff@8.0.2",
+                             "dependsOn":  [
+
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:dompurify@3.3.1",
+                             "dependsOn":  [
+
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:effect@4.0.0-beta.83",
+                             "dependsOn":  [
+
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:fuzzysort@3.1.0",
+                             "dependsOn":  [
+
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:ghostty-web@0.4.0",
+                             "dependsOn":  [
+
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:isexe@2.0.0",
+                             "dependsOn":  [
+
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:katex@0.16.27",
+                             "dependsOn":  [
+
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:luxon@3.6.1",
+                             "dependsOn":  [
+
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:marked@17.0.6",
+                             "dependsOn":  [
+
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:marked-katex-extension@5.1.6",
+                             "dependsOn":  [
+
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:marked-shiki@1.2.1",
+                             "dependsOn":  [
+
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:morphdom@2.7.8",
+                             "dependsOn":  [
+
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:motion@12.34.5",
+                             "dependsOn":  [
+
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:path-key@3.1.1",
+                             "dependsOn":  [
+
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:preact@11.0.0-beta.0",
+                             "dependsOn":  [
+
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:preact-render-to-string@6.6.5",
+                             "dependsOn":  [
+                                               "npm:preact@11.0.0-beta.0"
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:react@19.2.8",
+                             "dependsOn":  [
+
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:react-dom@19.2.8",
+                             "dependsOn":  [
+
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:remeda@2.26.0",
+                             "dependsOn":  [
+
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:remend@1.3.0",
+                             "dependsOn":  [
+
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:shebang-command@2.0.0",
+                             "dependsOn":  [
+                                               "npm:shebang-regex@3.0.0"
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:shebang-regex@3.0.0",
+                             "dependsOn":  [
+
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:shiki@4.2.0",
+                             "dependsOn":  [
+
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:solid-dismissible@0.1.1",
+                             "dependsOn":  [
+                                               "npm:@corvu/utils@0.4.2",
+                                               "npm:solid-js@1.9.10"
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:solid-focus-trap@0.1.9",
+                             "dependsOn":  [
+                                               "npm:@corvu/utils@0.4.2",
+                                               "npm:solid-js@1.9.10"
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:solid-js@1.9.10",
+                             "dependsOn":  [
+
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:solid-list@0.3.0",
+                             "dependsOn":  [
+
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:solid-presence@0.1.8",
+                             "dependsOn":  [
+                                               "npm:@corvu/utils@0.4.2",
+                                               "npm:solid-js@1.9.10"
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:solid-presence@0.2.0",
+                             "dependsOn":  [
+
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:solid-prevent-scroll@0.1.11",
+                             "dependsOn":  [
+
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:solid-transition-size@0.1.4",
+                             "dependsOn":  [
+                                               "npm:@corvu/utils@0.3.2",
+                                               "npm:solid-js@1.9.10"
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:strip-ansi@7.1.2",
+                             "dependsOn":  [
+
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:tailwindcss@4.1.11",
+                             "dependsOn":  [
+
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:tslib@2.8.1",
+                             "dependsOn":  [
+
+                                           ]
+                         },
+                         {
+                             "ref":  "npm:which@2.0.2",
+                             "dependsOn":  [
+                                               "npm:isexe@2.0.0"
+                                           ]
+                         }
+                     ]
+}

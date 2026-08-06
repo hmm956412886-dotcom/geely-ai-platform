@@ -19,7 +19,7 @@ try {
         }
     }
 
-    Write-Host "Starting Geely AI Copilot shell..."
+    Write-Host "Starting CoreTest Agent shell..."
     Write-Host "URL: http://$HostName`:$Port/copilot-shell/"
     Write-Host "Gateway: $env:AI_GATEWAY_URL"
     & $Pnpm exec vite --host $HostName --port $Port

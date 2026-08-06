@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 from unittest.mock import patch
 import unittest
@@ -10,6 +11,7 @@ from coretest_copilot.snapshots import (
     diagnostic_snapshot,
     pdx_snapshot,
     project_snapshot,
+    text_file_snapshot,
     trace_snapshot,
 )
 
@@ -41,6 +43,18 @@ class SnapshotTests(unittest.TestCase):
         self.assertEqual(payload["data"]["total_frames"], 10000)
         self.assertEqual(payload["selection"]["frame_id"], "0x123")
         self.assertEqual(payload["selection"]["payload_hex"], "01 02")
+
+    def test_text_file_snapshot_contains_bounded_utf8_content(self) -> None:
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "calculator.py"
+            path.write_text("def add(a, b):\n    return a + b\n", encoding="utf-8")
+
+            payload = text_file_snapshot(path, "3")
+
+        self.assertEqual(payload["kind"], "file")
+        self.assertEqual(payload["selection"]["filename"], "calculator.py")
+        self.assertIn("def add", payload["data"]["content"])
+        self.assertEqual(payload["data"]["line_count"], 2)
 
     def test_diagnostic_counts_negative_responses(self) -> None:
         payload = diagnostic_snapshot(
