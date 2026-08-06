@@ -13,13 +13,19 @@ $profileRoot = Join-Path $repoRoot "frontend\opencode-coretest\profile"
 $outputRoot = Join-Path $repoRoot "frontend\opencode-coretest\dist"
 $sourceManifestPath = Join-Path $repoRoot "third_party\OpenCode-UI-SOURCE.json"
 
+$nodeCommand = "node"
 if ($Node) {
     $nodePath = [IO.Path]::GetFullPath($Node)
     if (-not (Test-Path -LiteralPath $nodePath -PathType Leaf)) {
         throw "Node executable is missing: $nodePath"
     }
     $env:Path = [IO.Path]::GetDirectoryName($nodePath) + [IO.Path]::PathSeparator + $env:Path
+    $nodeCommand = $nodePath
 }
+
+$profileTests = Get-ChildItem -LiteralPath $profileRoot -Filter "*.test.mjs" | Select-Object -ExpandProperty FullName
+& $nodeCommand --test $profileTests
+if ($LASTEXITCODE -ne 0) { throw "CoreTest profile tests failed" }
 
 if (-not $buildRoot.StartsWith($tmpRoot + [IO.Path]::DirectorySeparatorChar)) {
     throw "OpenCode UI build directory must stay under tmp"
@@ -81,6 +87,8 @@ foreach ($property in $upstreamPackage.workspaces.catalog.PSObject.Properties) {
     [Text.UTF8Encoding]::new($false)
 )
 Copy-Item -LiteralPath (Join-Path $profileRoot "core-package.json") -Destination (Join-Path $buildRoot "packages\core\package.json") -Force
+Copy-Item -LiteralPath (Join-Path $profileRoot "coretest-provider-error.ts") -Destination (Join-Path $buildRoot "packages\core\src\coretest-provider-error.ts") -Force
+Copy-Item -LiteralPath (Join-Path $profileRoot "coretest-session-title.ts") -Destination (Join-Path $buildRoot "packages\app\src\utils\coretest-session-title.ts") -Force
 Copy-Item -LiteralPath (Join-Path $profileRoot "coretest-profile.css") -Destination (Join-Path $buildRoot "packages\app\src\coretest-profile.css") -Force
 
 $indexCss = Join-Path $buildRoot "packages\app\src\index.css"
@@ -101,6 +109,14 @@ $entryText = [IO.File]::ReadAllText($entry)
 $entryText = $entryText.Replace('icon: "https://opencode.ai/favicon-96x96-v3.png"', 'icon: "/favicon-96x96-v3.png"')
 $entryText = $entryText.Replace('if (typeof navigator !== "object") return "en" as const', 'if (typeof navigator !== "object") return "zh" as const')
 $entryText = $entryText.Replace('return "en" as const', 'return "zh" as const')
+$entryLocaleAnchor = 'if (root instanceof HTMLElement) {'
+if (-not $entryText.Contains($entryLocaleAnchor)) {
+    throw "The locked OpenCode entry locale anchor was not found"
+}
+$entryText = $entryText.Replace(
+    $entryLocaleAnchor,
+    "setStorage(`"opencode.global.dat:language`", JSON.stringify({ locale: `"zh`" }))`n`n$entryLocaleAnchor"
+)
 [IO.File]::WriteAllText($entry, $entryText, [Text.UTF8Encoding]::new($false))
 
 $settings = Join-Path $buildRoot "packages\app\src\context\settings.tsx"
@@ -124,16 +140,165 @@ $promptPlaceholderText = $promptPlaceholderText.Replace(
     [Text.UTF8Encoding]::new($false)
 )
 
+$sessionPrompt = Join-Path $buildRoot "packages\session-ui\src\v2\components\prompt-input\index.tsx"
+$sessionPromptText = [IO.File]::ReadAllText($sessionPrompt)
+$sessionPromptReplacements = @(
+    @('emptyLabel="No matching items"', 'emptyLabel={"\u6ca1\u6709\u5339\u914d\u7684\u5185\u5bb9"}'),
+    @('label: "Commands"', 'label: "\u5feb\u6377\u547d\u4ee4"'),
+    @('            Drop files to attach', '            {"\u62d6\u653e\u6587\u4ef6\u5230\u6b64\u5904\u6dfb\u52a0"}'),
+    @('removeLabel="Remove attachment"', 'removeLabel={"\u79fb\u9664\u9644\u4ef6"}'),
+    @('aria-label="Prompt"', 'aria-label={"\u8f93\u5165\u4efb\u52a1"}'),
+    @('"Enter shell command..."', '"\u8f93\u5165\u8981\u5728\u5f53\u524d\u5de5\u7a0b\u4e2d\u6267\u884c\u7684\u547d\u4ee4..."'),
+    @('"Ask anything, / for commands, @ for context..."', '"\u5206\u6790\u6587\u4ef6\u3001DBC/Trace\uff0c\u6216\u63cf\u8ff0\u6d4b\u8bd5\u4efb\u52a1..."'),
+    @('title="Add images and files"', 'title={"\u6dfb\u52a0\u56fe\u7247\u548c\u6587\u4ef6"}'),
+    @('attachLabel="Images and files"', 'attachLabel={"\u56fe\u7247\u548c\u6587\u4ef6"}'),
+    @('commandsLabel="Commands"', 'commandsLabel={"\u5feb\u6377\u547d\u4ee4"}'),
+    @('contextLabel="Context"', 'contextLabel={"\u5de5\u7a0b\u4e0a\u4e0b\u6587"}'),
+    @('shellLabel="Shell command"', 'shellLabel={"\u7ec8\u7aef\u547d\u4ee4"}'),
+    @('title="Choose agent"', 'title={"\u9009\u62e9\u667a\u80fd\u4f53"}'),
+    @('title="Choose model"', 'title={"\u9009\u62e9\u6a21\u578b"}'),
+    @('title="Choose model variant"', 'title={"\u9009\u62e9\u601d\u8003\u5f3a\u5ea6"}'),
+    @('sendLabel="Send"', 'sendLabel={"\u53d1\u9001"}'),
+    @('stopLabel="Stop"', 'stopLabel={"\u505c\u6b62"}')
+)
+foreach ($replacement in $sessionPromptReplacements) {
+    if (-not $sessionPromptText.Contains($replacement[0])) {
+        throw "The locked OpenCode prompt UI anchor was not found: $($replacement[0])"
+    }
+$sessionPromptText = $sessionPromptText.Replace($replacement[0], $replacement[1])
+}
+[IO.File]::WriteAllText($sessionPrompt, $sessionPromptText, [Text.UTF8Encoding]::new($false))
+
+$sessionTitle = Join-Path $buildRoot "packages\app\src\utils\session-title.ts"
+$sessionTitleText = [IO.File]::ReadAllText($sessionTitle)
+$sessionTitleImport = 'import { coreTestSessionTitle } from "./coretest-session-title"'
+$sessionTitleAnchor = '  return match?.[1] ?? title'
+if (-not $sessionTitleText.Contains($sessionTitleAnchor)) {
+    throw "The locked OpenCode session title anchor was not found"
+}
+$sessionTitleText = $sessionTitleImport + "`n`n" + $sessionTitleText
+$sessionTitleText = $sessionTitleText.Replace(
+    $sessionTitleAnchor,
+    '  return coreTestSessionTitle(title)'
+)
+[IO.File]::WriteAllText($sessionTitle, $sessionTitleText, [Text.UTF8Encoding]::new($false))
+
+$sessionRetry = Join-Path $buildRoot "packages\session-ui\src\components\session-retry.tsx"
+$sessionRetryText = [IO.File]::ReadAllText($sessionRetry)
+$sessionRetryImport = 'import { Spinner } from "@opencode-ai/ui/spinner"'
+if (-not $sessionRetryText.Contains($sessionRetryImport)) {
+    throw "The locked OpenCode session retry import anchor was not found"
+}
+$sessionRetryText = $sessionRetryText.Replace(
+    $sessionRetryImport,
+    $sessionRetryImport + "`n" + 'import { coreTestProviderRetry } from "@opencode-ai/core/coretest-provider-error"'
+)
+$sessionRetryMessage = '    if (current.message.length > 80) return current.message.slice(0, 80) + "..."' + "`n" + '    return current.message'
+if (-not $sessionRetryText.Contains($sessionRetryMessage)) {
+    throw "The locked OpenCode session retry message anchor was not found"
+}
+$sessionRetryText = $sessionRetryText.Replace(
+    $sessionRetryMessage,
+    '    const localized = coreTestProviderRetry(current.message)' + "`n" + '    if (localized.length > 80) return localized.slice(0, 80) + "..."' + "`n" + '    return localized'
+)
+$sessionRetryTruncated = '    return current.message.length > 80'
+$sessionRetryTooltip = '<Tooltip value={retry()?.message ?? ""} placement="top">'
+if (-not $sessionRetryText.Contains($sessionRetryTruncated) -or -not $sessionRetryText.Contains($sessionRetryTooltip)) {
+    throw "The locked OpenCode session retry detail anchors were not found"
+}
+$sessionRetryText = $sessionRetryText.Replace($sessionRetryTruncated, '    return message().length > 80')
+$sessionRetryText = $sessionRetryText.Replace($sessionRetryTooltip, '<Tooltip value={message()} placement="top">')
+[IO.File]::WriteAllText($sessionRetry, $sessionRetryText, [Text.UTF8Encoding]::new($false))
+
+$sessionTurn = Join-Path $buildRoot "packages\session-ui\src\components\session-turn.tsx"
+$sessionTurnText = [IO.File]::ReadAllText($sessionTurn)
+$sessionTurnImport = 'import { Binary } from "@opencode-ai/core/util/binary"'
+if (-not $sessionTurnText.Contains($sessionTurnImport)) {
+    throw "The locked OpenCode session error import anchor was not found"
+}
+$sessionTurnText = $sessionTurnText.Replace(
+    $sessionTurnImport,
+    $sessionTurnImport + "`n" + 'import { coreTestProviderError } from "@opencode-ai/core/coretest-provider-error"'
+)
+$sessionTurnText = $sessionTurnText.Replace('if (typeof msg === "string") return unwrap(msg)', 'if (typeof msg === "string") return coreTestProviderError(unwrap(msg))')
+$sessionTurnText = $sessionTurnText.Replace('return unwrap(String(msg))', 'return coreTestProviderError(unwrap(String(msg)))')
+[IO.File]::WriteAllText($sessionTurn, $sessionTurnText, [Text.UTF8Encoding]::new($false))
+
+$timelineRows = Join-Path $buildRoot "packages\app\src\pages\session\timeline\rows.ts"
+$timelineRowsText = [IO.File]::ReadAllText($timelineRows)
+$timelineRowsImport = 'import { uniqueSummaryDiffs } from "./summary-diffs"'
+if (-not $timelineRowsText.Contains($timelineRowsImport)) {
+    throw "The locked OpenCode timeline error import anchor was not found"
+}
+$timelineRowsText = $timelineRowsText.Replace(
+    $timelineRowsImport,
+    $timelineRowsImport + "`n" + 'import { coreTestProviderError } from "@opencode-ai/core/coretest-provider-error"'
+)
+$timelineErrorCall = @'
+          text: unwrapErrorMessage(
+            typeof data === "string" ? data : data === undefined || data === null ? "" : String(data),
+          ),
+'@
+$timelineLocalizedErrorCall = @'
+          text: coreTestProviderError(
+            unwrapErrorMessage(
+              typeof data === "string" ? data : data === undefined || data === null ? "" : String(data),
+            ),
+          ),
+'@
+if (-not $timelineRowsText.Contains($timelineErrorCall)) {
+    throw "The locked OpenCode timeline error text anchor was not found"
+}
+$timelineRowsText = $timelineRowsText.Replace($timelineErrorCall, $timelineLocalizedErrorCall)
+[IO.File]::WriteAllText($timelineRows, $timelineRowsText, [Text.UTF8Encoding]::new($false))
+
+$messageTimeline = Join-Path $buildRoot "packages\app\src\pages\session\timeline\message-timeline.tsx"
+$messageTimelineText = [IO.File]::ReadAllText($messageTimeline)
+$errorCard = @'
+              <Card variant="error" class="error-card">
+                {errorRow().text}
+              </Card>
+'@
+$recoverableErrorCard = @'
+              <Card variant="error" class="error-card">
+                <div class="flex flex-col items-start gap-2">
+                  <span>{errorRow().text}</span>
+                  <Show when={props.actions?.revert && sessionID()}>
+                    <ButtonV2
+                      variant="outline"
+                      onClick={() =>
+                        void props.actions?.revert?.({
+                          sessionID: sessionID()!,
+                          messageID: errorRow().userMessageID,
+                        })
+                      }
+                    >
+                      {"\u6062\u590d\u4efb\u52a1\u5230\u8f93\u5165\u6846"}
+                    </ButtonV2>
+                  </Show>
+                </div>
+              </Card>
+'@
+if (-not $messageTimelineText.Contains($errorCard)) {
+    throw "The locked OpenCode timeline error card anchor was not found"
+}
+$messageTimelineText = $messageTimelineText.Replace($errorCard, $recoverableErrorCard)
+[IO.File]::WriteAllText($messageTimeline, $messageTimelineText, [Text.UTF8Encoding]::new($false))
+
 $titlebar = Join-Path $buildRoot "packages\app\src\components\titlebar.tsx"
 $titlebarText = [IO.File]::ReadAllText($titlebar)
 if (-not $titlebarText.Contains('<IconV2 name="grid-plus" />')) {
     throw "The locked OpenCode titlebar history icon anchor was not found"
+}
+if (-not $titlebarText.Contains('icon={<IconV2 name="plus" />}')) {
+    throw "The locked OpenCode new session icon anchor was not found"
 }
 $channelIndicator = '                <ChannelIndicator debugTools={props.debugTools} />'
 if (-not $titlebarText.Contains($channelIndicator)) {
     throw "The locked OpenCode channel indicator anchor was not found"
 }
 $titlebarText = $titlebarText.Replace('<IconV2 name="grid-plus" />', '<IconV2 name="archive" />')
+$titlebarText = $titlebarText.Replace('icon={<IconV2 name="plus" />}', 'icon={<IconV2 name="edit" />}')
 $titlebarText = $titlebarText.Replace($channelIndicator, '')
 [IO.File]::WriteAllText(
     $titlebar,
@@ -202,7 +367,7 @@ $translationOverrides = @{
     'home.empty.title' = '\u6682\u65e0\u5386\u53f2\u4f1a\u8bdd'
     'home.empty.description' = '\u5728\u4e0b\u65b9\u8f93\u5165\u9700\u6c42\uff0cAgent \u4f1a\u57fa\u4e8e\u5f53\u524d CoreTest \u5de5\u7a0b\u5f00\u59cb\u5de5\u4f5c'
     'home.title' = 'CoreTest Agent'
-    'home.projects' = '\u5de5\u7a0b'
+    'home.projects' = '\u5f53\u524d\u5de5\u7a0b'
     'home.project.add' = '\u6dfb\u52a0\u5de5\u7a0b'
     'home.recentProjects' = '\u6700\u8fd1\u5de5\u7a0b'
     'home.recentlyClosed' = '\u6700\u8fd1\u5173\u95ed'
@@ -210,6 +375,15 @@ $translationOverrides = @{
     'prompt.placeholder.normal' = '\u5206\u6790\u6587\u4ef6\u3001DBC/Trace\uff0c\u6216\u63cf\u8ff0\u6d4b\u8bd5\u4efb\u52a1...'
     'prompt.placeholder.simple' = '\u5206\u6790\u6587\u4ef6\u3001DBC/Trace\uff0c\u6216\u63cf\u8ff0\u6d4b\u8bd5\u4efb\u52a1...'
     'prompt.placeholder.shell' = '\u8f93\u5165\u8981\u5728\u5f53\u524d\u5de5\u7a0b\u4e2d\u6267\u884c\u7684\u547d\u4ee4...'
+    'prompt.action.attachFile' = '\u6dfb\u52a0\u6587\u4ef6'
+    'prompt.menu.addImagesAndFiles' = '\u6dfb\u52a0\u6587\u4ef6\u53ca\u5176\u4ed6\u5185\u5bb9'
+    'prompt.menu.imagesAndFiles' = '\u56fe\u7247\u548c\u6587\u4ef6'
+    'prompt.menu.commands' = '\u5feb\u6377\u547d\u4ee4'
+    'prompt.menu.context' = '\u5de5\u7a0b\u4e0a\u4e0b\u6587'
+    'prompt.menu.shellCommand' = '\u7ec8\u7aef\u547d\u4ee4'
+    'prompt.attachment.remove' = '\u79fb\u9664\u9644\u4ef6'
+    'prompt.action.send' = '\u53d1\u9001'
+    'prompt.action.stop' = '\u505c\u6b62'
     'provider.connect.apiKey.description' = '\u8f93\u5165 {{provider}} API Key \u540e\u5373\u53ef\u5728 CoreTest Agent \u4e2d\u4f7f\u7528\u5bf9\u5e94\u6a21\u578b\u3002'
     'provider.connect.oauth.code.visit.suffix' = ' \u83b7\u53d6\u6388\u6743\u7801\uff0c\u5e76\u5728 CoreTest Agent \u4e2d\u8fde\u63a5 {{provider}} \u6a21\u578b\u3002'
     'provider.connect.oauth.auto.visit.suffix' = ' \u5e76\u8f93\u5165\u4ee5\u4e0b\u4ee3\u7801\uff0c\u4ee5\u8fde\u63a5 {{provider}} \u6a21\u578b\u3002'
@@ -230,7 +404,7 @@ $translationOverrides = @{
     'sidebar.gettingStarted.title' = '\u5f00\u59cb\u4f7f\u7528'
     'sidebar.gettingStarted.line1' = 'CoreTest Agent \u4f1a\u8bfb\u53d6\u5f53\u524d CoreTest \u5de5\u7a0b\u5e76\u534f\u52a9\u5206\u6790\u3001\u751f\u6210\u548c\u9a8c\u8bc1\u3002'
     'sidebar.gettingStarted.line2' = '\u8bf7\u5148\u914d\u7f6e\u6a21\u578b API\uff0c\u7136\u540e\u76f4\u63a5\u63cf\u8ff0\u4f60\u7684\u6d4b\u8bd5\u6216\u6587\u4ef6\u5206\u6790\u9700\u6c42\u3002'
-    'sidebar.nav.projectsAndSessions' = '\u5de5\u7a0b\u4e0e\u4f1a\u8bdd'
+    'sidebar.nav.projectsAndSessions' = '\u4f1a\u8bdd'
     'sidebar.settings' = '\u8bbe\u7f6e'
     'sidebar.help' = '\u5e2e\u52a9'
     'sidebar.workspaces.enable' = '\u542f\u7528\u5de5\u4f5c\u533a'

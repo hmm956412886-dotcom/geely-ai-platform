@@ -646,13 +646,12 @@ html, body, #root { width: 100%; height: 100%; }
 [data-component="terminal"],
 .settings-v2-servers,
 .settings-v2-server-dialog,
-aside[aria-label="项目"],
-aside[aria-label="Projects"],
 button[data-action="prompt-project"],
+button[data-action="home-add-project"],
+button[data-action="home-add-project-row"],
+button[data-action="home-project-menu"],
 [role="tab"][data-value="servers"],
 [data-slot="titlebar-v2"] button[aria-label="Close tab"],
-[data-slot="titlebar-v2"] button[aria-label="新建会话"],
-[data-slot="titlebar-v2"] button[aria-label="New session"],
 [data-component="session-new-design"] svg[class*="text-v2-background-bg-inverse"] {
   display: none !important;
 }

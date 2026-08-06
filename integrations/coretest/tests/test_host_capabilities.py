@@ -7,7 +7,7 @@ import sys
 import unittest
 from unittest.mock import patch
 
-from coretest_copilot.host_capabilities import CoreTestReadOnlyCapabilities
+from coretest_copilot.host_capabilities import CAPABILITIES, CoreTestReadOnlyCapabilities
 
 
 class HostCapabilityTests(unittest.TestCase):
@@ -21,6 +21,20 @@ class HostCapabilityTests(unittest.TestCase):
     def _revision(self) -> str:
         self.revision += 1
         return str(self.revision)
+
+    def test_capability_catalog_contains_only_approved_read_only_queries(self) -> None:
+        self.assertEqual(
+            {item["name"] for item in CAPABILITIES},
+            {
+                "project.summary",
+                "file.inspect",
+                "dbc.list",
+                "dbc.inspect",
+                "trace.list",
+                "trace.inspect",
+                "diagnostic.recent",
+            },
+        )
 
     def test_project_summary_reuses_active_project_services(self) -> None:
         project = SimpleNamespace(name="demo", url="D:/demo", tasks=set())

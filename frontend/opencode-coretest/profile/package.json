@@ -1,5 +1,6 @@
 {
   "name": "opencode-coretest-ui-workspace",
   "private": true,
+  "type": "module",
   "packageManager": "pnpm@11.9.0"
 }

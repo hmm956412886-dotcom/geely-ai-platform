@@ -386,6 +386,18 @@ class AppTests(unittest.TestCase):
         self.assertIn('input[placeholder="API 密钥"]', response.body)
         self.assertIn('href^="https://opencode.ai/docs/providers/"', response.body)
 
+    def test_native_agent_profile_hides_project_management_but_keeps_new_session(self) -> None:
+        response = handle_request("GET", "/agent-native-profile.css")
+
+        self.assertEqual(response.status, 200)
+        self.assertIn('data-action="home-add-project"', response.body)
+        self.assertIn('data-action="home-add-project-row"', response.body)
+        self.assertIn('data-action="home-project-menu"', response.body)
+        self.assertNotIn('aside[aria-label="项目"]', response.body)
+        self.assertNotIn('aside[aria-label="Projects"]', response.body)
+        self.assertNotIn('aria-label="新建会话"', response.body)
+        self.assertNotIn('aria-label="New session"', response.body)
+
     def test_native_agent_protocol_uses_basic_gateway_auth_and_session_cookie(self) -> None:
         runtime = _FakeOpenCodeRuntime()
         basic = b64encode(b"opencode:copilot-secret").decode("ascii")

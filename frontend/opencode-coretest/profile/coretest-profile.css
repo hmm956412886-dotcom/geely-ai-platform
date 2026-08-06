@@ -21,11 +21,12 @@ body,
 .settings-v2-servers,
 .settings-v2-server-dialog,
 button[data-action="prompt-project"],
+button[data-action="home-add-project"],
+button[data-action="home-add-project-row"],
+button[data-action="home-project-menu"],
 [role="tab"][data-value="servers"],
 [data-slot="titlebar-tabs"],
-[data-slot="titlebar-v2"] button:has(use[href="#opencode-v2-icon-plus"]),
 [data-slot="titlebar-v2"] button[aria-label="Close tab"],
-[data-slot="titlebar-v2"] button[aria-label="New session"],
 [data-component="session-new-design"] svg[class*="text-v2-background-bg-inverse"] {
   display: none !important;
 }
